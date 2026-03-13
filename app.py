@@ -106,8 +106,27 @@ html.dark-theme .stApp,
 html.dark-theme [data-testid="stAppViewContainer"] {
     background-color: var(--bg-primary) !important;
 }
+/* 헤더: 배경은 숨기되 사이드바 토글 버튼은 유지 */
 header[data-testid="stHeader"] {
+    background: transparent !important;
+    border: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+}
+/* 헤더 내부 장식 요소만 숨김 (토글 버튼 제외) */
+header[data-testid="stHeader"] [data-testid="stDecoration"] {
     display: none !important;
+}
+/* 사이드바 토글(열기) 버튼 항상 표시 */
+button[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"] {
+    visibility: visible !important;
+    display: flex !important;
+    z-index: 9999 !important;
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-sm) !important;
+    box-shadow: var(--shadow-md) !important;
 }
 
 /* 텍스트 컬러 */

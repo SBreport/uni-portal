@@ -22,6 +22,12 @@ BACKUP_DIR = os.path.join(DB_DIR, "backups")
 # 사진 있음 판정 값
 PHOTO_YES = {"0", "0.0", "1", "1.0", "o", "O", "ㅇ", "있음", "v", "완료", "y", "yes"}
 
+# 지점명 별칭 매핑 (시트 이름 → DB 이름)
+# 구글 시트와 DB 간 지점명이 다른 경우 여기에 추가
+BRANCH_ALIAS = {
+    "홍대신촌점": "홍대점",
+}
+
 # braw CSV URL (Google Sheets 공개 CSV)
 CSV_URL = (
     "https://docs.google.com/spreadsheets/d/e/"
@@ -95,12 +101,14 @@ def fetch_sheets_data():
 
 
 def get_or_create_branch(cursor, name):
-    """지점 조회 또는 생성, ID 반환"""
-    cursor.execute("SELECT id FROM branches WHERE name = ?", (name,))
+    """지점 조회 또는 생성, ID 반환 (별칭 매핑 포함)"""
+    # 별칭 매핑: 시트 이름 → DB 이름
+    resolved = BRANCH_ALIAS.get(name, name)
+    cursor.execute("SELECT id FROM branches WHERE name = ?", (resolved,))
     row = cursor.fetchone()
     if row:
         return row[0]
-    cursor.execute("INSERT INTO branches (name) VALUES (?)", (name,))
+    cursor.execute("INSERT INTO branches (name) VALUES (?)", (resolved,))
     return cursor.lastrowid
 
 

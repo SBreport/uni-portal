@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import plotly.express as px
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 
@@ -98,6 +99,86 @@ def _aggrid_dark_css():
     }
 
 
+@st.dialog("관련 이벤트", width="large")
+def _show_related_events_dialog(equip_name: str, branch_name: str, selected_branches: list):
+    """선택된 장비명과 관련된 현재 운영 중인 이벤트를 다이얼로그로 표시합니다."""
+    import re
+    try:
+        from events.db import load_current_events
+        evt_df = load_current_events()
+    except Exception:
+        st.error("이벤트 데이터를 불러올 수 없습니다.")
+        return
+
+    if evt_df is None or len(evt_df) == 0:
+        st.info("현재 운영 중인 이벤트가 없습니다.")
+        return
+
+    # 선택된 지점 필터 적용
+    filter_branches = selected_branches if selected_branches else []
+    # 장비 행의 지점명도 포함 (혹시 사이드바 필터에 없더라도)
+    if branch_name and branch_name not in filter_branches:
+        filter_branches = [branch_name] + filter_branches
+
+    if filter_branches:
+        evt_df = evt_df[evt_df["지점명"].isin(filter_branches)]
+        branch_label = ", ".join(filter_branches)
+    else:
+        branch_label = "전체"
+
+    # 기기명에서 핵심 키워드 추출
+    raw = re.sub(r"[0-9\s\-_/()（）]", " ", equip_name).strip()
+    keywords = [w for w in raw.split() if len(w) >= 2]
+    if not keywords:
+        keywords = [equip_name.strip()]
+
+    # 이벤트명에 키워드가 하나라도 포함된 행 필터링
+    mask = pd.Series(False, index=evt_df.index)
+    for kw in keywords:
+        mask = mask | evt_df["이벤트명"].str.contains(kw, case=False, na=False)
+    matched = evt_df[mask]
+
+    # 헤더
+    st.markdown(
+        f"<div style='font-size:1rem; font-weight:700; color:var(--text-primary,#1E293B); margin-bottom:0.25rem;'>"
+        f"<span style='color:var(--accent,#2563EB);'>{equip_name}</span> 관련 이벤트</div>",
+        unsafe_allow_html=True,
+    )
+    st.caption(f"지점: {branch_label} · 키워드: {', '.join(keywords)}")
+
+    if len(matched) == 0:
+        st.info(f"'{equip_name}' 관련 운영 중인 이벤트가 없습니다.")
+        return
+
+    st.markdown(f"**{len(matched)}건** 매칭")
+
+    display = matched[["지점명", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].copy()
+    display["정상가"] = display["정상가"].apply(lambda x: f"{int(x):,}" if pd.notna(x) and x else "-")
+    display["이벤트가"] = display["이벤트가"].apply(lambda x: f"{int(x):,}" if pd.notna(x) and x else "-")
+    display["할인율"] = display["할인율"].apply(lambda x: f"{x:.0f}%" if pd.notna(x) and x else "-")
+
+    gb = GridOptionsBuilder.from_dataframe(display)
+    gb.configure_column("지점명", header_name="지점", width=80, cellStyle={"textAlign": "center"})
+    gb.configure_column("카테고리", width=90, cellStyle={"textAlign": "center"})
+    gb.configure_column("이벤트명", width=250, flex=2)
+    gb.configure_column("정상가", width=90, cellStyle={"textAlign": "right"})
+    gb.configure_column("이벤트가", width=90, cellStyle={"textAlign": "right"})
+    gb.configure_column("할인율", width=65, cellStyle={"textAlign": "center"})
+    gb.configure_column("비고", width=150, flex=1, wrapText=True, autoHeight=True,
+                        cellStyle={"lineHeight": "1.4", "whiteSpace": "normal", "wordBreak": "break-word"})
+    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    gb.configure_grid_options(domLayout="normal", headerHeight=32)
+
+    AgGrid(
+        display, gridOptions=gb.build(), custom_css=_aggrid_dark_css(),
+        height=max(200, min(500, 32 + len(display) * 28)),
+        update_mode=GridUpdateMode.NO_UPDATE,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        fit_columns_on_grid_load=True, allow_unsafe_jscode=True, theme="streamlit",
+        key="evt_dialog_grid",
+    )
+
+
 def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
     if len(filtered_df) == 0:
         st.warning("선택한 조건에 해당하는 장비가 없습니다.")
@@ -131,10 +212,15 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
     )
     gb.configure_column("순번", header_name="No", width=60, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
     gb.configure_column("지점명", width=80, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
-    gb.configure_column("기기명", width=200, flex=2)
+    if can_edit:
+        gb.configure_column("기기명", width=200, flex=2, editable=True,
+                            cellStyle={"textAlign": "left", "cursor": "text"})
+    else:
+        gb.configure_column("기기명", width=200, flex=2)
     gb.configure_column("카테고리", width=90, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
     gb.configure_column("수량", width=60, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
-    gb.configure_column("비고", width=150, flex=1)
+    gb.configure_column("비고", width=200, flex=2, wrapText=True, autoHeight=True,
+                        cellStyle={"lineHeight": "1.4", "whiteSpace": "normal", "wordBreak": "break-word"})
 
     if can_edit:
         gb.configure_column("사진", header_name="사진", width=70, editable=True,
@@ -144,91 +230,117 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
         gb.configure_column("사진", width=70, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
 
     gb.configure_default_column(sortable=True, filter=True, resizable=True)
-    gb.configure_grid_options(domLayout="normal", rowHeight=28, headerHeight=32)
+    gb.configure_selection(selection_mode="single", use_checkbox=False)
+    gb.configure_grid_options(domLayout="normal", headerHeight=32)
+
+    # AG-Grid 높이: 뷰포트에서 상단(필터+라디오+제목≈250px) + 하단(버튼≈100px)을 뺀 나머지
+    st.markdown("""<style>
+    .equip-grid iframe { height: calc(100vh - 350px) !important; min-height: 350px !important; }
+    </style><div class="equip-grid">""", unsafe_allow_html=True)
 
     grid_response = AgGrid(
         grid_df[["순번", "지점명", "기기명", "카테고리", "사진", "수량", "비고"]],
         gridOptions=gb.build(), custom_css=_aggrid_dark_css(),
-        height=600,
-        update_mode=GridUpdateMode.VALUE_CHANGED if can_edit else GridUpdateMode.NO_UPDATE,
+        height=500,
+        update_mode=GridUpdateMode.MODEL_CHANGED if can_edit else GridUpdateMode.SELECTION_CHANGED,
         data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
         fit_columns_on_grid_load=True, allow_unsafe_jscode=True, theme="streamlit",
     )
 
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── 선택 정보 + 액션 버튼 (한 줄) ──
+    selected_rows = grid_response.get("selected_rows", None)
+    has_selection = selected_rows is not None and len(selected_rows) > 0
+    edited_data = grid_response["data"]
+
+    equip_name = ""
+    branch_name = ""
+    if has_selection:
+        sel = selected_rows.iloc[0] if hasattr(selected_rows, "iloc") else selected_rows[0]
+        sel_idx = sel.get("순번", None)
+        equip_name = sel.get("기기명", "")
+        branch_name = sel.get("지점명", "")
+        # 편집된 이름이 있으면 사용
+        if can_edit and sel_idx is not None:
+            match = edited_data[edited_data["순번"] == sel_idx]
+            if len(match) > 0:
+                equip_name = str(match.iloc[0]["기기명"]).strip() or equip_name
+
+    # 변경 사항 감지 (편집자용)
+    photo_changes = []
+    name_changes = []
     if can_edit:
-        col_save, col_download = st.columns([1, 1])
+        for i in range(min(len(edited_data), len(grid_df))):
+            eq_id = int(filtered_df.iloc[i]["순번"])
+            orig_photo = grid_df.iloc[i]["사진"]
+            new_photo = edited_data.iloc[i]["사진"]
+            if new_photo != orig_photo:
+                photo_changes.append((eq_id, "O" if new_photo else ""))
+            orig_name = grid_df.iloc[i]["기기명"]
+            new_name = str(edited_data.iloc[i]["기기명"]).strip()
+            if new_name and new_name != orig_name:
+                name_changes.append((eq_id, new_name))
+    total_changes = len(photo_changes) + len(name_changes)
+
+    # 선택 정보 바
+    if has_selection:
+        st.markdown(
+            f"<div style='background:var(--bg-card,#F8FAFC); border-left:3px solid var(--accent,#2563EB); "
+            f"border-radius:4px; padding:0.35rem 0.75rem; margin:0.25rem 0; font-size:0.82rem; "
+            f"color:var(--text-primary,#1E293B);'>"
+            f"선택: <b>{branch_name}</b> · <b style=\"color:var(--accent,#2563EB);\">{equip_name}</b>"
+            f"{'  |  변경: ' + str(total_changes) + '건' if total_changes > 0 else ''}"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    # 버튼 한 줄 배치: 이벤트 조회 | 변경 저장 | CSV
+    if can_edit:
+        col_evt, col_save, col_download = st.columns([1, 1, 1])
+    else:
+        col_evt, col_download = st.columns([1, 1])
+
+    with col_evt:
+        evt_disabled = not has_selection
+        if st.button("이벤트 조회", type="primary", use_container_width=True,
+                     key="btn_evt_lookup", disabled=evt_disabled):
+            _show_related_events_dialog(equip_name, branch_name, selected_branches)
+
+    if can_edit:
         with col_save:
-            if st.button("변경 사항 저장", type="primary", use_container_width=True):
-                edited_data = grid_response["data"]
-                changes = []
-                for i in range(len(edited_data)):
-                    orig_photo = grid_df.iloc[i]["사진"]
-                    new_photo = edited_data.iloc[i]["사진"]
-                    if new_photo != orig_photo:
-                        eq_id = int(filtered_df.iloc[i]["순번"])
-                        changes.append((eq_id, "O" if new_photo else ""))
-                if changes:
-                    with st.spinner(f"{len(changes)}건 저장 중..."):
-                        ok_count, errors = save_photo_changes(changes)
+            if st.button("변경 사항 저장", use_container_width=True):
+                if total_changes > 0:
                     save_msgs = []
-                    if ok_count > 0:
-                        save_msgs.append(f"✅ {ok_count}건 저장 완료")
-                    if errors:
+                    if photo_changes:
+                        with st.spinner(f"사진 {len(photo_changes)}건 저장 중..."):
+                            ok_count, errors = save_photo_changes(photo_changes)
+                        if ok_count > 0:
+                            save_msgs.append(f"사진 {ok_count}건 저장 완료")
                         for e in errors:
-                            save_msgs.append(f"❌ {e}")
-                    st.session_state["save_result"] = save_msgs
+                            save_msgs.append(f"사진 오류: {e}")
+                    if name_changes:
+                        from equipment.db import update_equipment
+                        name_ok = 0
+                        for eq_id, new_name in name_changes:
+                            try:
+                                update_equipment(eq_id, name=new_name)
+                                name_ok += 1
+                            except Exception as e:
+                                save_msgs.append(f"기기명 오류 ID {eq_id}: {e}")
+                        if name_ok > 0:
+                            save_msgs.append(f"기기명 {name_ok}건 저장 완료")
+                    st.session_state["save_result"] = [f"✅ {m}" if "오류" not in m else f"❌ {m}" for m in save_msgs]
                     load_data.clear()
                     st.rerun()
                 else:
                     st.info("변경된 항목이 없습니다.")
-        with col_download:
-            csv_data = grid_df[["순번", "지점명", "기기명", "카테고리", "사진유무", "수량", "비고"]].to_csv(index=False).encode("utf-8-sig")
-            st.download_button("CSV 다운로드", csv_data, "equipment_list.csv", "text/csv", use_container_width=True)
-    else:
+
+    col_dl = col_download
+    with col_dl:
         csv_data = grid_df[["순번", "지점명", "기기명", "카테고리", "사진유무", "수량", "비고"]].to_csv(index=False).encode("utf-8-sig")
         st.download_button("CSV 다운로드", csv_data, "equipment_list.csv", "text/csv", use_container_width=True)
 
-    # 사진 현황 요약
-    if selected_branches:
-        st.markdown(f"**📷 사진 현황 요약** · {len(selected_branches)}개 지점")
-        photo_summary = (
-            filtered_df.groupby(["지점명", "사진유무"])
-            .size()
-            .unstack(fill_value=0)
-            .reset_index()
-        )
-        if "있음" not in photo_summary.columns:
-            photo_summary["있음"] = 0
-        if "없음" not in photo_summary.columns:
-            photo_summary["없음"] = 0
-        photo_summary["보유율"] = (
-            photo_summary["있음"] / (photo_summary["있음"] + photo_summary["없음"]) * 100
-        ).round(1)
-
-        cols = st.columns(min(len(selected_branches), 4))
-        for i, branch in enumerate(selected_branches):
-            row = photo_summary[photo_summary["지점명"] == branch]
-            if len(row) > 0:
-                row = row.iloc[0]
-                pct = row["보유율"]
-                bar_color = "var(--success, #059669)" if pct >= 80 else ("var(--warning, #D97706)" if pct >= 50 else "var(--danger, #DC2626)")
-                with cols[i % len(cols)]:
-                    st.markdown(f"""
-                    <div style="background:var(--bg-card, #fff); border:1px solid var(--border, #E2E8F0);
-                                border-radius:var(--radius-sm, 6px); padding:0.75rem; margin-bottom:0.5rem;
-                                box-shadow:var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));">
-                        <div style="font-weight:600; font-size:0.875rem; color:var(--text-primary, #1E293B); margin-bottom:0.4rem;">
-                            {branch}
-                        </div>
-                        <div style="background:var(--border, #E2E8F0); border-radius:4px; height:6px; overflow:hidden;">
-                            <div style="background:{bar_color}; height:100%; width:{pct}%; border-radius:4px;
-                                        transition:width 0.5s ease;"></div>
-                        </div>
-                        <div style="font-size:0.72rem; color:var(--text-muted, #94A3B8); margin-top:0.3rem;">
-                            있음 {int(row['있음'])} / 없음 {int(row['없음'])} ({pct}%)
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
 
 
 # ============================================================

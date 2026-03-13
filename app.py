@@ -503,6 +503,39 @@ hr, [data-testid="stDivider"] { border-color: var(--border) !important; opacity:
 html.dark-theme [data-testid="stCaptionContainer"] * { color: var(--text-muted) !important; }
 .stProgress > div > div { background-color: var(--accent) !important; border-radius: 4px !important; }
 .stProgress > div { background-color: var(--border) !important; border-radius: 4px !important; }
+
+/* ================================================================
+   다이얼로그 (관련 이벤트 팝업) — 중앙 정렬 + 크기 확장
+   ================================================================ */
+[data-testid="stModal"] > div {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+[data-testid="stModal"] > div > div {
+    width: 90vw !important;
+    max-width: 1200px !important;
+    min-width: 800px !important;
+    max-height: 85vh !important;
+}
+[data-testid="stModal"] [data-testid="stVerticalBlock"] {
+    width: 100% !important;
+}
+/* 다이얼로그 내부 AG-Grid iframe 높이 확장 */
+[data-testid="stModal"] iframe {
+    min-height: 400px !important;
+}
+/* dialog fallback selectors */
+div[role="dialog"] {
+    max-width: 90vw !important;
+    width: 90vw !important;
+    min-width: 800px !important;
+}
+div[role="dialog"] > div {
+    width: 100% !important;
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+}
 </style>""", unsafe_allow_html=True)
 
 # ============================================================

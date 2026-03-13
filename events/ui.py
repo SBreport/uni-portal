@@ -167,9 +167,10 @@ def _render_event_list():
     gb.configure_column("정상가", width=90, cellStyle={"textAlign": "right"})
     gb.configure_column("이벤트가", width=90, cellStyle={"textAlign": "right"})
     gb.configure_column("할인율", width=65, cellStyle={"textAlign": "center"})
-    gb.configure_column("비고", width=150, flex=1)
+    gb.configure_column("비고", width=200, flex=2, wrapText=True, autoHeight=True,
+                        cellStyle={"lineHeight": "1.4", "whiteSpace": "normal", "wordBreak": "break-word"})
     gb.configure_default_column(sortable=True, filter=True, resizable=True)
-    gb.configure_grid_options(domLayout="normal", rowHeight=28, headerHeight=32)
+    gb.configure_grid_options(domLayout="normal", headerHeight=32)
 
     from ui_tabs import _aggrid_dark_css
     AgGrid(

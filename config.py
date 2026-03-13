@@ -33,8 +33,8 @@ ROLES = {
         "label": "편집자",
         "can_edit_photo": True,
         "can_save": True,
-        "can_sync": False,
-        "can_manage_users": False,
+        "can_sync": True,           # TODO: 임시 — 추후 False로 복원
+        "can_manage_users": True,    # TODO: 임시 — 추후 False로 복원
         "can_edit_dictionary": True,
     },
     "admin": {

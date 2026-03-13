@@ -14,6 +14,11 @@ from datetime import datetime
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 DB_PATH = os.path.join(DB_DIR, "equipment.db")
 
+# 지점명 별칭 매핑 (시트 탭 이름 → DB 이름)
+BRANCH_ALIAS = {
+    "홍대신촌점": "홍대점",
+}
+
 
 def _get_conn():
     conn = sqlite3.connect(DB_PATH)
@@ -101,10 +106,11 @@ def run_event_sync(year: int, start_month: int, end_month: int) -> dict:
     errors = []
 
     for tab_name, rows in branch_data.items():
-        branch_id = get_evt_branch_id(conn, tab_name)
+        resolved_name = BRANCH_ALIAS.get(tab_name, tab_name)
+        branch_id = get_evt_branch_id(conn, resolved_name)
         if branch_id is None:
             # "강남점" → "강남" 매핑 시도
-            branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", tab_name))
+            branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", resolved_name))
         if branch_id is None:
             errors.append(f"{tab_name}: DB에 지점 없음")
             continue

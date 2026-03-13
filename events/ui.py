@@ -31,6 +31,33 @@ def _format_price(val):
 
 def render_tab_events():
     """이벤트 관리 탭 — 서브 뷰 전환."""
+    permissions = get_permissions()
+
+    # 이벤트 동기화 (관리자 전용)
+    if permissions.get("can_sync", False):
+        with st.expander("📥 이벤트 동기화", expanded=False):
+            from datetime import datetime
+            now = datetime.now()
+            col_y, col_m1, col_m2, col_btn = st.columns([1, 1, 1, 1])
+            with col_y:
+                evt_year = st.number_input("연도", value=now.year, min_value=2024, max_value=2030, key="evt_year")
+            with col_m1:
+                evt_sm = st.number_input("시작월", value=now.month, min_value=1, max_value=12, key="evt_sm")
+            with col_m2:
+                evt_em = st.number_input("종료월", value=min(now.month + 1, 12), min_value=1, max_value=12, key="evt_em")
+            with col_btn:
+                st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+                if st.button("수집 실행", use_container_width=True, type="primary", key="evt_sync_btn"):
+                    from events.sync import run_event_sync
+                    with st.spinner("이벤트 수집 중..."):
+                        result = run_event_sync(int(evt_year), int(evt_sm), int(evt_em))
+                    if result["errors"]:
+                        st.warning(f"수집 완료: {result['processed']}개 지점, {result['total_items']:,}건 (오류 {len(result['errors'])}건)")
+                    else:
+                        st.success(f"수집 완료: {result['processed']}개 지점, {result['total_items']:,}건")
+                    load_current_events.clear()
+                    st.rerun()
+
     sub_view = st.radio(
         "보기 선택", ["이벤트 목록", "이벤트 검색", "지점 비교", "가격 이력", "시술 사전"],
         horizontal=True, label_visibility="collapsed",
@@ -54,7 +81,7 @@ def _render_event_list():
     df = load_current_events()
 
     if len(df) == 0:
-        st.warning("이벤트 데이터가 없습니다. 사이드바에서 '이벤트 동기화'를 실행해주세요.")
+        st.warning("이벤트 데이터가 없습니다. 상단의 '이벤트 동기화'를 실행해주세요.")
         return
 
     # 필터 영역

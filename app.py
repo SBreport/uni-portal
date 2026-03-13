@@ -305,6 +305,18 @@ html.dark-theme [data-baseweb="input"] > div {
     color: var(--text-primary) !important;
     border-color: var(--border) !important;
 }
+/* 다크모드 placeholder 텍스트 */
+html.dark-theme .stTextInput input::placeholder,
+html.dark-theme .stTextArea textarea::placeholder {
+    color: var(--text-muted) !important;
+    opacity: 1 !important;
+}
+/* 다크모드 인라인 코드 (역할 뱃지 등) */
+html.dark-theme code,
+html.dark-theme .stMarkdown code {
+    color: var(--accent) !important;
+    background-color: var(--accent-light) !important;
+}
 html.dark-theme [data-baseweb="tag"] { background-color: var(--accent-light) !important; }
 html.dark-theme [data-baseweb="popover"] > div,
 html.dark-theme [data-baseweb="menu"] { background-color: var(--bg-card) !important; }
@@ -466,11 +478,6 @@ with st.sidebar:
             label_visibility="collapsed",
         )
 
-    st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
-
-    # 필터 설정 카드
-    st.markdown('<div class="filter-card">', unsafe_allow_html=True)
-
     all_categories = sorted(df["카테고리"].unique()) if len(df) > 0 else []
 
     st.markdown('<div class="filter-label">카테고리</div>', unsafe_allow_html=True)
@@ -485,44 +492,14 @@ with st.sidebar:
     st.markdown('<div class="filter-label">장비 검색</div>', unsafe_allow_html=True)
     search_query = st.text_input("장비 검색", placeholder="장비명 입력", label_visibility="collapsed")
 
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
-
-    if st.button("새로고침", use_container_width=True,
-                  help="DB 데이터를 최신 상태로 갱신합니다"):
-        load_data.clear()
-        st.rerun()
-
     if permissions["can_sync"]:
-        if st.button("장비 동기화", use_container_width=True,
-                      help="Google Sheets에서 신규 장비 데이터를 가져와 DB에 추가합니다"):
-            with st.spinner("Google Sheets 장비 동기화 중..."):
+        if st.button("📥 시트 동기화", use_container_width=True, type="primary",
+                      help="Google Sheets 원본에서 최신 장비 데이터를 가져와 DB에 반영합니다"):
+            with st.spinner("Google Sheets에서 데이터 가져오는 중..."):
                 result = sync_from_sheets()
-            st.success(f"장비 동기화 완료: 추가 {result['added']}건, 스킵 {result['skipped']}건, 충돌 {result['conflicts']}건")
+            st.success(f"동기화 완료: 추가 {result['added']}건, 업데이트 {result['updated']}건, 스킵 {result['skipped']}건")
             load_data.clear()
             st.rerun()
-
-        # 이벤트 동기화
-        with st.expander("이벤트 동기화", expanded=False):
-            now = datetime.now()
-            evt_year = st.number_input("연도", value=now.year, min_value=2024, max_value=2030, key="evt_year")
-            col_m1, col_m2 = st.columns(2)
-            with col_m1:
-                evt_sm = st.number_input("시작월", value=now.month, min_value=1, max_value=12, key="evt_sm")
-            with col_m2:
-                evt_em = st.number_input("종료월", value=min(now.month + 1, 12), min_value=1, max_value=12, key="evt_em")
-            if st.button("이벤트 수집 실행", use_container_width=True, type="primary"):
-                from events.sync import run_event_sync
-                from events.db import load_current_events
-                with st.spinner("이벤트 수집 중..."):
-                    result = run_event_sync(int(evt_year), int(evt_sm), int(evt_em))
-                if result["errors"]:
-                    st.warning(f"이벤트 수집 완료: {result['processed']}개 지점, {result['total_items']:,}건 (오류 {len(result['errors'])}건)")
-                else:
-                    st.success(f"이벤트 수집 완료: {result['processed']}개 지점, {result['total_items']:,}건")
-                load_current_events.clear()
-                st.rerun()
 
     # 푸터
     st.markdown(f"""

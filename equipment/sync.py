@@ -131,8 +131,8 @@ def sync_from_sheets():
     c = conn.cursor()
 
     added = 0
+    updated = 0
     skipped = 0
-    conflicts = 0
     conflict_details = []
 
     for _, row in df.iterrows():
@@ -169,16 +169,22 @@ def sync_from_sheets():
             added += 1
         else:
             # 기존 행 → 내용 비교
+            db_id = existing[0]
             db_qty, db_photo, db_note, db_cat_id = existing[1], existing[2], existing[3], existing[4]
             if (db_qty == quantity and db_photo == photo_status
                     and (db_note or "") == note and db_cat_id == category_id):
                 skipped += 1
             else:
-                # 내용 다름 → 덮어쓰지 않고 로그만 남김
-                conflicts += 1
+                # 내용 다름 → 시트 기준으로 업데이트
+                c.execute("""
+                    UPDATE equipment
+                    SET quantity = ?, photo_status = ?, note = ?, category_id = ?
+                    WHERE id = ?
+                """, (quantity, photo_status, note, category_id, db_id))
+                updated += 1
                 conflict_details.append(
                     f"{branch_name}/{device_name}: "
-                    f"DB({db_qty},{db_photo},{db_note}) vs Sheets({quantity},{photo_status},{note})"
+                    f"DB({db_qty},{db_photo},{db_note}) → Sheets({quantity},{photo_status},{note})"
                 )
 
     # 4. 동기화 로그 기록
@@ -186,7 +192,7 @@ def sync_from_sheets():
     c.execute("""
         INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail)
         VALUES (?, ?, ?, ?, ?)
-    """, ("sheets_to_db", added, skipped, conflicts, detail_text))
+    """, ("sheets_to_db", added, skipped, updated, detail_text))
 
     conn.commit()
     conn.close()
@@ -194,15 +200,15 @@ def sync_from_sheets():
     # 5. 결과 출력
     print(f"\n동기화 완료:")
     print(f"  추가: {added}건")
+    print(f"  업데이트: {updated}건")
     print(f"  스킵: {skipped}건 (동일)")
-    print(f"  충돌: {conflicts}건 (로그만 기록, 덮어쓰지 않음)")
 
     if conflict_details:
-        print(f"\n충돌 상세 (상위 10건):")
+        print(f"\n변경 상세 (상위 10건):")
         for detail in conflict_details[:10]:
             print(f"  - {detail}")
 
-    return {"added": added, "skipped": skipped, "conflicts": conflicts}
+    return {"added": added, "updated": updated, "skipped": skipped}
 
 
 if __name__ == "__main__":

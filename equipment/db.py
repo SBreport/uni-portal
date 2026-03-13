@@ -215,3 +215,150 @@ def get_categories():
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return rows
+
+
+# ============================================================
+# 시술/장비 정보 사전 (device_info)
+# ============================================================
+
+def _ensure_device_info_table():
+    """device_info 테이블이 없으면 생성 (자동 마이그레이션)"""
+    conn = _get_conn()
+    c = conn.cursor()
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS device_info (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL UNIQUE,
+        category    TEXT DEFAULT '',
+        summary     TEXT DEFAULT '',
+        target      TEXT DEFAULT '',
+        mechanism   TEXT DEFAULT '',
+        note        TEXT DEFAULT '',
+        aliases     TEXT DEFAULT '',
+        usage_count INTEGER DEFAULT 0,
+        is_verified INTEGER DEFAULT 0,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def get_all_device_info():
+    """전체 시술 정보 목록 조회"""
+    _ensure_device_info_table()
+    conn = _get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM device_info ORDER BY usage_count DESC, name")
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_device_info_by_name(name):
+    """이름으로 시술 정보 조회 (정확 매칭)"""
+    _ensure_device_info_table()
+    conn = _get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM device_info WHERE name = ?", (name,))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def search_device_info(keyword):
+    """키워드로 시술 정보 검색 (이름 + aliases 부분 매칭)"""
+    _ensure_device_info_table()
+    conn = _get_conn()
+    c = conn.cursor()
+    c.execute(
+        "SELECT * FROM device_info WHERE name LIKE ? OR aliases LIKE ? ORDER BY usage_count DESC",
+        (f"%{keyword}%", f"%{keyword}%"),
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def upsert_device_info(name, category="", summary="", target="", mechanism="", note="", aliases="", usage_count=0, is_verified=0):
+    """시술 정보 추가 또는 업데이트 (upsert)"""
+    _ensure_device_info_table()
+    conn = _get_conn()
+    c = conn.cursor()
+    c.execute("SELECT id FROM device_info WHERE name = ?", (name,))
+    existing = c.fetchone()
+    if existing:
+        c.execute("""
+            UPDATE device_info SET category=?, summary=?, target=?, mechanism=?, note=?,
+                aliases=?, usage_count=?, is_verified=?, updated_at=CURRENT_TIMESTAMP
+            WHERE name=?
+        """, (category, summary, target, mechanism, note, aliases, usage_count, is_verified, name))
+    else:
+        c.execute("""
+            INSERT INTO device_info (name, category, summary, target, mechanism, note, aliases, usage_count, is_verified)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (name, category, summary, target, mechanism, note, aliases, usage_count, is_verified))
+    conn.commit()
+    conn.close()
+
+
+def delete_device_info(name):
+    """시술 정보 삭제"""
+    _ensure_device_info_table()
+    conn = _get_conn()
+    c = conn.cursor()
+    c.execute("DELETE FROM device_info WHERE name = ?", (name,))
+    conn.commit()
+    conn.close()
+
+
+def seed_device_info_from_config():
+    """config.py의 DEVICE_INFO를 DB로 이관 (기존 데이터 있으면 스킵)"""
+    _ensure_device_info_table()
+    from config import DEVICE_INFO, DEVICE_ALIASES
+    conn = _get_conn()
+    c = conn.cursor()
+
+    for name, info in DEVICE_INFO.items():
+        # aliases 구성
+        alias_list = DEVICE_ALIASES.get(name, [])
+        aliases_str = ", ".join(alias_list) if alias_list else ""
+
+        c.execute("SELECT id FROM device_info WHERE name = ?", (name,))
+        if not c.fetchone():
+            c.execute("""
+                INSERT INTO device_info (name, category, summary, target, mechanism, note, aliases, is_verified)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            """, (name, info.get("category", ""), info.get("summary", ""),
+                  info.get("target", ""), info.get("mechanism", ""),
+                  info.get("note", ""), aliases_str))
+
+    conn.commit()
+    conn.close()
+
+
+def update_device_usage_counts():
+    """장비 테이블 기준으로 각 시술의 사용 빈도(보유 지점 수) 업데이트"""
+    _ensure_device_info_table()
+    conn = _get_conn()
+    c = conn.cursor()
+
+    c.execute("SELECT id, name, aliases FROM device_info")
+    devices = c.fetchall()
+
+    for device in devices:
+        dev_name = device["name"]
+        aliases = device["aliases"].split(", ") if device["aliases"] else []
+        keywords = [dev_name] + aliases
+
+        total = 0
+        for kw in keywords:
+            if len(kw) >= 2:
+                c.execute("SELECT COUNT(*) FROM equipment WHERE name LIKE ?", (f"%{kw}%",))
+                total += c.fetchone()[0]
+
+        c.execute("UPDATE device_info SET usage_count = ? WHERE id = ?", (total, device["id"]))
+
+    conn.commit()
+    conn.close()

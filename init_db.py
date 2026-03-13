@@ -212,6 +212,28 @@ def init_db():
     )
     """)
 
+    # ============================================================
+    # 시술/장비 기초 정보 사전 (device_info)
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS device_info (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL UNIQUE,
+        category    TEXT DEFAULT '',
+        summary     TEXT DEFAULT '',
+        target      TEXT DEFAULT '',
+        mechanism   TEXT DEFAULT '',
+        note        TEXT DEFAULT '',
+        aliases     TEXT DEFAULT '',
+        usage_count INTEGER DEFAULT 0,
+        is_verified INTEGER DEFAULT 0,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_device_info_name ON device_info(name)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_device_info_category ON device_info(category)")
+
     # 이벤트 인덱스
     c.execute("CREATE INDEX IF NOT EXISTS idx_evt_branches_region ON evt_branches(region_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_evt_items_period_branch ON evt_items(event_period_id, branch_id)")

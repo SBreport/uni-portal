@@ -513,17 +513,18 @@ html.dark-theme [data-testid="stCaptionContainer"] * { color: var(--text-muted) 
     justify-content: center !important;
 }
 [data-testid="stModal"] > div > div {
-    width: 90vw !important;
-    max-width: 1200px !important;
+    width: 92vw !important;
+    max-width: 1300px !important;
     min-width: 800px !important;
-    max-height: 85vh !important;
+    max-height: 90vh !important;
 }
 [data-testid="stModal"] [data-testid="stVerticalBlock"] {
     width: 100% !important;
 }
 /* 다이얼로그 내부 AG-Grid iframe 높이 확장 */
 [data-testid="stModal"] iframe {
-    min-height: 400px !important;
+    min-height: 55vh !important;
+    height: 60vh !important;
 }
 /* dialog fallback selectors */
 div[role="dialog"] {
@@ -533,7 +534,7 @@ div[role="dialog"] {
 }
 div[role="dialog"] > div {
     width: 100% !important;
-    max-height: 85vh !important;
+    max-height: 90vh !important;
     overflow-y: auto !important;
 }
 </style>""", unsafe_allow_html=True)

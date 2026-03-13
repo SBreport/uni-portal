@@ -99,10 +99,86 @@ def _aggrid_dark_css():
     }
 
 
-@st.dialog("관련 이벤트", width="large")
-def _show_related_events_dialog(equip_name: str, branch_name: str, selected_branches: list):
-    """선택된 장비명과 관련된 현재 운영 중인 이벤트를 다이얼로그로 표시합니다."""
+@st.dialog("조회", width="large")
+def _show_lookup_dialog(equip_name: str, branch_name: str, selected_branches: list):
+    """시술 정보 + 관련 이벤트를 통합 표시하는 다이얼로그."""
     import re
+    from equipment.db import search_device_info
+    from config import DEVICE_ALIASES
+
+    # ── 헤더 ──
+    st.markdown(
+        f"<div style='font-size:1.15rem; font-weight:700; color:var(--text-primary,#1E293B); margin-bottom:0.25rem;'>"
+        f"<span style='color:var(--accent,#2563EB);'>{equip_name}</span></div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── 1. 시술 정보 (DB) ──
+    device_matched = []
+    seen_names = set()
+    name_lower = equip_name.lower().strip()
+
+    for canonical, aliases in DEVICE_ALIASES.items():
+        for alias in aliases:
+            if alias.lower() in name_lower or name_lower in alias.lower():
+                results = search_device_info(canonical)
+                for r in results:
+                    if r["name"] not in seen_names:
+                        device_matched.append(r)
+                        seen_names.add(r["name"])
+                break
+
+    if not device_matched:
+        raw = re.sub(r"[0-9\s\-_/()（）]", " ", equip_name).strip()
+        kws = [w for w in raw.split() if len(w) >= 2]
+        if not kws:
+            kws = [equip_name.strip()]
+        for kw in kws:
+            results = search_device_info(kw)
+            for r in results:
+                if r["name"] not in seen_names:
+                    device_matched.append(r)
+                    seen_names.add(r["name"])
+
+    if device_matched:
+        for info in device_matched:
+            st.markdown(f"""
+<div style="background:var(--bg-card,#F8FAFC); border:1px solid var(--border,#E2E8F0);
+    border-left:4px solid var(--accent,#2563EB); border-radius:8px; padding:0.75rem 1rem; margin-bottom:0.5rem;">
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.35rem;">
+        <span style="font-size:0.95rem; font-weight:700; color:var(--text-primary,#1E293B);">{info['name']}</span>
+        <span style="font-size:0.7rem; color:var(--text-muted,#94A3B8);
+            background:var(--secondary-background-color,#F1F5F9); padding:1px 7px; border-radius:4px;">{info.get('category', '')}</span>
+    </div>
+    <div style="font-size:0.85rem; color:var(--text-primary,#334155); line-height:1.6; margin-bottom:0.35rem;">
+        {info.get('summary', '')}
+    </div>
+    <table style="font-size:0.78rem; color:var(--text-primary,#475569); border-collapse:collapse; width:100%;">
+        <tr style="border-bottom:1px solid var(--border,#E2E8F0);">
+            <td style="padding:0.25rem 0.4rem; font-weight:600; white-space:nowrap; width:70px; color:var(--text-muted,#64748B);">적용 부위</td>
+            <td style="padding:0.25rem 0.4rem;">{info.get('target', '-')}</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border,#E2E8F0);">
+            <td style="padding:0.25rem 0.4rem; font-weight:600; white-space:nowrap; color:var(--text-muted,#64748B);">작용 원리</td>
+            <td style="padding:0.25rem 0.4rem;">{info.get('mechanism', '-')}</td>
+        </tr>
+        <tr>
+            <td style="padding:0.25rem 0.4rem; font-weight:600; white-space:nowrap; color:var(--text-muted,#64748B);">참고</td>
+            <td style="padding:0.25rem 0.4rem;">{info.get('note', '-')}</td>
+        </tr>
+    </table>
+</div>""", unsafe_allow_html=True)
+    else:
+        st.caption(f"'{equip_name}'에 대한 시술 정보가 등록되어 있지 않습니다.")
+
+    # ── 2. 관련 이벤트 ──
+    st.markdown(
+        "<div style='font-size:0.9rem; font-weight:700; color:var(--text-primary,#1E293B); "
+        "margin:0.5rem 0 0.25rem 0; border-top:1px solid var(--border,#E2E8F0); padding-top:0.5rem;'>"
+        "관련 이벤트</div>",
+        unsafe_allow_html=True,
+    )
+
     try:
         from events.db import load_current_events
         evt_df = load_current_events()
@@ -114,45 +190,42 @@ def _show_related_events_dialog(equip_name: str, branch_name: str, selected_bran
         st.info("현재 운영 중인 이벤트가 없습니다.")
         return
 
-    # 선택된 지점 필터 적용
+    # 지점 필터
     filter_branches = selected_branches if selected_branches else []
-    # 장비 행의 지점명도 포함 (혹시 사이드바 필터에 없더라도)
     if branch_name and branch_name not in filter_branches:
         filter_branches = [branch_name] + filter_branches
-
     if filter_branches:
         evt_df = evt_df[evt_df["지점명"].isin(filter_branches)]
         branch_label = ", ".join(filter_branches)
     else:
         branch_label = "전체"
 
-    # 기기명에서 핵심 키워드 추출
+    # 키워드 추출 + 매칭
     raw = re.sub(r"[0-9\s\-_/()（）]", " ", equip_name).strip()
     keywords = [w for w in raw.split() if len(w) >= 2]
     if not keywords:
         keywords = [equip_name.strip()]
 
-    # 이벤트명에 키워드가 하나라도 포함된 행 필터링
     mask = pd.Series(False, index=evt_df.index)
     for kw in keywords:
         mask = mask | evt_df["이벤트명"].str.contains(kw, case=False, na=False)
-    matched = evt_df[mask]
+    matched_evt = evt_df[mask]
 
-    # 헤더
-    st.markdown(
-        f"<div style='font-size:1rem; font-weight:700; color:var(--text-primary,#1E293B); margin-bottom:0.25rem;'>"
-        f"<span style='color:var(--accent,#2563EB);'>{equip_name}</span> 관련 이벤트</div>",
-        unsafe_allow_html=True,
-    )
-    st.caption(f"지점: {branch_label} · 키워드: {', '.join(keywords)}")
+    # 기간 표시
+    period_label = ""
+    if "기간" in evt_df.columns and len(evt_df) > 0:
+        period_label = evt_df["기간"].dropna().unique()
+        period_label = period_label[0] if len(period_label) > 0 else ""
+    period_text = f" · 기간: {period_label}" if period_label else ""
+    st.caption(f"지점: {branch_label} · 키워드: {', '.join(keywords)}{period_text}")
 
-    if len(matched) == 0:
+    if len(matched_evt) == 0:
         st.info(f"'{equip_name}' 관련 운영 중인 이벤트가 없습니다.")
         return
 
-    st.markdown(f"**{len(matched)}건** 매칭")
+    st.markdown(f"**{len(matched_evt)}건** 매칭")
 
-    display = matched[["지점명", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].copy()
+    display = matched_evt[["지점명", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].copy()
     display["정상가"] = display["정상가"].apply(lambda x: f"{int(x):,}" if pd.notna(x) and x else "-")
     display["이벤트가"] = display["이벤트가"].apply(lambda x: f"{int(x):,}" if pd.notna(x) and x else "-")
     display["할인율"] = display["할인율"].apply(lambda x: f"{x:.0f}%" if pd.notna(x) and x else "-")
@@ -171,7 +244,7 @@ def _show_related_events_dialog(equip_name: str, branch_name: str, selected_bran
 
     AgGrid(
         display, gridOptions=gb.build(), custom_css=_aggrid_dark_css(),
-        height=max(200, min(500, 32 + len(display) * 28)),
+        height=max(250, min(600, 32 + len(display) * 30)),
         update_mode=GridUpdateMode.NO_UPDATE,
         data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
         fit_columns_on_grid_load=True, allow_unsafe_jscode=True, theme="streamlit",
@@ -213,8 +286,9 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
     gb.configure_column("순번", header_name="No", width=60, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
     gb.configure_column("지점명", width=80, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
     if can_edit:
+        # 더블클릭 = 편집 (AG-Grid 기본 동작), 원클릭 = 행 선택
         gb.configure_column("기기명", width=200, flex=2, editable=True,
-                            cellStyle={"textAlign": "left", "cursor": "text"})
+                            cellStyle={"textAlign": "left", "cursor": "pointer"})
     else:
         gb.configure_column("기기명", width=200, flex=2)
     gb.configure_column("카테고리", width=90, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
@@ -249,7 +323,7 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── 선택 정보 + 액션 버튼 (한 줄) ──
+    # ── 선택 정보 + 액션 버튼 ──
     selected_rows = grid_response.get("selected_rows", None)
     has_selection = selected_rows is not None and len(selected_rows) > 0
     edited_data = grid_response["data"]
@@ -295,17 +369,17 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
             unsafe_allow_html=True,
         )
 
-    # 버튼 한 줄 배치: 이벤트 조회 | 변경 저장 | CSV
+    # 버튼 한 줄 배치: 조회 | 변경 저장 | CSV
     if can_edit:
-        col_evt, col_save, col_download = st.columns([1, 1, 1])
+        col_lookup, col_save, col_download = st.columns([1, 1, 1])
     else:
-        col_evt, col_download = st.columns([1, 1])
+        col_lookup, col_download = st.columns([1, 1])
 
-    with col_evt:
-        evt_disabled = not has_selection
-        if st.button("이벤트 조회", type="primary", use_container_width=True,
-                     key="btn_evt_lookup", disabled=evt_disabled):
-            _show_related_events_dialog(equip_name, branch_name, selected_branches)
+    with col_lookup:
+        lookup_disabled = not has_selection
+        if st.button("조회", type="primary", use_container_width=True,
+                     key="btn_lookup", disabled=lookup_disabled):
+            _show_lookup_dialog(equip_name, branch_name, selected_branches)
 
     if can_edit:
         with col_save:
@@ -336,10 +410,10 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
                 else:
                     st.info("변경된 항목이 없습니다.")
 
-    col_dl = col_download
-    with col_dl:
+    with col_download:
         csv_data = grid_df[["순번", "지점명", "기기명", "카테고리", "사진유무", "수량", "비고"]].to_csv(index=False).encode("utf-8-sig")
         st.download_button("CSV 다운로드", csv_data, "equipment_list.csv", "text/csv", use_container_width=True)
+
 
 
 
@@ -599,8 +673,8 @@ def render_admin_panel():
             st.info("등록된 사용자가 없습니다.")
 
     with col_mgmt:
-        tab_add, tab_role, tab_pw, tab_memo, tab_del, tab_sync = st.tabs(
-            ["➕ 추가", "🔄 역할변경", "🔑 비밀번호", "📝 비고", "🗑️ 삭제", "📥 동기화"]
+        tab_add, tab_role, tab_pw, tab_memo, tab_del, tab_sync, tab_dict = st.tabs(
+            ["➕ 추가", "🔄 역할변경", "🔑 비밀번호", "📝 비고", "🗑️ 삭제", "📥 동기화", "📖 시술사전"]
         )
 
         # ── 사용자 추가 ──
@@ -801,6 +875,110 @@ def render_admin_panel():
                         else:
                             st.success(f"수집 완료: {result['processed']}개 지점, {result['total_items']:,}건")
                         load_current_events.clear()
+                        st.rerun()
+
+        # ── 시술 사전 관리 ──
+        with tab_dict:
+            from equipment.db import (
+                get_all_device_info, upsert_device_info, delete_device_info,
+                update_device_usage_counts, seed_device_info_from_config,
+            )
+
+            st.markdown("**시술/장비 정보 사전 관리**")
+
+            # 목록 표시
+            all_devices = get_all_device_info()
+
+            if all_devices:
+                dict_df = pd.DataFrame(all_devices)
+                display_cols = ["name", "category", "summary", "usage_count", "is_verified"]
+                display_df = dict_df[display_cols].rename(columns={
+                    "name": "시술명", "category": "카테고리", "summary": "설명",
+                    "usage_count": "보유수", "is_verified": "검증",
+                })
+                display_df["검증"] = display_df["검증"].apply(lambda x: "✅" if x else "")
+
+                st.dataframe(
+                    display_df, use_container_width=True, hide_index=True,
+                    height=min(35 * len(display_df) + 38, 350),
+                    column_config={
+                        "시술명": st.column_config.TextColumn("시술명", width="small"),
+                        "카테고리": st.column_config.TextColumn("카테고리", width="small"),
+                        "설명": st.column_config.TextColumn("설명", width="large"),
+                        "보유수": st.column_config.NumberColumn("보유", width="small"),
+                        "검증": st.column_config.TextColumn("검증", width="small"),
+                    },
+                )
+                st.caption(f"총 {len(all_devices)}건 등록")
+            else:
+                st.info("등록된 시술 정보가 없습니다.")
+
+            # 추가/수정 폼
+            st.markdown("---")
+            with st.expander("시술 정보 추가/수정", expanded=False):
+                with st.form("dict_upsert_form"):
+                    dict_name = st.text_input("시술명 *", key="dict_name",
+                                              placeholder="예: 울쎄라피 프라임")
+                    dc1, dc2 = st.columns(2)
+                    with dc1:
+                        dict_category = st.text_input("카테고리", key="dict_cat",
+                                                       placeholder="예: 리프팅")
+                    with dc2:
+                        dict_aliases = st.text_input("별칭 (쉼표 구분)", key="dict_aliases",
+                                                      placeholder="예: 울쎄라, 울쎄라프라임")
+                    dict_summary = st.text_area("한줄 설명", key="dict_summary",
+                                                 placeholder="초음파 열로 피부를 자극하는 리프팅 시술", height=68)
+                    dict_target = st.text_input("적용 부위", key="dict_target",
+                                                 placeholder="예: 얼굴 처짐, 턱선")
+                    dict_mechanism = st.text_area("작용 원리", key="dict_mech",
+                                                   placeholder="HIFU로 SMAS층까지 열에너지 전달", height=68)
+                    dict_note = st.text_input("참고", key="dict_note",
+                                               placeholder="추가 참고 사항")
+                    if st.form_submit_button("저장", type="primary", use_container_width=True):
+                        if not dict_name.strip():
+                            st.error("시술명을 입력해주세요.")
+                        else:
+                            upsert_device_info(
+                                name=dict_name.strip(),
+                                category=dict_category.strip(),
+                                summary=dict_summary.strip(),
+                                target=dict_target.strip(),
+                                mechanism=dict_mechanism.strip(),
+                                note=dict_note.strip(),
+                                aliases=dict_aliases.strip(),
+                                is_verified=1,
+                            )
+                            st.success(f"'{dict_name.strip()}' 저장 완료")
+                            st.rerun()
+
+            # 삭제
+            with st.expander("시술 정보 삭제", expanded=False):
+                if all_devices:
+                    device_names = [d["name"] for d in all_devices]
+                    del_device = st.selectbox("삭제할 시술", device_names, key="dict_del_target")
+                    del_device_confirm = st.checkbox(f"'{del_device}' 삭제 확인", key="dict_del_confirm")
+                    if st.button("삭제", key="dict_del_btn", use_container_width=True):
+                        if not del_device_confirm:
+                            st.error("삭제 확인란을 체크해주세요.")
+                        else:
+                            delete_device_info(del_device)
+                            st.success(f"'{del_device}' 삭제 완료")
+                            st.rerun()
+                else:
+                    st.info("삭제할 시술 정보가 없습니다.")
+
+            # 유틸리티
+            with st.expander("유틸리티", expanded=False):
+                uc1, uc2 = st.columns(2)
+                with uc1:
+                    if st.button("보유수 업데이트", use_container_width=True, key="dict_update_count"):
+                        update_device_usage_counts()
+                        st.success("보유수 업데이트 완료")
+                        st.rerun()
+                with uc2:
+                    if st.button("config → DB 시딩", use_container_width=True, key="dict_seed"):
+                        seed_device_info_from_config()
+                        st.success("config.py 데이터 시딩 완료")
                         st.rerun()
 
 

@@ -59,6 +59,7 @@ def init_db():
         password_hash TEXT NOT NULL,
         role          TEXT DEFAULT 'viewer',
         branch_id     INTEGER REFERENCES branches(id),
+        memo          TEXT DEFAULT '',
         created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)

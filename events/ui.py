@@ -6,6 +6,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 
 from events.db import (
     load_current_events,
@@ -46,67 +47,45 @@ def _show_sync_result(result):
 
 
 def render_tab_events():
-    """이벤트 관리 탭 — 서브 뷰 전환."""
+    """이벤트 관리 탭 — 상단 필터 + 서브 뷰 전환."""
+    # 컨테이너로 감싸서 다른 탭 레이아웃 잔상 방지
+    _evt_container = st.container()
+    with _evt_container:
+        _render_tab_events_inner()
+
+
+def _render_tab_events_inner():
+    """이벤트 탭 내부 구현."""
     permissions = get_permissions()
 
-    # 이벤트 동기화 (관리자 전용)
-    if permissions.get("can_sync", False):
-        with st.expander("📥 이벤트 동기화", expanded=False):
-            from datetime import datetime
-            now = datetime.now()
+    # ── 상단 필터 바 ──
+    _evt_cats = load_evt_categories()
+    _cat_names = sorted([c["display_name"] for c in _evt_cats])
 
-            # 기간 설정 (격월 단위)
-            col_y, col_p = st.columns(2)
-            with col_y:
-                evt_year = st.selectbox("연도", range(now.year, 2023, -1), key="evt_year")
-            with col_p:
-                bimonth_options = ["1-2월", "3-4월", "5-6월", "7-8월", "9-10월", "11-12월"]
-                current_idx = min((now.month - 1) // 2, 5)
-                evt_period = st.selectbox("기간", bimonth_options, index=current_idx, key="evt_period_sel")
+    col_f1, col_f2, col_f3, col_f4 = st.columns([1.5, 2.5, 1, 1])
+    with col_f1:
+        st.selectbox("카테고리", ["전체"] + _cat_names, key="evt_top_cat")
+    with col_f2:
+        st.text_input("이벤트 검색", placeholder="시술명/이벤트명을 입력하세요", key="evt_top_search")
+    with col_f3:
+        _p_min = st.number_input("최소 금액", min_value=0, max_value=5_000_000,
+                                  value=0, step=10_000, format="%d", key="evt_price_min_input")
+    with col_f4:
+        _p_max = st.number_input("최대 금액", min_value=0, max_value=5_000_000,
+                                  value=5_000_000, step=10_000, format="%d", key="evt_price_max_input")
+    st.session_state["evt_price_min"] = _p_min
+    st.session_state["evt_price_max"] = _p_max
 
-            _period_map = {
-                "1-2월": (1, 2), "3-4월": (3, 4), "5-6월": (5, 6),
-                "7-8월": (7, 8), "9-10월": (9, 10), "11-12월": (11, 12),
-            }
-            sm, em = _period_map[evt_period]
+    # 동기화 기능은 사용자 관리 탭으로 이동됨
 
-            # 동기화 방식 선택
-            sync_method = st.radio(
-                "동기화 방식", ["📎 링크 입력", "📤 파일 업로드"],
-                horizontal=True, key="evt_sync_method", label_visibility="collapsed",
-            )
-
-            if sync_method == "📎 링크 입력":
-                sheet_url = st.text_input(
-                    "Google Sheets URL",
-                    placeholder="https://docs.google.com/spreadsheets/d/...",
-                    key="evt_sheet_url",
-                )
-                st.caption("시트가 '링크가 있는 모든 사용자에게 공개'로 설정되어야 합니다.")
-                if st.button("수집 실행", type="primary", use_container_width=True, key="evt_sync_url_btn"):
-                    if not sheet_url:
-                        st.error("URL을 입력해주세요.")
-                    else:
-                        from events.sync import run_event_sync_from_url
-                        with st.spinner("이벤트 수집 중..."):
-                            result = run_event_sync_from_url(sheet_url, int(evt_year), sm, em)
-                        _show_sync_result(result)
-            else:
-                uploaded = st.file_uploader(
-                    "Excel 파일 업로드",
-                    type=["xlsx", "xls"],
-                    key="evt_file_upload",
-                    help="각 시트 탭 이름이 지점명(예: 강남, 잠실)이어야 합니다.",
-                )
-                if uploaded is not None:
-                    if st.button("수집 실행", type="primary", use_container_width=True, key="evt_sync_file_btn"):
-                        from events.sync import run_event_sync_from_file
-                        with st.spinner("이벤트 수집 중..."):
-                            result = run_event_sync_from_file(uploaded.read(), int(evt_year), sm, em)
-                        _show_sync_result(result)
+    # 권한에 따라 서브 뷰 목록 구성
+    _sub_views = ["이벤트 목록", "이벤트 검색"]
+    if permissions.get("can_edit_dictionary", False):
+        _sub_views.append("지점 비교")
+    _sub_views += ["기간별 가격 변동", "시술 사전"]
 
     sub_view = st.radio(
-        "보기 선택", ["이벤트 목록", "이벤트 검색", "지점 비교", "가격 이력", "시술 사전"],
+        "보기 선택", _sub_views,
         horizontal=True, label_visibility="collapsed",
         key="evt_sub_view",
     )
@@ -117,7 +96,7 @@ def render_tab_events():
         _render_event_search()
     elif sub_view == "지점 비교":
         _render_branch_compare()
-    elif sub_view == "가격 이력":
+    elif sub_view == "기간별 가격 변동":
         _render_price_history()
     elif sub_view == "시술 사전":
         _render_treatment_dictionary()
@@ -128,61 +107,80 @@ def _render_event_list():
     df = load_current_events()
 
     if len(df) == 0:
-        st.warning("이벤트 데이터가 없습니다. 상단의 '이벤트 동기화'를 실행해주세요.")
+        from datetime import datetime
+        now = datetime.now()
+        _bm_idx = min((now.month - 1) // 2, 5)
+        _pm = {0: (1, 2), 1: (3, 4), 2: (5, 6), 3: (7, 8), 4: (9, 10), 5: (11, 12)}
+        sm, em = _pm[_bm_idx]
+        st.warning(f"{now.year}년 {sm}-{em}월 이벤트 정보가 아직 입력되지 않았습니다.")
         return
 
-    # 필터 영역
-    col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        regions = sorted(df["지역"].unique())
-        sel_region = st.selectbox("지역", ["전체"] + regions, key="evt_region")
-    with col_f2:
-        categories = sorted(df["카테고리"].unique())
-        sel_cat = st.selectbox("카테고리", ["전체"] + categories, key="evt_cat")
-    with col_f3:
-        branches = sorted(df["지점명"].unique())
-        sel_branch = st.selectbox("지점", ["전체"] + branches, key="evt_branch")
+    # 해시태그 필터링 (#xxx 제거)
+    df = df[~df["이벤트명"].str.startswith("#", na=False)]
+
+    # 정상가/이벤트가/할인율/비고 모두 비어있는 행 제거
+    _price_cols = ["정상가", "이벤트가", "할인율", "비고"]
+    _existing = [c for c in _price_cols if c in df.columns]
+    if _existing:
+        df = df[~df[_existing].apply(
+            lambda row: all(pd.isna(v) or str(v).strip() in ("", "-", "0") for v in row),
+            axis=1,
+        )]
+
+    # 필터 읽기 (사이드바 지점 + 탭 상단 카테고리/검색/가격대)
+    sel_branches = st.session_state.get("_shared_branches", [])
+    sel_cat = st.session_state.get("evt_top_cat", "전체")
+    sel_search = st.session_state.get("evt_top_search", "")
+    p_min = st.session_state.get("evt_price_min", 0)
+    p_max = st.session_state.get("evt_price_max", 5_000_000)
 
     # 필터 적용
     filtered = df.copy()
-    if sel_region != "전체":
-        filtered = filtered[filtered["지역"] == sel_region]
+    if sel_branches:
+        filtered = filtered[filtered["지점명"].isin(sel_branches)]
     if sel_cat != "전체":
         filtered = filtered[filtered["카테고리"] == sel_cat]
-    if sel_branch != "전체":
-        filtered = filtered[filtered["지점명"] == sel_branch]
+    if sel_search:
+        filtered = filtered[filtered["이벤트명"].str.contains(sel_search, case=False, na=False)]
+    if p_min > 0:
+        filtered = filtered[filtered["이벤트가"].fillna(0) >= p_min]
+    if p_max < 5_000_000:
+        filtered = filtered[filtered["이벤트가"].fillna(0) <= p_max]
 
     # 기간 + 건수 표시
     period = df["기간"].iloc[0] if len(df) > 0 else ""
     st.markdown(f"**이벤트 목록** · {period} · {len(filtered):,}건")
 
-    # 데이터 표시
-    display_df = filtered[["지점명", "지역", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].copy()
+    # 데이터 표시 (지역 컬럼 제외)
+    display_df = filtered[["지점명", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].copy()
     display_df["정상가"] = display_df["정상가"].apply(_format_price)
     display_df["이벤트가"] = display_df["이벤트가"].apply(_format_price)
     display_df["할인율"] = display_df["할인율"].apply(
         lambda x: f"{x:.0f}%" if pd.notna(x) and x is not None else "-"
     )
 
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        height=600,
-        hide_index=True,
-        column_config={
-            "지점명": st.column_config.TextColumn("지점", width="small"),
-            "지역": st.column_config.TextColumn("지역", width="small"),
-            "카테고리": st.column_config.TextColumn("카테고리", width="small"),
-            "이벤트명": st.column_config.TextColumn("이벤트명", width="large"),
-            "정상가": st.column_config.TextColumn("정상가", width="small"),
-            "이벤트가": st.column_config.TextColumn("이벤트가", width="small"),
-            "할인율": st.column_config.TextColumn("할인율", width="small"),
-            "비고": st.column_config.TextColumn("비고", width="medium"),
-        },
+    # AG-Grid 렌더링 (보유장비 탭과 동일 스타일)
+    gb = GridOptionsBuilder.from_dataframe(display_df)
+    gb.configure_column("지점명", header_name="지점", width=80, cellStyle={"textAlign": "center"})
+    gb.configure_column("카테고리", width=90, cellStyle={"textAlign": "center"})
+    gb.configure_column("이벤트명", width=250, flex=2)
+    gb.configure_column("정상가", width=90, cellStyle={"textAlign": "right"})
+    gb.configure_column("이벤트가", width=90, cellStyle={"textAlign": "right"})
+    gb.configure_column("할인율", width=65, cellStyle={"textAlign": "center"})
+    gb.configure_column("비고", width=150, flex=1)
+    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    gb.configure_grid_options(domLayout="normal", rowHeight=28, headerHeight=32)
+
+    from ui_tabs import _aggrid_dark_css
+    AgGrid(
+        display_df, gridOptions=gb.build(), custom_css=_aggrid_dark_css(),
+        height=600, update_mode=GridUpdateMode.NO_UPDATE,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        fit_columns_on_grid_load=True, allow_unsafe_jscode=True, theme="streamlit",
     )
 
     # CSV 다운로드
-    csv = filtered[["지점명", "지역", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].to_csv(index=False).encode("utf-8-sig")
+    csv = filtered[["지점명", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].to_csv(index=False).encode("utf-8-sig")
     st.download_button("CSV 다운로드", csv, f"events_{period}.csv", "text/csv", use_container_width=True)
 
 
@@ -242,8 +240,12 @@ def _render_event_search():
     with col4:
         st.metric("최고 이벤트가", _format_price(prices.max()) if len(prices) > 0 else "-")
 
-    # 결과 테이블
-    display = unique_events[["지점명", "지역", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "패키지", "매칭유형", "비고"]].copy()
+    # 해시태그 필터링
+    unique_events = unique_events[~unique_events["이벤트명"].str.startswith("#", na=False)]
+    unique_count = len(unique_events)
+
+    # 결과 테이블 (지역 컬럼 제외)
+    display = unique_events[["지점명", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "패키지", "매칭유형", "비고"]].copy()
     display["정상가"] = display["정상가"].apply(_format_price)
     display["이벤트가"] = display["이벤트가"].apply(_format_price)
     display["할인율"] = display["할인율"].apply(
@@ -256,7 +258,6 @@ def _render_event_search():
         use_container_width=True, hide_index=True, height=500,
         column_config={
             "지점명": st.column_config.TextColumn("지점", width="small"),
-            "지역": st.column_config.TextColumn("지역", width="small"),
             "카테고리": st.column_config.TextColumn("카테고리", width="small"),
             "이벤트명": st.column_config.TextColumn("이벤트명", width="large"),
             "정상가": st.column_config.TextColumn("정상가", width="small"),
@@ -269,7 +270,7 @@ def _render_event_search():
     )
 
     # CSV 다운로드
-    csv = unique_events[["지점명", "지역", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].to_csv(index=False).encode("utf-8-sig")
+    csv = unique_events[["지점명", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].to_csv(index=False).encode("utf-8-sig")
     st.download_button(
         f"검색결과 CSV 다운로드 ({unique_count}건)", csv,
         f"search_{query}.csv", "text/csv", use_container_width=True,
@@ -321,7 +322,8 @@ def _render_branch_compare():
 
 
 def _render_price_history():
-    """가격 이력 조회."""
+    """기간별 가격 변동 — 같은 이벤트의 가격이 기간에 따라 어떻게 바뀌었는지 추적."""
+    st.caption("동일 시술의 가격이 기간(격월)마다 어떻게 변동되었는지 확인합니다.")
     evt_branches = load_evt_branches()
     branch_names = [b["name"] for b in evt_branches]
 

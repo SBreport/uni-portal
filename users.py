@@ -27,13 +27,14 @@ def load_users():
     try:
         conn = _get_conn()
         c = conn.cursor()
-        c.execute("SELECT username, password_hash, role, branch_id FROM users ORDER BY username")
+        c.execute("SELECT username, password_hash, role, branch_id, memo FROM users ORDER BY username")
         for row in c.fetchall():
             users.append({
                 "username": row["username"],
                 "password_hash": row["password_hash"],
                 "role": row["role"],
                 "branch_id": row["branch_id"],
+                "memo": row["memo"] if "memo" in row.keys() else "",
             })
         conn.close()
     except Exception:
@@ -78,7 +79,7 @@ def get_user(username):
     return None
 
 
-def add_user(username, password_hash, role, branch_id=None):
+def add_user(username, password_hash, role, branch_id=None, memo=""):
     """사용자를 추가한다."""
     if get_user(username):
         return False, f"'{username}' 은(는) 이미 존재합니다."
@@ -87,8 +88,8 @@ def add_user(username, password_hash, role, branch_id=None):
         conn = _get_conn()
         c = conn.cursor()
         c.execute(
-            "INSERT INTO users (username, password_hash, role, branch_id) VALUES (?, ?, ?, ?)",
-            (username, password_hash, role, branch_id),
+            "INSERT INTO users (username, password_hash, role, branch_id, memo) VALUES (?, ?, ?, ?, ?)",
+            (username, password_hash, role, branch_id, memo),
         )
         conn.commit()
         conn.close()
@@ -153,6 +154,38 @@ def update_user_password(username, new_password_hash):
         return True, f"'{username}' 비밀번호가 변경되었습니다."
     except Exception as e:
         return False, f"비밀번호 변경 실패: {e}"
+
+
+def update_user_memo(username, memo):
+    """사용자 비고를 변경한다."""
+    try:
+        conn = _get_conn()
+        c = conn.cursor()
+        c.execute("UPDATE users SET memo = ? WHERE username = ?", (memo, username))
+        if c.rowcount == 0:
+            conn.close()
+            return False, f"'{username}' 을(를) 찾을 수 없습니다."
+        conn.commit()
+        conn.close()
+        invalidate_users_cache()
+        return True, f"'{username}' 비고가 변경되었습니다."
+    except Exception as e:
+        return False, f"비고 변경 실패: {e}"
+
+
+def ensure_memo_column():
+    """기존 DB에 memo 컬럼이 없으면 추가한다."""
+    try:
+        conn = _get_conn()
+        c = conn.cursor()
+        c.execute("PRAGMA table_info(users)")
+        cols = [row["name"] for row in c.fetchall()]
+        if "memo" not in cols:
+            c.execute("ALTER TABLE users ADD COLUMN memo TEXT DEFAULT ''")
+            conn.commit()
+        conn.close()
+    except Exception:
+        pass
 
 
 def invalidate_users_cache():

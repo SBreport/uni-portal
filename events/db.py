@@ -221,8 +221,21 @@ def update_ingestion_log(conn, log_id: int, status: str, total_branches: int, to
 
 @st.cache_data(ttl=300)
 def load_current_events() -> pd.DataFrame:
-    """현재 기간의 이벤트 데이터를 로드."""
+    """현재 날짜 기준 해당 격월 기간의 이벤트 데이터를 로드.
+
+    현재 월에 해당하는 격월 기간(1-2, 3-4, 5-6, …)의 데이터를 우선 조회.
+    해당 기간 데이터가 없으면 is_current=1인 기간을 fallback으로 사용.
+    """
+    from datetime import datetime
+    now = datetime.now()
+    _bm_idx = min((now.month - 1) // 2, 5)
+    _pm = {0: 1, 1: 3, 2: 5, 3: 7, 4: 9, 5: 11}
+    current_start_month = _pm[_bm_idx]
+    current_year = now.year
+
     conn = _get_conn()
+
+    # 현재 날짜 기준 격월 기간 조회
     query = """
         SELECT
             ei.id,
@@ -244,10 +257,39 @@ def load_current_events() -> pd.DataFrame:
         JOIN evt_regions er ON eb.region_id = er.id
         JOIN evt_categories ec ON ei.category_id = ec.id
         JOIN evt_periods ep ON ei.event_period_id = ep.id
-        WHERE ep.is_current = 1 AND ei.is_active = 1
+        WHERE ep.year = ? AND ep.start_month = ? AND ei.is_active = 1
         ORDER BY er.sort_order, eb.name, ec.sort_order, ei.row_order
     """
-    df = pd.read_sql_query(query, conn)
+    df = pd.read_sql_query(query, conn, params=(current_year, current_start_month))
+
+    # 해당 기간 데이터가 없으면 is_current=1 fallback
+    if len(df) == 0:
+        query_fallback = """
+            SELECT
+                ei.id,
+                eb.name AS 지점명,
+                eb.short_name,
+                er.name AS 지역,
+                ec.display_name AS 카테고리,
+                ei.raw_event_name AS 이벤트명,
+                ei.display_name AS 표시명,
+                ei.regular_price AS 정상가,
+                ei.event_price AS 이벤트가,
+                ei.discount_rate AS 할인율,
+                ei.session_count AS 회차,
+                ei.is_package AS 패키지,
+                ei.notes AS 비고,
+                ep.label AS 기간
+            FROM evt_items ei
+            JOIN evt_branches eb ON ei.branch_id = eb.id
+            JOIN evt_regions er ON eb.region_id = er.id
+            JOIN evt_categories ec ON ei.category_id = ec.id
+            JOIN evt_periods ep ON ei.event_period_id = ep.id
+            WHERE ep.is_current = 1 AND ei.is_active = 1
+            ORDER BY er.sort_order, eb.name, ec.sort_order, ei.row_order
+        """
+        df = pd.read_sql_query(query_fallback, conn)
+
     conn.close()
     return df
 

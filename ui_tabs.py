@@ -8,7 +8,8 @@ from events.db import get_treatment_descriptions
 from auth import hash_password
 from users import (
     load_users, add_user, remove_user,
-    update_user_role, update_user_password, invalidate_users_cache,
+    update_user_role, update_user_password, update_user_memo,
+    invalidate_users_cache, ensure_memo_column,
 )
 
 
@@ -37,7 +38,26 @@ def _kpi_card(icon, label, value, color="var(--accent)"):
 # 탭 1: 장비 관리 (서브 뷰 전환)
 # ============================================================
 def render_tab_equipment(filtered_df, df, selected_branches, permissions):
-    """장비 관리 탭 — 서브 뷰(목록/검색/비교) 전환"""
+    """보유장비 탭 — 상단 필터 + 서브 뷰 전환"""
+    # ── 상단 필터 바 ──
+    col_f1, col_f2 = st.columns([1.5, 3])
+    with col_f1:
+        _cats = sorted(filtered_df["카테고리"].unique()) if len(filtered_df) > 0 else []
+        eq_cat = st.selectbox("카테고리", ["전체"] + _cats, key="eq_top_cat")
+    with col_f2:
+        eq_search = st.text_input("장비명 검색", placeholder="장비명을 입력하세요", key="eq_top_search")
+
+    # 카테고리 / 검색 필터 적용
+    if eq_cat != "전체":
+        filtered_df = filtered_df[filtered_df["카테고리"] == eq_cat]
+    if eq_search:
+        _mask = (
+            filtered_df["기기명"].str.contains(eq_search, case=False, na=False)
+            | filtered_df["장비그룹"].str.contains(eq_search, case=False, na=False)
+        )
+        filtered_df = filtered_df[_mask]
+
+    # ── 서브 뷰 ──
     sub_view = st.radio(
         "보기 선택", ["장비 목록", "장비 검색", "지점 비교"],
         horizontal=True, label_visibility="collapsed",
@@ -48,6 +68,34 @@ def render_tab_equipment(filtered_df, df, selected_branches, permissions):
         render_tab_search(filtered_df, df)
     elif sub_view == "지점 비교":
         render_tab_compare(df, selected_branches)
+
+
+def _aggrid_dark_css():
+    """AG-Grid 공통 커스텀 CSS (라이트 + 다크 모드)."""
+    return {
+        ".ag-center-header": {"text-align": "center !important"},
+        ".ag-header-cell-label": {"justify-content": "center"},
+        ".ag-cell": {"padding": "0 6px !important", "line-height": "28px !important"},
+        ".ag-header-cell": {"padding": "0 6px !important"},
+        ".ag-row": {"font-size": "13px"},
+        ".ag-cell-wrapper": {"justify-content": "center"},
+        ".ag-checkbox-input-wrapper": {"margin": "0 auto"},
+        ".ag-header": {"background-color": "#F8FAFC !important", "border-bottom": "2px solid #2563EB !important"},
+        ".ag-header-cell": {"background-color": "#F8FAFC !important", "color": "#1E293B !important",
+                            "padding": "0 6px !important", "font-weight": "600 !important"},
+        ".ag-row-odd": {"background-color": "#FAFBFC !important"},
+        ".ag-row-hover": {"background-color": "#EFF6FF !important"},
+        ".ag-root-wrapper": {"border": "1px solid #E2E8F0 !important", "border-radius": "8px !important"},
+        ":root.dark-theme .ag-cell": {"color": "#E0E0E0 !important", "border-color": "#2A2A4A !important"},
+        ":root.dark-theme .ag-header": {"background-color": "#1E293B !important", "border-bottom": "2px solid #3B82F6 !important"},
+        ":root.dark-theme .ag-header-cell": {"background-color": "#1E293B !important", "color": "#F1F5F9 !important"},
+        ":root.dark-theme .ag-header-cell-label": {"color": "#F1F5F9 !important"},
+        ":root.dark-theme .ag-row": {"background-color": "#0F172A !important", "color": "#E0E0E0 !important"},
+        ":root.dark-theme .ag-root-wrapper": {"background-color": "#0F172A !important", "border-color": "#334155 !important"},
+        ":root.dark-theme .ag-row-odd": {"background-color": "#1E293B !important"},
+        ":root.dark-theme .ag-row-hover": {"background-color": "#1E3A5F !important"},
+        ":root.dark-theme .ag-body-viewport": {"background-color": "#0F172A !important"},
+    }
 
 
 def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
@@ -68,122 +116,47 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
     st.markdown(f"**장비 목록** · {len(filtered_df):,}건")
 
     # AG-Grid 데이터 준비
-    grid_df = filtered_df[["순번", "지점명", "기기명", "카테고리", "사진유무", "수량", "비고", "기기명_원본"]].copy()
+    grid_df = filtered_df[["순번", "지점명", "기기명", "카테고리", "사진유무", "수량", "비고"]].copy()
     grid_df = grid_df.reset_index(drop=True)
 
     can_edit = permissions["can_edit_photo"] and permissions["can_save"]
 
-    # 편집 모드: 사진유무를 True/False 체크박스로
     if can_edit:
         grid_df["사진"] = grid_df["사진유무"].apply(lambda x: x == "있음")
     else:
         grid_df["사진"] = grid_df["사진유무"]
 
-    # AG-Grid 옵션 설정
     gb = GridOptionsBuilder.from_dataframe(
         grid_df[["순번", "지점명", "기기명", "카테고리", "사진", "수량", "비고"]]
     )
-
-    # 공통: 열별 정렬/너비/필터 설정
-    gb.configure_column("순번", header_name="No", width=60,
-                        filter="agNumberColumnFilter",
-                        cellStyle={"textAlign": "center"},
-                        headerClass="ag-center-header")
-    gb.configure_column("지점명", width=80,
-                        filter="agTextColumnFilter",
-                        cellStyle={"textAlign": "center"},
-                        headerClass="ag-center-header")
-    gb.configure_column("기기명", width=200, flex=2,
-                        filter="agTextColumnFilter")
-    gb.configure_column("카테고리", width=90,
-                        filter="agTextColumnFilter",
-                        cellStyle={"textAlign": "center"},
-                        headerClass="ag-center-header")
-    gb.configure_column("수량", width=60,
-                        filter="agNumberColumnFilter",
-                        cellStyle={"textAlign": "center"},
-                        headerClass="ag-center-header")
-    gb.configure_column("비고", width=150, flex=1,
-                        filter="agTextColumnFilter")
+    gb.configure_column("순번", header_name="No", width=60, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
+    gb.configure_column("지점명", width=80, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
+    gb.configure_column("기기명", width=200, flex=2)
+    gb.configure_column("카테고리", width=90, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
+    gb.configure_column("수량", width=60, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
+    gb.configure_column("비고", width=150, flex=1)
 
     if can_edit:
         gb.configure_column("사진", header_name="사진", width=70, editable=True,
-                            cellRenderer="agCheckboxCellRenderer",
-                            cellEditor="agCheckboxCellEditor",
-                            filter=True,
-                            cellStyle={"textAlign": "center"},
-                            headerClass="ag-center-header")
+                            cellRenderer="agCheckboxCellRenderer", cellEditor="agCheckboxCellEditor",
+                            cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
     else:
-        gb.configure_column("사진", width=70,
-                            filter="agTextColumnFilter",
-                            cellStyle={"textAlign": "center"},
-                            headerClass="ag-center-header")
+        gb.configure_column("사진", width=70, cellStyle={"textAlign": "center"}, headerClass="ag-center-header")
 
-    gb.configure_default_column(
-        sortable=True, filter=True, resizable=True,
-    )
-    gb.configure_grid_options(
-        domLayout="normal",
-        rowHeight=28,
-        headerHeight=32,
-    )
+    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    gb.configure_grid_options(domLayout="normal", rowHeight=28, headerHeight=32)
 
-    grid_options = gb.build()
-
-    # 헤더 가운데 정렬 + 셀 컴팩트 CSS + 다크모드
-    custom_css = {
-        # ── 공통 ──
-        ".ag-center-header": {"text-align": "center !important"},
-        ".ag-header-cell-label": {"justify-content": "center"},
-        ".ag-cell": {"padding": "0 6px !important", "line-height": "28px !important"},
-        ".ag-header-cell": {"padding": "0 6px !important"},
-        ".ag-row": {"font-size": "13px"},
-        ".ag-cell-wrapper": {"justify-content": "center"},
-        ".ag-checkbox-input-wrapper": {"margin": "0 auto"},
-        # ── 라이트 모드 ──
-        ".ag-header": {"background-color": "#F8FAFC !important", "border-bottom": "2px solid #2563EB !important"},
-        ".ag-header-cell": {"background-color": "#F8FAFC !important", "color": "#1E293B !important",
-                            "padding": "0 6px !important", "font-weight": "600 !important"},
-        ".ag-row-odd": {"background-color": "#FAFBFC !important"},
-        ".ag-row-hover": {"background-color": "#EFF6FF !important"},
-        ".ag-root-wrapper": {"border": "1px solid #E2E8F0 !important", "border-radius": "8px !important"},
-        # ── 다크 모드 ──
-        ":root.dark-theme .ag-cell": {
-            "color": "#E0E0E0 !important", "border-color": "#2A2A4A !important",
-        },
-        ":root.dark-theme .ag-header": {"background-color": "#1E293B !important", "border-bottom": "2px solid #3B82F6 !important"},
-        ":root.dark-theme .ag-header-cell": {
-            "background-color": "#1E293B !important", "color": "#F1F5F9 !important",
-        },
-        ":root.dark-theme .ag-header-cell-label": {"color": "#F1F5F9 !important"},
-        ":root.dark-theme .ag-row": {
-            "background-color": "#0F172A !important", "color": "#E0E0E0 !important",
-        },
-        ":root.dark-theme .ag-root-wrapper": {
-            "background-color": "#0F172A !important", "border-color": "#334155 !important",
-        },
-        ":root.dark-theme .ag-row-odd": {"background-color": "#1E293B !important"},
-        ":root.dark-theme .ag-row-hover": {"background-color": "#1E3A5F !important"},
-        ":root.dark-theme .ag-body-viewport": {"background-color": "#0F172A !important"},
-    }
-
-    # AG-Grid 렌더링
     grid_response = AgGrid(
         grid_df[["순번", "지점명", "기기명", "카테고리", "사진", "수량", "비고"]],
-        gridOptions=grid_options,
-        custom_css=custom_css,
+        gridOptions=gb.build(), custom_css=_aggrid_dark_css(),
         height=600,
         update_mode=GridUpdateMode.VALUE_CHANGED if can_edit else GridUpdateMode.NO_UPDATE,
         data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-        fit_columns_on_grid_load=True,
-        allow_unsafe_jscode=True,
-        theme="streamlit",
+        fit_columns_on_grid_load=True, allow_unsafe_jscode=True, theme="streamlit",
     )
 
-    # 버튼 영역
     if can_edit:
         col_save, col_download = st.columns([1, 1])
-
         with col_save:
             if st.button("변경 사항 저장", type="primary", use_container_width=True):
                 edited_data = grid_response["data"]
@@ -192,26 +165,22 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
                     orig_photo = grid_df.iloc[i]["사진"]
                     new_photo = edited_data.iloc[i]["사진"]
                     if new_photo != orig_photo:
-                        eq_id = int(filtered_df.iloc[i]["순번"])  # equipment.id
+                        eq_id = int(filtered_df.iloc[i]["순번"])
                         changes.append((eq_id, "O" if new_photo else ""))
-
                 if changes:
                     with st.spinner(f"{len(changes)}건 저장 중..."):
                         ok_count, errors = save_photo_changes(changes)
-
                     save_msgs = []
                     if ok_count > 0:
                         save_msgs.append(f"✅ {ok_count}건 저장 완료")
                     if errors:
                         for e in errors:
                             save_msgs.append(f"❌ {e}")
-
                     st.session_state["save_result"] = save_msgs
                     load_data.clear()
                     st.rerun()
                 else:
                     st.info("변경된 항목이 없습니다.")
-
         with col_download:
             csv_data = grid_df[["순번", "지점명", "기기명", "카테고리", "사진유무", "수량", "비고"]].to_csv(index=False).encode("utf-8-sig")
             st.download_button("CSV 다운로드", csv_data, "equipment_list.csv", "text/csv", use_container_width=True)
@@ -400,93 +369,83 @@ def render_tab_compare(df, selected_branches):
 # ============================================================
 # 탭 4: 대시보드
 # ============================================================
-def render_tab_dashboard(filtered_df):
-    if len(filtered_df) == 0:
-        st.warning("선택한 조건에 해당하는 장비가 없습니다.")
-        return
+def render_tab_dashboard(permissions=None):
+    """대시보드 — 홈 화면. 각 기능으로 이동하는 카드형 네비게이션."""
+    if permissions is None:
+        from auth import get_permissions
+        permissions = get_permissions()
 
-    total_qty = int(filtered_df["수량"].sum())
-    branch_count = filtered_df["지점명"].nunique()
-    cat_count = filtered_df["카테고리"].nunique()
-    avg_per_branch = filtered_df.groupby("지점명")["수량"].sum().mean()
+    st.markdown("""
+    <div style="padding:0.5rem 0 1rem 0;">
+        <h2 style="margin:0; font-weight:700; color:var(--text-primary);">유앤아이의원 통합 관리 시스템</h2>
+        <p style="margin:0.25rem 0 0 0; color:var(--text-muted); font-size:0.85rem;">
+            관리할 항목을 선택해주세요.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown(_kpi_card("📦", "총 장비 수량", f"{total_qty:,}", "var(--accent, #2563EB)"), unsafe_allow_html=True)
-    with col2:
-        st.markdown(_kpi_card("🏢", "지점 수", f"{branch_count}", "var(--success, #059669)"), unsafe_allow_html=True)
-    with col3:
-        st.markdown(_kpi_card("📂", "카테고리 수", f"{cat_count}", "var(--warning, #D97706)"), unsafe_allow_html=True)
-    with col4:
-        st.markdown(_kpi_card("📊", "평균 장비/지점", f"{avg_per_branch:.1f}", "#7C3AED"), unsafe_allow_html=True)
+    # 카드 데이터 정의
+    cards = [
+        {"title": "보유장비", "desc": "지점별 장비 현황 조회 및 관리", "menu": "보유장비", "color": "#2563EB"},
+        {"title": "이벤트", "desc": "기간별 이벤트 목록 및 가격 비교", "menu": "이벤트", "color": "#059669"},
+        {"title": "카페 마케팅", "desc": "카페 마케팅 현황 관리", "menu": "카페", "color": "#D97706"},
+        {"title": "블로그 마케팅", "desc": "블로그 마케팅 현황 관리", "menu": "블로그", "color": "#7C3AED"},
+        {"title": "가이드", "desc": "시스템 사용법 안내", "menu": "가이드", "color": "#64748B"},
+    ]
+    if permissions.get("can_manage_users", False):
+        cards.append({"title": "사용자 관리", "desc": "계정 추가·역할 변경·삭제", "menu": "사용자 관리", "color": "#DC2626"})
 
-    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+    # 버튼을 카드처럼 스타일링 (CSS :has() 사용)
+    st.markdown("""<style>
+    .card-marker { display: none !important; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker) {
+        margin-bottom: 0.75rem;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker) .stButton button {
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius, 10px) !important;
+        padding: 1.2rem 1.25rem !important;
+        min-height: 88px !important;
+        text-align: left !important;
+        box-shadow: var(--shadow-sm) !important;
+        transition: all 0.2s ease !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker) .stButton button:hover {
+        box-shadow: var(--shadow-md) !important;
+        transform: translateY(-2px);
+        border-color: var(--accent) !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker) .stButton button p {
+        margin: 0 !important; text-align: left !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker) .stButton button p:first-child {
+        font-size: 1.05rem !important; font-weight: 700 !important;
+        color: var(--text-primary) !important; margin-bottom: 0.35rem !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-marker) .stButton button p:last-child {
+        font-size: 0.78rem !important; font-weight: 400 !important;
+        color: var(--text-muted) !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-c-0) .stButton button { border-left: 4px solid #2563EB !important; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-c-1) .stButton button { border-left: 4px solid #059669 !important; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-c-2) .stButton button { border-left: 4px solid #D97706 !important; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-c-3) .stButton button { border-left: 4px solid #7C3AED !important; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-c-4) .stButton button { border-left: 4px solid #64748B !important; }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.card-c-5) .stButton button { border-left: 4px solid #DC2626 !important; }
+    </style>""", unsafe_allow_html=True)
 
-    has_photo = len(filtered_df[filtered_df["사진유무"] == "있음"])
-    no_photo = len(filtered_df[filtered_df["사진유무"] == "없음"])
-    photo_pct = (has_photo / len(filtered_df) * 100) if len(filtered_df) > 0 else 0
-
-    col5, col6, col7, col8 = st.columns(4)
-    with col5:
-        st.markdown(_kpi_card("✅", "사진 보유", f"{has_photo}건", "var(--success, #059669)"), unsafe_allow_html=True)
-    with col6:
-        st.markdown(_kpi_card("❌", "사진 미보유", f"{no_photo}건", "var(--danger, #DC2626)"), unsafe_allow_html=True)
-    with col7:
-        st.markdown(_kpi_card("📈", "사진 보유율", f"{photo_pct:.1f}%", "var(--accent, #2563EB)"), unsafe_allow_html=True)
-    with col8:
-        st.markdown(_kpi_card("🔬", "고유 장비 종류", f"{filtered_df['장비그룹'].nunique()}", "#0891B2"), unsafe_allow_html=True)
-
-    st.divider()
-
-    chart_col1, chart_col2 = st.columns(2)
-
-    _chart_layout = dict(
-        showlegend=False, coloraxis_showscale=False,
-        margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(size=12, color="#64748B"),
-        xaxis=dict(gridcolor="#E2E8F0", zerolinecolor="#E2E8F0"),
-        yaxis=dict(gridcolor="#E2E8F0", zerolinecolor="#E2E8F0"),
-    )
-
-    with chart_col1:
-        st.markdown("**카테고리별 장비 수량**")
-        cat_data = filtered_df.groupby("카테고리")["수량"].sum().sort_values(ascending=True).reset_index()
-        fig_cat = px.bar(cat_data, x="수량", y="카테고리", orientation="h", color="수량",
-                         color_continuous_scale=["#DBEAFE", "#2563EB"])
-        fig_cat.update_layout(height=400, **_chart_layout)
-        fig_cat.update_traces(marker_cornerradius=4, marker_line_width=0)
-        st.plotly_chart(fig_cat, use_container_width=True)
-
-    with chart_col2:
-        st.markdown("**지점별 총 장비 수량 (Top 15)**")
-        branch_data = filtered_df.groupby("지점명")["수량"].sum().sort_values(ascending=False).head(15).sort_values(ascending=True).reset_index()
-        fig_branch = px.bar(branch_data, x="수량", y="지점명", orientation="h", color="수량",
-                            color_continuous_scale=["#D1FAE5", "#059669"])
-        fig_branch.update_layout(height=400, **_chart_layout)
-        fig_branch.update_traces(marker_cornerradius=4, marker_line_width=0)
-        st.plotly_chart(fig_branch, use_container_width=True)
-
-    chart_col3, chart_col4 = st.columns(2)
-
-    _cat_colors = ["#2563EB", "#059669", "#D97706", "#DC2626", "#7C3AED", "#0891B2", "#DB2777", "#65A30D"]
-
-    with chart_col3:
-        st.markdown("**카테고리 분포**")
-        pie_data = filtered_df.groupby("카테고리")["수량"].sum().reset_index()
-        fig_pie = px.pie(pie_data, values="수량", names="카테고리", hole=0.4,
-                         color_discrete_sequence=_cat_colors)
-        fig_pie.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0),
-                              paper_bgcolor="rgba(0,0,0,0)", font=dict(size=12, color="#64748B"))
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    with chart_col4:
-        st.markdown("**지점 × 카테고리 히트맵**")
-        pivot = filtered_df.pivot_table(index="지점명", columns="카테고리", values="수량", aggfunc="sum", fill_value=0)
-        fig_heat = px.imshow(pivot, color_continuous_scale=["#EFF6FF", "#2563EB"], aspect="auto")
-        fig_heat.update_layout(height=max(400, len(pivot) * 18), margin=dict(l=0, r=0, t=10, b=0),
-                               paper_bgcolor="rgba(0,0,0,0)", font=dict(size=11, color="#64748B"))
-        st.plotly_chart(fig_heat, use_container_width=True)
+    # 3열 그리드 — 버튼 자체가 카드 (클릭 시 탭 이동)
+    cols = st.columns(3)
+    for i, card in enumerate(cards):
+        with cols[i % 3]:
+            with st.container():
+                st.markdown(f'<div class="card-marker card-c-{i}"></div>', unsafe_allow_html=True)
+                label = f"**{card['title']}**\n\n{card['desc']}"
+                if st.button(label, key=f"dash_goto_{card['menu']}",
+                             use_container_width=True):
+                    st.session_state["_goto_menu"] = card["menu"]
+                    st.rerun()
 
 
 # ============================================================
@@ -494,146 +453,243 @@ def render_tab_dashboard(filtered_df):
 # ============================================================
 def render_admin_panel():
     st.subheader("사용자 관리")
+    ensure_memo_column()
 
     users = load_users()
-
-    # 지점 목록 (branch 역할 사용자 추가 시 필요)
     branches = get_branches()
     branch_map = {b["id"]: b["name"] for b in branches}
-
-    # 현재 사용자 목록 (컴팩트)
-    if users:
-        user_table = [{
-            "ID": u["username"],
-            "역할": ROLES.get(u["role"], {}).get("label", u["role"]),
-            "지점": branch_map.get(u.get("branch_id"), "-"),
-        } for u in users]
-        st.dataframe(
-            user_table, use_container_width=True, hide_index=True,
-            height=min(35 * len(users) + 38, 250),
-            column_config={
-                "ID": st.column_config.TextColumn("ID", width="medium"),
-                "역할": st.column_config.TextColumn("역할", width="small"),
-                "지점": st.column_config.TextColumn("지점", width="small"),
-            },
-        )
-    else:
-        st.info("등록된 사용자가 없습니다.")
-
     current_user = st.session_state.get("username", "")
     other_users = [u["username"] for u in users if u["username"] != current_user]
 
-    # 탭 기반 관리 UI
-    tab_add, tab_role, tab_pw, tab_del = st.tabs(["➕ 추가", "🔄 역할변경", "🔑 비밀번호", "🗑️ 삭제"])
+    # ── 가로 레이아웃: 좌=관리 / 우=목록 ──
+    col_mgmt, col_list = st.columns([3, 2])
 
-    # ── 사용자 추가 ──
-    with tab_add:
-        with st.form("add_user_form"):
-            c1, c2 = st.columns(2)
-            with c1:
-                new_username = st.text_input("사용자 ID", key="add_uid")
-                new_role = st.selectbox(
-                    "역할", options=["viewer", "branch", "editor", "admin"],
-                    format_func=lambda r: ROLES[r]["label"], key="add_role",
-                )
-            with c2:
-                new_password = st.text_input("비밀번호", type="password", key="add_pw")
-                new_password_confirm = st.text_input("비밀번호 확인", type="password", key="add_pw2")
-
-            branch_options = {b["id"]: b["name"] for b in branches}
-            new_branch_id = st.selectbox(
-                "담당 지점 (지점담당 역할만 해당)",
-                options=[None] + list(branch_options.keys()),
-                format_func=lambda x: "선택 안 함" if x is None else branch_options[x],
-                key="add_branch",
+    with col_list:
+        st.markdown("**등록된 사용자**")
+        if users:
+            user_table = [{
+                "ID": u["username"],
+                "역할": ROLES.get(u["role"], {}).get("label", u["role"]),
+                "지점": branch_map.get(u.get("branch_id"), "-"),
+                "비고": u.get("memo", ""),
+            } for u in users]
+            st.dataframe(
+                user_table, use_container_width=True, hide_index=True,
+                height=min(35 * len(users) + 38, 450),
+                column_config={
+                    "ID": st.column_config.TextColumn("ID", width="small"),
+                    "역할": st.column_config.TextColumn("역할", width="small"),
+                    "지점": st.column_config.TextColumn("지점", width="small"),
+                    "비고": st.column_config.TextColumn("비고", width="medium"),
+                },
             )
-            submitted = st.form_submit_button("추가", type="primary", use_container_width=True)
-            if submitted:
-                if not new_username or not new_password:
-                    st.error("ID와 비밀번호를 입력해주세요.")
-                elif len(new_username) < 2:
-                    st.error("ID는 2자 이상이어야 합니다.")
-                elif new_password != new_password_confirm:
-                    st.error("비밀번호가 일치하지 않습니다.")
-                elif new_role == "branch" and new_branch_id is None:
-                    st.error("지점담당 역할은 담당 지점을 선택해야 합니다.")
-                else:
-                    hashed = hash_password(new_password)
-                    branch_id = new_branch_id if new_role == "branch" else None
-                    ok, msg = add_user(new_username, hashed, new_role, branch_id)
-                    if ok:
-                        st.success(msg)
-                        st.rerun()
-                    else:
-                        st.error(msg)
-
-    # ── 역할 변경 ──
-    with tab_role:
-        if not other_users:
-            st.info("관리할 다른 사용자가 없습니다.")
         else:
-            c1, c2, c3 = st.columns([2, 2, 1])
-            with c1:
-                role_target = st.selectbox("대상", other_users, key="role_target")
-            with c2:
-                role_new = st.selectbox(
-                    "새 역할", options=["viewer", "editor", "admin"],
-                    format_func=lambda r: ROLES[r]["label"], key="role_new",
-                )
-            with c3:
-                st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
-                if st.button("변경", use_container_width=True, key="role_btn"):
-                    ok, msg = update_user_role(role_target, role_new)
-                    if ok:
-                        st.success(msg)
-                        st.rerun()
-                    else:
-                        st.error(msg)
+            st.info("등록된 사용자가 없습니다.")
 
-    # ── 비밀번호 초기화 ──
-    with tab_pw:
-        if not other_users:
-            st.info("관리할 다른 사용자가 없습니다.")
-        else:
-            c1, c2, c3 = st.columns([2, 2, 1])
-            with c1:
-                pw_target = st.selectbox("대상", other_users, key="pw_target")
-            with c2:
-                pw_new = st.text_input("새 비밀번호", type="password", key="pw_new")
-            with c3:
-                st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
-                if st.button("변경", use_container_width=True, key="pw_btn"):
-                    if not pw_new:
-                        st.error("새 비밀번호를 입력해주세요.")
-                    else:
-                        hashed = hash_password(pw_new)
-                        ok, msg = update_user_password(pw_target, hashed)
-                        if ok:
-                            st.success(msg)
-                        else:
-                            st.error(msg)
+    with col_mgmt:
+        tab_add, tab_role, tab_pw, tab_memo, tab_del, tab_sync = st.tabs(
+            ["➕ 추가", "🔄 역할변경", "🔑 비밀번호", "📝 비고", "🗑️ 삭제", "📥 동기화"]
+        )
 
-    # ── 사용자 삭제 ──
-    with tab_del:
-        if not other_users:
-            st.info("관리할 다른 사용자가 없습니다.")
-        else:
-            c1, c2 = st.columns([3, 1])
-            with c1:
-                del_target = st.selectbox("대상", other_users, key="del_target")
-                del_confirm = st.checkbox(f"'{del_target}' 삭제 확인", key="del_confirm")
-            with c2:
-                st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
-                if st.button("삭제", type="primary", use_container_width=True, key="del_btn"):
-                    if not del_confirm:
-                        st.error("삭제 확인란을 체크해주세요.")
+        # ── 사용자 추가 ──
+        with tab_add:
+            with st.form("add_user_form"):
+                new_username = st.text_input("사용자 ID", key="add_uid")
+                c1, c2 = st.columns(2)
+                with c1:
+                    new_password = st.text_input("비밀번호", type="password", key="add_pw")
+                with c2:
+                    new_password_confirm = st.text_input("비밀번호 확인", type="password", key="add_pw2")
+                c3, c4 = st.columns(2)
+                with c3:
+                    new_role = st.selectbox(
+                        "역할", options=["viewer", "branch", "editor", "admin"],
+                        format_func=lambda r: ROLES[r]["label"], key="add_role",
+                    )
+                with c4:
+                    branch_options = {b["id"]: b["name"] for b in branches}
+                    new_branch_id = st.selectbox(
+                        "담당 지점",
+                        options=[None] + list(branch_options.keys()),
+                        format_func=lambda x: "전 지점" if x is None else branch_options[x],
+                        key="add_branch",
+                    )
+                new_memo = st.text_input("비고", key="add_memo", placeholder="사용자 식별 메모 (예: 홍길동 본사)")
+                submitted = st.form_submit_button("추가", type="primary", use_container_width=True)
+                if submitted:
+                    if not new_username or not new_password:
+                        st.error("ID와 비밀번호를 입력해주세요.")
+                    elif len(new_username) < 2:
+                        st.error("ID는 2자 이상이어야 합니다.")
+                    elif new_password != new_password_confirm:
+                        st.error("비밀번호가 일치하지 않습니다.")
+                    elif new_role == "branch" and new_branch_id is None:
+                        st.error("지점담당 역할은 담당 지점을 선택해야 합니다.")
                     else:
-                        ok, msg = remove_user(del_target)
+                        hashed = hash_password(new_password)
+                        branch_id = new_branch_id if new_role == "branch" else None
+                        ok, msg = add_user(new_username, hashed, new_role, branch_id, memo=new_memo)
                         if ok:
                             st.success(msg)
                             st.rerun()
                         else:
                             st.error(msg)
+
+        # ── 역할 변경 ──
+        with tab_role:
+            if not other_users:
+                st.info("관리할 다른 사용자가 없습니다.")
+            else:
+                c1, c2, c3 = st.columns([2, 2, 1])
+                with c1:
+                    role_target = st.selectbox("대상", other_users, key="role_target")
+                with c2:
+                    role_new = st.selectbox(
+                        "새 역할", options=["viewer", "editor", "admin"],
+                        format_func=lambda r: ROLES[r]["label"], key="role_new",
+                    )
+                with c3:
+                    st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+                    if st.button("변경", use_container_width=True, key="role_btn"):
+                        ok, msg = update_user_role(role_target, role_new)
+                        if ok:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+        # ── 비밀번호 초기화 ──
+        with tab_pw:
+            if not other_users:
+                st.info("관리할 다른 사용자가 없습니다.")
+            else:
+                c1, c2, c3 = st.columns([2, 2, 1])
+                with c1:
+                    pw_target = st.selectbox("대상", other_users, key="pw_target")
+                with c2:
+                    pw_new = st.text_input("새 비밀번호", type="password", key="pw_new")
+                with c3:
+                    st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+                    if st.button("변경", use_container_width=True, key="pw_btn"):
+                        if not pw_new:
+                            st.error("새 비밀번호를 입력해주세요.")
+                        else:
+                            hashed = hash_password(pw_new)
+                            ok, msg = update_user_password(pw_target, hashed)
+                            if ok:
+                                st.success(msg)
+                            else:
+                                st.error(msg)
+
+        # ── 비고 수정 ──
+        with tab_memo:
+            all_usernames = [u["username"] for u in users]
+            if not all_usernames:
+                st.info("등록된 사용자가 없습니다.")
+            else:
+                memo_target = st.selectbox("대상", all_usernames, key="memo_target")
+                current_memo = next((u.get("memo", "") for u in users if u["username"] == memo_target), "")
+                memo_new = st.text_input("비고", value=current_memo, key="memo_new",
+                                          placeholder="이 사용자에 대한 메모 (예: 홍길동 본사)")
+                if st.button("저장", use_container_width=True, key="memo_btn"):
+                    ok, msg = update_user_memo(memo_target, memo_new)
+                    if ok:
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+        # ── 사용자 삭제 ──
+        with tab_del:
+            if not other_users:
+                st.info("관리할 다른 사용자가 없습니다.")
+            else:
+                c1, c2 = st.columns([3, 1])
+                with c1:
+                    del_target = st.selectbox("대상", other_users, key="del_target")
+                    del_confirm = st.checkbox(f"'{del_target}' 삭제 확인", key="del_confirm")
+                with c2:
+                    st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+                    if st.button("삭제", type="primary", use_container_width=True, key="del_btn"):
+                        if not del_confirm:
+                            st.error("삭제 확인란을 체크해주세요.")
+                        else:
+                            ok, msg = remove_user(del_target)
+                            if ok:
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+
+        # ── 데이터 동기화 ──
+        with tab_sync:
+            st.markdown("**장비 데이터 동기화**")
+            st.caption("Google Sheets에서 최신 장비 데이터를 가져옵니다.")
+            if st.button("장비 시트 동기화", type="primary", use_container_width=True, key="admin_eq_sync_btn"):
+                from equipment.sync import sync_from_sheets
+                with st.spinner("장비 동기화 중..."):
+                    result = sync_from_sheets()
+                st.success(f"완료: +{result['added']} ↻{result['updated']} ={result['skipped']}")
+                load_data.clear()
+                st.rerun()
+
+            st.markdown("---")
+            st.markdown("**이벤트 데이터 동기화**")
+            from datetime import datetime
+            now = datetime.now()
+            _bm_idx = min((now.month - 1) // 2, 5)
+            _pm = {0: (1, 2), 1: (3, 4), 2: (5, 6), 3: (7, 8), 4: (9, 10), 5: (11, 12)}
+            sm, em = _pm[_bm_idx]
+            evt_year = now.year
+            st.caption(f"수집 기간: **{evt_year}년 {sm}-{em}월**")
+
+            sync_method = st.radio(
+                "동기화 방식", ["링크 입력", "파일 업로드"],
+                horizontal=True, key="admin_evt_sync_method", label_visibility="collapsed",
+            )
+            if sync_method == "링크 입력":
+                sheet_url = st.text_input(
+                    "Google Sheets URL",
+                    placeholder="https://docs.google.com/spreadsheets/d/...",
+                    key="admin_evt_sheet_url",
+                )
+                st.caption("시트가 '링크가 있는 모든 사용자에게 공개'로 설정되어야 합니다.")
+                if st.button("이벤트 수집 실행", type="primary", use_container_width=True, key="admin_evt_sync_url_btn"):
+                    if not sheet_url:
+                        st.error("URL을 입력해주세요.")
+                    else:
+                        from events.sync import run_event_sync_from_url
+                        from events.db import load_current_events
+                        with st.spinner("이벤트 수집 중..."):
+                            result = run_event_sync_from_url(sheet_url, evt_year, sm, em)
+                        if result["errors"]:
+                            st.warning(f"수집 완료: {result['processed']}개 지점, "
+                                       f"{result['total_items']:,}건 (오류 {len(result['errors'])}건)")
+                            with st.expander("오류 상세"):
+                                for err in result["errors"]:
+                                    st.text(f"• {err}")
+                        else:
+                            st.success(f"수집 완료: {result['processed']}개 지점, {result['total_items']:,}건")
+                        load_current_events.clear()
+                        st.rerun()
+            else:
+                uploaded = st.file_uploader(
+                    "Excel 파일 업로드", type=["xlsx", "xls"], key="admin_evt_file_upload",
+                    help="각 시트 탭 이름이 지점명(예: 강남, 잠실)이어야 합니다.",
+                )
+                if uploaded is not None:
+                    if st.button("이벤트 수집 실행", type="primary", use_container_width=True, key="admin_evt_sync_file_btn"):
+                        from events.sync import run_event_sync_from_file
+                        from events.db import load_current_events
+                        with st.spinner("이벤트 수집 중..."):
+                            result = run_event_sync_from_file(uploaded.read(), evt_year, sm, em)
+                        if result["errors"]:
+                            st.warning(f"수집 완료: {result['processed']}개 지점, "
+                                       f"{result['total_items']:,}건 (오류 {len(result['errors'])}건)")
+                        else:
+                            st.success(f"수집 완료: {result['processed']}개 지점, {result['total_items']:,}건")
+                        load_current_events.clear()
+                        st.rerun()
 
 
 # ============================================================
@@ -643,12 +699,50 @@ def render_tab_guide():
     st.subheader("운영 가이드")
     st.caption("시스템 관리를 위한 절차 안내입니다.")
 
-    with st.expander("데이터 동기화 안내", expanded=False):
+    with st.expander("메뉴 구조", expanded=False):
+        st.markdown("""
+| 메뉴 | 설명 | 접근 권한 |
+|---|---|---|
+| HOME | 대시보드 — 각 기능으로 이동하는 카드형 네비게이션 | 모두 |
+| 보유장비 | 지점별 장비 현황 조회 및 사진 상태 관리 | 모두 |
+| 이벤트 | 격월 이벤트 정보 조회, 검색, 비교 | 모두 |
+| 카페 | 카페 마케팅 관리 (준비 중) | - |
+| 블로그 | 블로그 마케팅 관리 (준비 중) | - |
+| 가이드 | 시스템 사용 안내 | 모두 |
+| 사용자 관리 | 계정/권한/동기화 관리 | 관리자 |
+""")
+
+    with st.expander("지점 필터 안내", expanded=False):
+        st.markdown("""
+**사이드바 지점 필터 (모든 탭 공통)**
+
+- **뷰어/편집자/관리자**: 복수 지점 선택 가능 (미선택 시 전체 지점)
+- **지점담당자**: 담당 지점만 자동 적용 (변경 불가)
+- 선택한 지점 기준으로 모든 탭의 데이터가 필터링됩니다.
+""")
+
+    with st.expander("이벤트 탭 기능", expanded=False):
+        st.markdown("""
+**이벤트 탭 서브 뷰**
+
+| 서브 뷰 | 설명 | 접근 권한 |
+|---|---|---|
+| 이벤트 목록 | 현재 기간 이벤트 목록 조회 및 필터링 | 모두 |
+| 이벤트 검색 | 시술명/이벤트명으로 상세 검색 | 모두 |
+| 지점 비교 | 지점별 이벤트 수 및 할인율 비교 | 편집자/관리자 |
+| 기간별 가격 변동 | 동일 시술의 격월 단위 가격 변동 추적 | 모두 |
+| 시술 사전 | 시술/장비 설명 조회 및 편집 | 편집자/관리자 편집 가능 |
+
+**필터 기능:**
+- 카테고리 선택, 이벤트명 검색
+- 이벤트가 범위 필터 (최소 0원 ~ 최대 500만원, 직접 입력)
+""")
+
+    with st.expander("장비 데이터 동기화 안내", expanded=False):
         st.markdown("""
 **Google Sheets → SQLite DB 동기화 규칙**
 
-- 매일 새벽 3시 자동 동기화 (Docker cron)
-- 수동: 사이드바 'Sheets → DB 동기화' 버튼 클릭
+- 수동 실행: **사용자 관리** 탭 > **동기화** 탭에서 실행 (관리자 전용)
 
 **동기화 규칙 (데이터 안전):**
 1. 동기화 전 DB 자동 백업 (7일 보관)
@@ -662,13 +756,13 @@ def render_tab_guide():
         st.markdown("""
 **이벤트 데이터 수집 (격월 단위)**
 
-- 이벤트 탭 상단의 '이벤트 동기화'에서 실행
-- **링크 입력**: Google Sheets URL을 붙여넣기 (시트가 공개 설정이어야 함)
+- **사용자 관리** 탭 > **동기화** 탭에서 실행 (관리자 전용)
+- **링크 입력**: Google Sheets URL 붙여넣기 (시트 공개 설정 필요)
 - **파일 업로드**: Excel 파일(.xlsx) 직접 업로드
 
 **시트 구조 요구사항:**
 - 각 시트 탭 이름 = 지점명 (예: 강남, 잠실, 부평 등)
-- 탭 내부: ■ 카테고리 → 이벤트명 | 정상가 | 이벤트가 | 비고
+- 탭 내부: 카테고리 → 이벤트명 | 정상가 | 이벤트가 | 비고
 
 **수집 규칙:**
 1. 같은 기간+지점 데이터가 이미 있으면 삭제 후 재수집 (최신 데이터 우선)
@@ -680,19 +774,25 @@ def render_tab_guide():
         st.markdown("""
 **사진 상태 변경 방법:**
 
-1. '장비 목록' 탭에서 사진 체크박스를 클릭하여 상태 변경
+1. 보유장비 탭 > '장비 목록'에서 사진 체크박스 클릭
 2. '변경 사항 저장' 버튼 클릭 → DB에 즉시 반영
 3. Google Sheets에는 반영되지 않음 (DB 우선 원칙)
 """)
 
     with st.expander("사용자 권한 안내", expanded=False):
         st.markdown("""
-| 역할 | 장비 조회 | 사진 편집 | 동기화 | 사용자 관리 | 비고 |
-|---|---|---|---|---|---|
-| 뷰어 | ✅ | ❌ | ❌ | ❌ | 전체 지점 읽기 전용 |
-| 지점담당 | ✅ | ✅ | ❌ | ❌ | 자기 지점만 조회/편집 |
-| 편집자 | ✅ | ✅ | ❌ | ❌ | 전체 지점 편집 가능 |
-| 관리자 | ✅ | ✅ | ✅ | ✅ | 모든 권한 |
+| 역할 | 장비 조회 | 사진 편집 | 시술 사전 편집 | 동기화 | 사용자 관리 | 비고 |
+|---|---|---|---|---|---|---|
+| 뷰어 | ✅ | ❌ | ❌ | ❌ | ❌ | 전체 지점 읽기 전용 |
+| 지점담당 | ✅ | ✅ | ❌ | ❌ | ❌ | 자기 지점만 조회/편집 |
+| 편집자 | ✅ | ✅ | ✅ | ❌ | ❌ | 전체 지점 편집 + 시술 사전 |
+| 관리자 | ✅ | ✅ | ✅ | ✅ | ✅ | 모든 권한 |
+
+**사용자 관리 기능 (관리자 전용):**
+- 사용자 추가: ID, 비밀번호, 역할, 담당 지점, 비고 등록
+- 역할 변경 / 비밀번호 초기화
+- 비고 관리: 사용자 식별용 메모 (예: 홍길동 본사)
+- 데이터 동기화: 장비 및 이벤트 데이터 수집
 """)
 
 
@@ -705,9 +805,16 @@ def render_tab_events():
 
 
 # ============================================================
-# 탭: 카페마케팅 (placeholder)
+# 탭: 카페 (placeholder)
 # ============================================================
-def render_tab_cafe_marketing():
-    st.subheader("카페마케팅")
-    st.info("카페마케팅 원고 관리 기능은 준비 중입니다.")
-    st.caption("지점별 월간 마케팅 원고 발행 현황 관리가 추가될 예정입니다.")
+def render_tab_cafe():
+    st.subheader("카페")
+    st.info("곧 업데이트 됩니다.")
+
+
+# ============================================================
+# 탭: 블로그 (placeholder)
+# ============================================================
+def render_tab_blog():
+    st.subheader("블로그")
+    st.info("곧 업데이트 됩니다.")

@@ -4,12 +4,12 @@ from datetime import datetime
 
 from config import BRANDING
 from auth import require_auth, get_permissions, get_user_branch_id, get_current_role, show_user_info_sidebar
-from equipment.db import load_data, apply_photo_status, apply_filters, get_branch_name
-from equipment.sync import sync_from_sheets
+from equipment.db import load_data, apply_photo_status, apply_filters, get_branch_name, get_branches
 from ui_tabs import (
     render_tab_equipment,
     render_tab_events,
-    render_tab_cafe_marketing,
+    render_tab_cafe,
+    render_tab_blog,
     render_tab_dashboard,
     render_admin_panel,
     render_tab_guide,
@@ -152,21 +152,21 @@ section[data-testid="stSidebar"] > div {
 
 /* 사이드바 브랜드 */
 .sidebar-brand {
-    padding: 0.5rem 0 0.75rem 0;
-    margin-bottom: 0.5rem;
+    padding: 0.25rem 0 0.5rem 0;
+    margin-bottom: 0.25rem;
     border-bottom: 2px solid var(--accent);
 }
 .sidebar-brand h3 {
     color: var(--text-primary) !important;
-    font-size: 1.1rem !important;
+    font-size: 1.05rem !important;
     margin: 0 !important;
     font-weight: 700 !important;
     letter-spacing: -0.02em !important;
 }
 .sidebar-brand p {
     color: var(--text-muted) !important;
-    font-size: 0.75rem !important;
-    margin: 0.15rem 0 0 0 !important;
+    font-size: 0.72rem !important;
+    margin: 0.1rem 0 0 0 !important;
     font-weight: 400 !important;
 }
 
@@ -192,7 +192,59 @@ html.dark-theme .filter-card {
 }
 
 /* ================================================================
-   탭 — 필(Pill) 스타일
+   사이드바 내비게이션 라디오 (관리 포탈 스타일)
+   ================================================================ */
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] {
+    gap: 0.125rem !important;
+    padding: 0 !important;
+}
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0.375rem !important;
+    border-left: 3px solid transparent !important;
+    padding: 0.5rem 0.75rem !important;
+    margin: 0 !important;
+    font-weight: 500 !important;
+    font-size: 0.85rem !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    display: flex !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label p,
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label span {
+    color: var(--text-secondary) !important;
+    transition: color 0.15s ease !important;
+}
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label:hover {
+    background: var(--accent-light) !important;
+    border-left-color: var(--accent) !important;
+}
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label:hover p,
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label:hover span {
+    color: var(--accent) !important;
+}
+/* 선택된 항목 */
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label:has(input:checked) {
+    background: var(--accent) !important;
+    border-left-color: var(--accent) !important;
+    box-shadow: 0 1px 3px rgba(37,99,235,0.3) !important;
+}
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label:has(input:checked) p,
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label:has(input:checked) span,
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label:has(input:checked) div {
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+}
+/* 라디오 원형 숨김 */
+section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label > div:first-child {
+    display: none !important;
+}
+
+/* ================================================================
+   탭 — 필(Pill) 스타일 (서브뷰용)
    ================================================================ */
 .stTabs [data-baseweb="tab-list"] {
     gap: 0.35rem !important;
@@ -350,13 +402,105 @@ html.dark-theme [data-testid="stTooltipContent"] div {
     overflow: hidden !important;
     box-shadow: var(--shadow-sm) !important;
 }
+/* 다크모드: dataframe iframe 내부 배경 강제 */
+html.dark-theme [data-testid="stDataFrame"] iframe {
+    filter: none !important;
+}
+html.dark-theme [data-testid="stDataFrame"] {
+    background: var(--bg-card) !important;
+}
+
+/* ================================================================
+   다크모드: number_input / slider
+   ================================================================ */
+html.dark-theme .stNumberInput input,
+html.dark-theme .stNumberInput [data-baseweb="input"] > div {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border) !important;
+}
+html.dark-theme .stNumberInput button {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border) !important;
+}
+html.dark-theme .stSlider [data-baseweb="slider"] div {
+    color: var(--text-primary) !important;
+}
+
+/* ================================================================
+   다크모드: 서브뷰 라디오 (horizontal)
+   ================================================================ */
+html.dark-theme .stRadio[data-testid="stRadio"] > div[role="radiogroup"][aria-label] > label {
+    color: var(--text-secondary) !important;
+}
+html.dark-theme .stRadio > div[role="radiogroup"] > label:has(input:checked) {
+    color: white !important;
+}
+
+/* ================================================================
+   다크모드: multiselect
+   ================================================================ */
+html.dark-theme .stMultiSelect [data-baseweb="select"] > div {
+    background-color: var(--bg-primary) !important;
+    border-color: var(--border) !important;
+}
+html.dark-theme .stMultiSelect [data-baseweb="tag"] {
+    background-color: var(--accent) !important;
+    color: white !important;
+}
+html.dark-theme .stMultiSelect [data-baseweb="tag"] span {
+    color: white !important;
+}
+
+/* ================================================================
+   다크모드: expander / info / warning / success
+   ================================================================ */
+html.dark-theme [data-testid="stExpander"] {
+    background: var(--bg-card) !important;
+    border-color: var(--border) !important;
+}
+html.dark-theme [data-testid="stExpander"] summary,
+html.dark-theme [data-testid="stExpander"] p,
+html.dark-theme [data-testid="stExpander"] li,
+html.dark-theme [data-testid="stExpander"] td,
+html.dark-theme [data-testid="stExpander"] th,
+html.dark-theme [data-testid="stExpander"] strong,
+html.dark-theme [data-testid="stExpander"] span,
+html.dark-theme [data-testid="stExpander"] ol,
+html.dark-theme [data-testid="stExpander"] ul {
+    color: var(--text-primary) !important;
+}
+html.dark-theme [data-testid="stExpander"] table {
+    border-color: var(--border) !important;
+}
+html.dark-theme [data-testid="stExpander"] td,
+html.dark-theme [data-testid="stExpander"] th {
+    border-color: var(--border) !important;
+}
+html.dark-theme [data-testid="stAlert"] {
+    background: var(--bg-secondary) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+}
+html.dark-theme .stDownloadButton button {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border) !important;
+}
+
+/* ================================================================
+   다크모드: plotly 차트 배경
+   ================================================================ */
+html.dark-theme [data-testid="stPlotlyChart"] {
+    background: transparent !important;
+}
 
 /* ================================================================
    구분선 / 기타
    ================================================================ */
 hr, [data-testid="stDivider"] { border-color: var(--border) !important; opacity: 0.6 !important; }
 html.dark-theme [data-testid="stCaptionContainer"] * { color: var(--text-muted) !important; }
-html.dark-theme [data-testid="stExpander"] { border-color: var(--border) !important; }
 .stProgress > div > div { background-color: var(--accent) !important; border-radius: 4px !important; }
 .stProgress > div { background-color: var(--border) !important; border-radius: 4px !important; }
 </style>""", unsafe_allow_html=True)
@@ -376,7 +520,7 @@ components.html("""
   if (isDark) html.classList.add('dark-theme');
   else html.classList.remove('dark-theme');
 
-  /* 2. AG-Grid iframe 동기화 헬퍼 */
+  /* 2. iframe + Streamlit 테마 변수 동기화 */
   function syncIframes(dark) {
     pd.querySelectorAll('iframe').forEach(function(f) {
       try {
@@ -385,6 +529,19 @@ components.html("""
         else d.documentElement.classList.remove('dark-theme');
       } catch(e) {}
     });
+    /* Streamlit 내부 CSS 변수 변경 — dataframe(Glide) 테마 반영 */
+    var root = pd.documentElement.style;
+    if (dark) {
+      root.setProperty('--primary-color', '#3B82F6');
+      root.setProperty('--background-color', '#0F172A');
+      root.setProperty('--secondary-background-color', '#1E293B');
+      root.setProperty('--text-color', '#F1F5F9');
+    } else {
+      root.setProperty('--primary-color', '#2563EB');
+      root.setProperty('--background-color', '#F8FAFC');
+      root.setProperty('--secondary-background-color', '#FFFFFF');
+      root.setProperty('--text-color', '#1E293B');
+    }
   }
   syncIframes(isDark);
 
@@ -420,6 +577,36 @@ components.html("""
   new MutationObserver(function() {
     syncIframes(html.classList.contains('dark-theme'));
   }).observe(pd.body, { childList: true, subtree: true });
+
+  /* 5. 탭 전환 잔상 방지 — 사이드바 라디오 변경 시 메인 영역 즉시 숨김 */
+  (function() {
+    var sb = pd.querySelector('[data-testid="stSidebar"]');
+    if (!sb) return;
+    var lastVal = '';
+    sb.addEventListener('change', function(e) {
+      if (e.target.type !== 'radio') return;
+      var cur = e.target.value || '';
+      if (lastVal && cur !== lastVal) {
+        var main = pd.querySelector('[data-testid="stMain"]');
+        if (main) {
+          main.style.opacity = '0';
+          main.style.transition = 'none';
+        }
+      }
+      lastVal = cur;
+    });
+    /* Streamlit 렌더링 완료 감지 → 메인 영역 복원 */
+    new MutationObserver(function() {
+      var main = pd.querySelector('[data-testid="stMain"]');
+      if (!main || main.style.opacity !== '0') return;
+      var status = pd.querySelector('[data-testid="stStatusWidget"]');
+      var isRunning = status && status.querySelector('[data-testid="stLoading"]');
+      if (!isRunning) {
+        main.style.transition = 'opacity 0.12s ease';
+        main.style.opacity = '1';
+      }
+    }).observe(pd.body, { childList: true, subtree: true, attributes: true });
+  })();
 })();
 </script>
 """, height=0)
@@ -432,21 +619,26 @@ if not require_auth():
 permissions = get_permissions()
 
 # ============================================================
-# 데이터 로딩
+# 지점 목록 (가벼운 쿼리 — 장비 전체 데이터는 장비 탭에서만 로딩)
 # ============================================================
-df = load_data()
-df = apply_photo_status(df)
+all_branches = sorted(b["name"] for b in get_branches())
 
-# 지점 목록
-all_branches = sorted(df["지점명"].unique()) if len(df) > 0 else []
+# branch 역할 확인
+is_branch_role = get_current_role() == "branch"
+user_branch_name = None
+if is_branch_role:
+    user_branch_name = get_branch_name(get_user_branch_id())
 
 # ============================================================
-# 사이드바
+# 사이드바 — 내비게이션 + 지점 필터
 # ============================================================
 with st.sidebar:
     st.markdown("""<style>
-    section[data-testid="stSidebar"] .block-container { padding-top: 0.75rem; }
-    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: -0.4rem; }
+    section[data-testid="stSidebar"] .block-container { padding-top: 0.5rem; }
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: -0.35rem; }
+    section[data-testid="stSidebar"] hr { margin: 0.4rem 0 !important; opacity: 0.2; }
+    section[data-testid="stSidebar"] .stSelectbox { margin-top: 0rem; margin-bottom: 0rem; }
+    section[data-testid="stSidebar"] .filter-label { margin-top: 0.2rem !important; }
     </style>""", unsafe_allow_html=True)
 
     # 브랜드 섹션
@@ -457,54 +649,44 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # 지점 선택 — branch 역할은 자기 지점만 표시
-    is_branch_role = get_current_role() == "branch"
-    user_branch_name = None
-    if is_branch_role:
-        user_branch_name = get_branch_name(get_user_branch_id())
-
-    st.markdown('<div class="filter-label">지점 선택</div>', unsafe_allow_html=True)
+    # ── 지점 필터 (모든 탭에서 노출) ──
+    st.markdown('<div class="filter-label">지점</div>', unsafe_allow_html=True)
     if is_branch_role and user_branch_name:
-        # 지점 담당자: 자기 지점 고정, 선택 UI 비활성화
         st.info(f"담당 지점: {user_branch_name}")
-        selected_branches = [user_branch_name]
+        st.session_state["_shared_branches"] = [user_branch_name]
     else:
-        selected_branches = st.multiselect(
-            "지점 선택",
-            options=all_branches,
-            default=[],
-            placeholder="지점명 입력하여 검색",
-            help="지점명을 직접 입력하면 빠르게 찾을 수 있습니다",
-            label_visibility="collapsed",
-        )
+        b_set = set(all_branches)
+        try:
+            from events.db import load_evt_branches as _leb
+            b_set.update(b["name"] for b in _leb())
+        except Exception:
+            pass
+        b_opts = sorted(b_set)
+        sel_bs = st.multiselect("지점", b_opts, default=[], key="_sb_branches",
+                                 placeholder="전체 (지점 선택)", label_visibility="collapsed")
+        st.session_state["_shared_branches"] = sel_bs
 
-    all_categories = sorted(df["카테고리"].unique()) if len(df) > 0 else []
+    st.markdown("---")
 
-    st.markdown('<div class="filter-label">카테고리</div>', unsafe_allow_html=True)
-    selected_categories = st.multiselect(
-        "카테고리 선택",
-        options=all_categories,
-        default=[],
-        placeholder="전체 카테고리",
-        label_visibility="collapsed",
+    # ── 내비게이션 ──
+    st.markdown('<div class="filter-label" style="margin-bottom:0.15rem !important;">메뉴</div>', unsafe_allow_html=True)
+    menu_items = ["HOME", "보유장비", "이벤트", "카페", "블로그", "가이드"]
+    if permissions["can_manage_users"]:
+        menu_items.append("사용자 관리")
+
+    # 대시보드 카드 클릭 → _goto_menu 플래그 → radio 기본값 설정
+    _goto = st.session_state.pop("_goto_menu", None)
+    if _goto and _goto in menu_items:
+        st.session_state["nav_menu"] = _goto
+
+    selected_menu = st.radio(
+        "메뉴", menu_items, key="nav_menu", label_visibility="collapsed",
     )
-
-    st.markdown('<div class="filter-label">장비 검색</div>', unsafe_allow_html=True)
-    search_query = st.text_input("장비 검색", placeholder="장비명 입력", label_visibility="collapsed")
-
-    if permissions["can_sync"]:
-        if st.button("📥 시트 동기화", use_container_width=True, type="primary",
-                      help="Google Sheets 원본에서 최신 장비 데이터를 가져와 DB에 반영합니다"):
-            with st.spinner("Google Sheets에서 데이터 가져오는 중..."):
-                result = sync_from_sheets()
-            st.success(f"동기화 완료: 추가 {result['added']}건, 업데이트 {result['updated']}건, 스킵 {result['skipped']}건")
-            load_data.clear()
-            st.rerun()
 
     # 푸터
     st.markdown(f"""
-    <div style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--border);
-                text-align:center; font-size:0.7rem; color:var(--text-muted);">
+    <div style="margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid var(--border);
+                text-align:center; font-size:0.65rem; color:var(--text-muted);">
         마지막 로딩: {datetime.now().strftime('%Y-%m-%d %H:%M')}<br>
         {len(all_branches)}개 지점 · v2.0
     </div>
@@ -513,38 +695,33 @@ with st.sidebar:
     st.markdown(f"<div style='text-align:center;font-size:0.65rem;color:var(--text-muted);margin-top:0.25rem;'>{BRANDING}</div>", unsafe_allow_html=True)
 
 # ============================================================
-# 필터 적용
+# 메인 영역 라우팅
 # ============================================================
-# branch 역할: df 자체를 자기 지점으로 제한 (다른 탭에서도 다른 지점 데이터 노출 방지)
-if is_branch_role and user_branch_name:
-    df = df[df["지점명"] == user_branch_name].copy()
+_main = st.empty()
+with _main.container():
+    if selected_menu == "HOME":
+        render_tab_dashboard(permissions)
 
-filtered_df = apply_filters(df, selected_branches, selected_categories, search_query, "전체")
+    elif selected_menu == "보유장비":
+        df = load_data()
+        df = apply_photo_status(df)
+        if is_branch_role and user_branch_name:
+            df = df[df["지점명"] == user_branch_name].copy()
+        _branches = st.session_state.get("_shared_branches", [])
+        branch_df = apply_filters(df, _branches, [], "", "전체")
+        render_tab_equipment(branch_df, df, _branches, permissions)
 
-# ============================================================
-# 탭
-# ============================================================
-tab_names = ["장비 관리", "이벤트", "카페마케팅", "대시보드", "가이드"]
-if permissions["can_manage_users"]:
-    tab_names.append("사용자 관리")
+    elif selected_menu == "이벤트":
+        render_tab_events()
 
-tabs = st.tabs(tab_names)
+    elif selected_menu == "카페":
+        render_tab_cafe()
 
-with tabs[0]:
-    render_tab_equipment(filtered_df, df, selected_branches, permissions)
+    elif selected_menu == "블로그":
+        render_tab_blog()
 
-with tabs[1]:
-    render_tab_events()
+    elif selected_menu == "가이드":
+        render_tab_guide()
 
-with tabs[2]:
-    render_tab_cafe_marketing()
-
-with tabs[3]:
-    render_tab_dashboard(filtered_df)
-
-with tabs[4]:
-    render_tab_guide()
-
-if permissions["can_manage_users"]:
-    with tabs[5]:
+    elif selected_menu == "사용자 관리":
         render_admin_panel()

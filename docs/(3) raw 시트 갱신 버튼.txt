@@ -1,0 +1,88 @@
+/**(3) raw 시트 갱신 버튼
+*/
+
+function syncToRaw() {
+  const ss = SpreadsheetApp.getActive();
+  const rawSheetName = "raw";
+  // raw 시트 찾기 또는 새로 생성
+  const rawSheet = ss.getSheetByName(rawSheetName) || ss.insertSheet(rawSheetName);
+
+  // 1. 기존 내용 초기화
+  rawSheet.clearContents();
+
+  // 2. 헤더 작성 (A1:G1)
+  const headers = ["순번", "지점명", "카테고리", "기기명", "수량", "비고", "사진"];
+  rawSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+  let writeRow = 2;
+
+  const allSheets = ss.getSheets();
+  const exclude = ["지점 목차", "파일생성목록", rawSheetName];
+
+  // 모든 시트를 순회하며 데이터 통합
+  allSheets.forEach(sheet => {
+    const name = sheet.getName();
+    if (exclude.includes(name)) return;
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+
+    // [수정됨] A~G열 데이터 가져오기 (2행부터 마지막 행까지, 총 7개 열)
+    const data = sheet.getRange(2, 1, lastRow - 1, 7).getValues(); 
+
+    data.forEach(row => {
+      // [수정됨] 1열은 무시, 2~7열 사용 (B, C, D, E, F, G)
+      const [_, branch, category, device, qty, note, photo] = row; 
+
+      // '기기명'이 없는 행은 무시
+      if (!device || device.toString().trim() === "") return; 
+
+      // [수정됨] raw 시트의 B열부터 G열까지 데이터 작성 (총 6열 기록)
+      rawSheet.getRange(writeRow, 2, 1, 6).setValues([[branch, category, device, qty, note, photo]]);
+      writeRow++;
+    });
+  });
+
+  // 3. 순번 자동 수식 (A열)
+  if (writeRow > 2) {
+    rawSheet.getRange(2, 1, writeRow - 2).setFormulaR1C1("=ROW()-1");
+  }
+
+  // ----------------------------------------------------------------
+  // 4. 통계 테이블 설정 (I열, J열, L열, M열)
+  // ----------------------------------------------------------------
+
+  // 4-1. 통계 테이블 헤더 설정 및 볼드체 적용 (I1, J1, L1, M1)
+  rawSheet.getRange('I1').setValue("장비통계");
+  rawSheet.getRange('J1').setValue("수량");
+  rawSheet.getRange('L1').setValue("지점통계");
+  rawSheet.getRange('M1').setValue("수량");
+
+  // 볼드체 적용
+  const statHeadersRange = rawSheet.getRangeList(['I1', 'J1', 'L1', 'M1']);
+  statHeadersRange.setFontWeight("bold");
+
+  // 4-2. 장비 및 지점 목록 추출 수식 삽입 (I2, L2)
+  // I2: 장비 목록 (D열의 고유값 정렬)
+  const deviceListFormula = '=SORT(UNIQUE(FILTER(D2:D, D2:D<>"")))';
+  rawSheet.getRange('I2').setFormula(deviceListFormula);
+
+  // L2: 지점 목록 (B열의 고유값 정렬)
+  const branchListFormula = '=SORT(UNIQUE(FILTER(B2:B, B2:B<>"")))';
+  rawSheet.getRange('L2').setFormula(branchListFormula);
+
+
+  // 4-3. 장비 및 지점별 수량 집계 수식 삽입 (J2, M2)
+  
+  // J2: 장비별 수량 합계 (I열 기준, D열에서 일치 여부 확인, E열의 값 합산)
+  const deviceSumFormula = '=ARRAYFORMULA(IF(I2:I="", "", SUMIF(D:D, I2:I, E:E)))';
+  rawSheet.getRange('J2').setFormula(deviceSumFormula);
+
+  // M2: 지점별 수량 합계 (L열 기준, B열에서 일치 여부 확인, E열의 값 합산)
+  const branchSumFormula = '=ARRAYFORMULA(IF(L2:L="", "", SUMIF(B:B, L2:L, E:E)))';
+  rawSheet.getRange('M2').setFormula(branchSumFormula);
+
+
+  // 5. 변경사항 반영
+  SpreadsheetApp.flush();
+}

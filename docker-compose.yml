@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  uni-portal:
+    build: .
+    container_name: uni-portal
+    ports:
+      - "8501:8501"
+    volumes:
+      - portal-data:/app/data
+    restart: always
+    mem_limit: 512m
+    environment:
+      - TZ=Asia/Seoul
+      # ── 인증 설정 ──
+      - AUTH_SALT=${AUTH_SALT:-uandi_equipment_2026}
+      - AUTH_BOOTSTRAP_ADMIN_ID=${AUTH_BOOTSTRAP_ADMIN_ID:-admin}
+      - AUTH_BOOTSTRAP_ADMIN_PW_HASH=${AUTH_BOOTSTRAP_ADMIN_PW_HASH:-9fd94e1caae92307047e2cfb6739f3610fb9a7c7c4924c53f4ae52f88ec7e9ad}
+      - AUTH_BOOTSTRAP_ADMIN_ROLE=${AUTH_BOOTSTRAP_ADMIN_ROLE:-admin}
+      # ── 이벤트 수집 (Google Sheets) ──
+      - EVENT_SHEET_ID=${EVENT_SHEET_ID:-}
+      - GOOGLE_CREDENTIALS_FILE=/app/credentials.json
+
+volumes:
+  portal-data:
+    driver: local

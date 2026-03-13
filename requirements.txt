@@ -4,3 +4,4 @@ plotly
 streamlit-aggrid
 gspread
 google-auth
+openpyxl

@@ -148,6 +148,156 @@ def run_event_sync(year: int, start_month: int, end_month: int) -> dict:
     return result
 
 
+def _extract_sheet_id(url: str):
+    """Google Sheets URL에서 시트 ID를 추출."""
+    match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", url)
+    return match.group(1) if match else None
+
+
+def _process_branch_data(branch_data: dict, year: int, start_month: int, end_month: int, source_url: str = "") -> dict:
+    """공통 처리 로직: 지점별 raw 데이터 → DB 저장."""
+    from events.parser import parse_branch_sheet
+    from events.normalizer import CategoryNormalizer, ComponentParser
+    from events.db import (
+        ensure_period,
+        get_evt_branch_id,
+        insert_events,
+        create_ingestion_log,
+        update_ingestion_log,
+    )
+
+    label = f"{str(year)[-2:]}.{start_month}~{end_month}"
+    conn = _get_conn()
+    period_id = ensure_period(conn, year, start_month, end_month, label, source_url=source_url)
+    log_id = create_ingestion_log(conn, period_id)
+
+    cat_normalizer = CategoryNormalizer()
+    comp_parser = ComponentParser()
+
+    total_items = 0
+    processed = 0
+    errors = []
+
+    for tab_name, rows in branch_data.items():
+        branch_id = get_evt_branch_id(conn, tab_name)
+        if branch_id is None:
+            branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", tab_name))
+        if branch_id is None:
+            errors.append(f"{tab_name}: DB에 지점 없음")
+            continue
+
+        try:
+            events = parse_branch_sheet(rows, tab_name)
+            if not events:
+                continue
+
+            count = insert_events(
+                conn, events, period_id, branch_id,
+                category_resolver=cat_normalizer.normalize,
+                component_parser=comp_parser,
+            )
+            total_items += count
+            processed += 1
+            print(f"  {tab_name}: {count}건 저장")
+        except Exception as e:
+            errors.append(f"{tab_name}: {e}")
+            print(f"  {tab_name}: 오류 - {e}")
+
+    unmapped = cat_normalizer.get_unmapped()
+    if unmapped:
+        cat_normalizer.save_review_queue()
+        print(f"  미매핑 카테고리 {len(unmapped)}건 → review_queue.json 저장")
+
+    status = "completed" if not errors else "completed_with_errors"
+    error_log = [{"error": e} for e in errors] if errors else None
+    update_ingestion_log(conn, log_id, status, processed, total_items, error_log)
+    conn.close()
+
+    return {"processed": processed, "total_items": total_items, "errors": errors}
+
+
+def _read_excel_to_branch_data(content, skip_tabs=None) -> dict:
+    """Excel 바이트(또는 BytesIO) → {탭이름: [[셀값, ...], ...]} 딕셔너리."""
+    import pandas as pd
+    from io import BytesIO
+
+    if skip_tabs is None:
+        skip_tabs = {"지점 목차", "파일생성목록", "raw", "목차", "Sheet1", "요약", "목록"}
+
+    buf = BytesIO(content) if isinstance(content, bytes) else content
+    try:
+        excel = pd.ExcelFile(buf)
+    except Exception as e:
+        raise ValueError(f"파일 읽기 실패: {e}")
+
+    branch_data = {}
+    for sheet_name in excel.sheet_names:
+        if sheet_name.strip() in skip_tabs:
+            continue
+        try:
+            df = pd.read_excel(excel, sheet_name=sheet_name, header=None)
+            rows = df.fillna("").astype(str).values.tolist()
+            if rows and len(rows) > 2:
+                branch_data[sheet_name.strip()] = rows
+        except Exception:
+            continue
+
+    return branch_data
+
+
+def run_event_sync_from_url(url: str, year: int, start_month: int, end_month: int) -> dict:
+    """Google Sheets URL에서 이벤트 데이터를 읽어 DB에 저장.
+
+    공개 시트의 경우 xlsx export를 통해 데이터를 가져옵니다.
+    """
+    from urllib.request import urlopen, Request
+    from urllib.error import URLError
+
+    sheet_id = _extract_sheet_id(url)
+    if not sheet_id:
+        return {"processed": 0, "total_items": 0, "errors": ["유효한 Google Sheets URL이 아닙니다."]}
+
+    export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
+    print(f"이벤트 수집 (URL): {export_url}")
+
+    try:
+        req = Request(export_url, headers={"User-Agent": "uni-portal/1.0"})
+        resp = urlopen(req, timeout=60)
+        content = resp.read()
+    except URLError as e:
+        return {"processed": 0, "total_items": 0,
+                "errors": [f"시트 다운로드 실패 (공개 설정을 확인하세요): {e}"]}
+    except Exception as e:
+        return {"processed": 0, "total_items": 0, "errors": [f"시트 다운로드 실패: {e}"]}
+
+    try:
+        branch_data = _read_excel_to_branch_data(content)
+    except ValueError as e:
+        return {"processed": 0, "total_items": 0, "errors": [str(e)]}
+
+    if not branch_data:
+        return {"processed": 0, "total_items": 0, "errors": ["읽을 수 있는 지점 시트가 없습니다."]}
+
+    print(f"  읽은 지점 수: {len(branch_data)} ({', '.join(branch_data.keys())})")
+    return _process_branch_data(branch_data, year, start_month, end_month, source_url=url)
+
+
+def run_event_sync_from_file(file_bytes: bytes, year: int, start_month: int, end_month: int) -> dict:
+    """업로드된 Excel 파일에서 이벤트 데이터를 읽어 DB에 저장."""
+    print("이벤트 수집 (파일 업로드)")
+
+    try:
+        branch_data = _read_excel_to_branch_data(file_bytes)
+    except ValueError as e:
+        return {"processed": 0, "total_items": 0, "errors": [str(e)]}
+
+    if not branch_data:
+        return {"processed": 0, "total_items": 0, "errors": ["읽을 수 있는 지점 시트가 없습니다."]}
+
+    print(f"  읽은 지점 수: {len(branch_data)} ({', '.join(branch_data.keys())})")
+    return _process_branch_data(branch_data, year, start_month, end_month, source_url="file_upload")
+
+
 def main():
     parser = argparse.ArgumentParser(description="유앤아이의원 이벤트 데이터 수집")
     parser.add_argument("--year", type=int, default=datetime.now().year)

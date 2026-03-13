@@ -499,40 +499,53 @@ def render_admin_panel():
 
     # 지점 목록 (branch 역할 사용자 추가 시 필요)
     branches = get_branches()
-    branch_map = {b["id"]: b["name"] for b in branches}  # id → name
+    branch_map = {b["id"]: b["name"] for b in branches}
 
-    # 현재 사용자 목록
+    # 현재 사용자 목록 (컴팩트)
     if users:
         user_table = [{
-            "사용자 ID": u["username"],
+            "ID": u["username"],
             "역할": ROLES.get(u["role"], {}).get("label", u["role"]),
-            "담당 지점": branch_map.get(u.get("branch_id"), "-"),
+            "지점": branch_map.get(u.get("branch_id"), "-"),
         } for u in users]
-        st.dataframe(user_table, use_container_width=True, hide_index=True)
+        st.dataframe(
+            user_table, use_container_width=True, hide_index=True,
+            height=min(35 * len(users) + 38, 250),
+            column_config={
+                "ID": st.column_config.TextColumn("ID", width="medium"),
+                "역할": st.column_config.TextColumn("역할", width="small"),
+                "지점": st.column_config.TextColumn("지점", width="small"),
+            },
+        )
     else:
         st.info("등록된 사용자가 없습니다.")
 
-    st.divider()
+    current_user = st.session_state.get("username", "")
+    other_users = [u["username"] for u in users if u["username"] != current_user]
 
-    col_add, col_manage = st.columns(2)
+    # 탭 기반 관리 UI
+    tab_add, tab_role, tab_pw, tab_del = st.tabs(["➕ 추가", "🔄 역할변경", "🔑 비밀번호", "🗑️ 삭제"])
 
-    # 사용자 추가
-    with col_add:
-        st.markdown("**사용자 추가**")
+    # ── 사용자 추가 ──
+    with tab_add:
         with st.form("add_user_form"):
-            new_username = st.text_input("사용자 ID")
-            new_password = st.text_input("비밀번호", type="password")
-            new_password_confirm = st.text_input("비밀번호 확인", type="password")
-            new_role = st.selectbox(
-                "역할", options=["viewer", "branch", "editor", "admin"],
-                format_func=lambda r: ROLES[r]["label"],
-            )
-            # branch 역할 선택 시 담당 지점 지정
+            c1, c2 = st.columns(2)
+            with c1:
+                new_username = st.text_input("사용자 ID", key="add_uid")
+                new_role = st.selectbox(
+                    "역할", options=["viewer", "branch", "editor", "admin"],
+                    format_func=lambda r: ROLES[r]["label"], key="add_role",
+                )
+            with c2:
+                new_password = st.text_input("비밀번호", type="password", key="add_pw")
+                new_password_confirm = st.text_input("비밀번호 확인", type="password", key="add_pw2")
+
             branch_options = {b["id"]: b["name"] for b in branches}
             new_branch_id = st.selectbox(
                 "담당 지점 (지점담당 역할만 해당)",
                 options=[None] + list(branch_options.keys()),
                 format_func=lambda x: "선택 안 함" if x is None else branch_options[x],
+                key="add_branch",
             )
             submitted = st.form_submit_button("추가", type="primary", use_container_width=True)
             if submitted:
@@ -554,59 +567,73 @@ def render_admin_panel():
                     else:
                         st.error(msg)
 
-    # 역할 변경 / 삭제 / 비밀번호 초기화
-    with col_manage:
-        current_user = st.session_state.get("username", "")
-        other_users = [u["username"] for u in users if u["username"] != current_user]
-
+    # ── 역할 변경 ──
+    with tab_role:
         if not other_users:
             st.info("관리할 다른 사용자가 없습니다.")
         else:
-            st.markdown("**역할 변경**")
-            role_target = st.selectbox("대상 사용자", other_users, key="role_target")
-            role_new = st.selectbox(
-                "새 역할", options=["viewer", "editor", "admin"],
-                format_func=lambda r: ROLES[r]["label"], key="role_new",
-            )
-            if st.button("역할 변경", use_container_width=True):
-                ok, msg = update_user_role(role_target, role_new)
-                if ok:
-                    st.success(msg)
-                    st.rerun()
-                else:
-                    st.error(msg)
-
-            st.divider()
-
-            st.markdown("**비밀번호 초기화**")
-            pw_target = st.selectbox("대상 사용자", other_users, key="pw_target")
-            pw_new = st.text_input("새 비밀번호", type="password", key="pw_new")
-            if st.button("비밀번호 변경", use_container_width=True):
-                if not pw_new:
-                    st.error("새 비밀번호를 입력해주세요.")
-                else:
-                    hashed = hash_password(pw_new)
-                    ok, msg = update_user_password(pw_target, hashed)
-                    if ok:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
-
-            st.divider()
-
-            st.markdown("**사용자 삭제**")
-            del_target = st.selectbox("대상 사용자", other_users, key="del_target")
-            del_confirm = st.checkbox(f"'{del_target}' 삭제를 확인합니다", key="del_confirm")
-            if st.button("삭제", type="primary", use_container_width=True):
-                if not del_confirm:
-                    st.error("삭제 확인란을 체크해주세요.")
-                else:
-                    ok, msg = remove_user(del_target)
+            c1, c2, c3 = st.columns([2, 2, 1])
+            with c1:
+                role_target = st.selectbox("대상", other_users, key="role_target")
+            with c2:
+                role_new = st.selectbox(
+                    "새 역할", options=["viewer", "editor", "admin"],
+                    format_func=lambda r: ROLES[r]["label"], key="role_new",
+                )
+            with c3:
+                st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+                if st.button("변경", use_container_width=True, key="role_btn"):
+                    ok, msg = update_user_role(role_target, role_new)
                     if ok:
                         st.success(msg)
                         st.rerun()
                     else:
                         st.error(msg)
+
+    # ── 비밀번호 초기화 ──
+    with tab_pw:
+        if not other_users:
+            st.info("관리할 다른 사용자가 없습니다.")
+        else:
+            c1, c2, c3 = st.columns([2, 2, 1])
+            with c1:
+                pw_target = st.selectbox("대상", other_users, key="pw_target")
+            with c2:
+                pw_new = st.text_input("새 비밀번호", type="password", key="pw_new")
+            with c3:
+                st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+                if st.button("변경", use_container_width=True, key="pw_btn"):
+                    if not pw_new:
+                        st.error("새 비밀번호를 입력해주세요.")
+                    else:
+                        hashed = hash_password(pw_new)
+                        ok, msg = update_user_password(pw_target, hashed)
+                        if ok:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+
+    # ── 사용자 삭제 ──
+    with tab_del:
+        if not other_users:
+            st.info("관리할 다른 사용자가 없습니다.")
+        else:
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                del_target = st.selectbox("대상", other_users, key="del_target")
+                del_confirm = st.checkbox(f"'{del_target}' 삭제 확인", key="del_confirm")
+            with c2:
+                st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+                if st.button("삭제", type="primary", use_container_width=True, key="del_btn"):
+                    if not del_confirm:
+                        st.error("삭제 확인란을 체크해주세요.")
+                    else:
+                        ok, msg = remove_user(del_target)
+                        if ok:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
 
 
 # ============================================================
@@ -633,10 +660,15 @@ def render_tab_guide():
 
     with st.expander("이벤트 동기화 안내", expanded=False):
         st.markdown("""
-**Google Sheets → DB 이벤트 수집**
+**이벤트 데이터 수집 (격월 단위)**
 
-- 자동: 매월 1일, 15일 새벽 4시 (Docker cron)
-- 수동: 사이드바 '이벤트 동기화' 섹션에서 연도/시작월/종료월 입력 후 실행
+- 이벤트 탭 상단의 '이벤트 동기화'에서 실행
+- **링크 입력**: Google Sheets URL을 붙여넣기 (시트가 공개 설정이어야 함)
+- **파일 업로드**: Excel 파일(.xlsx) 직접 업로드
+
+**시트 구조 요구사항:**
+- 각 시트 탭 이름 = 지점명 (예: 강남, 잠실, 부평 등)
+- 탭 내부: ■ 카테고리 → 이벤트명 | 정상가 | 이벤트가 | 비고
 
 **수집 규칙:**
 1. 같은 기간+지점 데이터가 이미 있으면 삭제 후 재수집 (최신 데이터 우선)

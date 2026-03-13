@@ -29,6 +29,22 @@ def _format_price(val):
     return f"{int(val):,}"
 
 
+def _show_sync_result(result):
+    """동기화 결과를 표시하고 캐시를 갱신."""
+    if result["errors"]:
+        st.warning(
+            f"수집 완료: {result['processed']}개 지점, "
+            f"{result['total_items']:,}건 (오류 {len(result['errors'])}건)"
+        )
+        with st.expander("오류 상세", expanded=False):
+            for err in result["errors"]:
+                st.text(f"• {err}")
+    else:
+        st.success(f"수집 완료: {result['processed']}개 지점, {result['total_items']:,}건")
+    load_current_events.clear()
+    st.rerun()
+
+
 def render_tab_events():
     """이벤트 관리 탭 — 서브 뷰 전환."""
     permissions = get_permissions()
@@ -38,25 +54,56 @@ def render_tab_events():
         with st.expander("📥 이벤트 동기화", expanded=False):
             from datetime import datetime
             now = datetime.now()
-            col_y, col_m1, col_m2, col_btn = st.columns([1, 1, 1, 1])
+
+            # 기간 설정 (격월 단위)
+            col_y, col_p = st.columns(2)
             with col_y:
-                evt_year = st.number_input("연도", value=now.year, min_value=2024, max_value=2030, key="evt_year")
-            with col_m1:
-                evt_sm = st.number_input("시작월", value=now.month, min_value=1, max_value=12, key="evt_sm")
-            with col_m2:
-                evt_em = st.number_input("종료월", value=min(now.month + 1, 12), min_value=1, max_value=12, key="evt_em")
-            with col_btn:
-                st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
-                if st.button("수집 실행", use_container_width=True, type="primary", key="evt_sync_btn"):
-                    from events.sync import run_event_sync
-                    with st.spinner("이벤트 수집 중..."):
-                        result = run_event_sync(int(evt_year), int(evt_sm), int(evt_em))
-                    if result["errors"]:
-                        st.warning(f"수집 완료: {result['processed']}개 지점, {result['total_items']:,}건 (오류 {len(result['errors'])}건)")
+                evt_year = st.selectbox("연도", range(now.year, 2023, -1), key="evt_year")
+            with col_p:
+                bimonth_options = ["1-2월", "3-4월", "5-6월", "7-8월", "9-10월", "11-12월"]
+                current_idx = min((now.month - 1) // 2, 5)
+                evt_period = st.selectbox("기간", bimonth_options, index=current_idx, key="evt_period_sel")
+
+            _period_map = {
+                "1-2월": (1, 2), "3-4월": (3, 4), "5-6월": (5, 6),
+                "7-8월": (7, 8), "9-10월": (9, 10), "11-12월": (11, 12),
+            }
+            sm, em = _period_map[evt_period]
+
+            # 동기화 방식 선택
+            sync_method = st.radio(
+                "동기화 방식", ["📎 링크 입력", "📤 파일 업로드"],
+                horizontal=True, key="evt_sync_method", label_visibility="collapsed",
+            )
+
+            if sync_method == "📎 링크 입력":
+                sheet_url = st.text_input(
+                    "Google Sheets URL",
+                    placeholder="https://docs.google.com/spreadsheets/d/...",
+                    key="evt_sheet_url",
+                )
+                st.caption("시트가 '링크가 있는 모든 사용자에게 공개'로 설정되어야 합니다.")
+                if st.button("수집 실행", type="primary", use_container_width=True, key="evt_sync_url_btn"):
+                    if not sheet_url:
+                        st.error("URL을 입력해주세요.")
                     else:
-                        st.success(f"수집 완료: {result['processed']}개 지점, {result['total_items']:,}건")
-                    load_current_events.clear()
-                    st.rerun()
+                        from events.sync import run_event_sync_from_url
+                        with st.spinner("이벤트 수집 중..."):
+                            result = run_event_sync_from_url(sheet_url, int(evt_year), sm, em)
+                        _show_sync_result(result)
+            else:
+                uploaded = st.file_uploader(
+                    "Excel 파일 업로드",
+                    type=["xlsx", "xls"],
+                    key="evt_file_upload",
+                    help="각 시트 탭 이름이 지점명(예: 강남, 잠실)이어야 합니다.",
+                )
+                if uploaded is not None:
+                    if st.button("수집 실행", type="primary", use_container_width=True, key="evt_sync_file_btn"):
+                        from events.sync import run_event_sync_from_file
+                        with st.spinner("이벤트 수집 중..."):
+                            result = run_event_sync_from_file(uploaded.read(), int(evt_year), sm, em)
+                        _show_sync_result(result)
 
     sub_view = st.radio(
         "보기 선택", ["이벤트 목록", "이벤트 검색", "지점 비교", "가격 이력", "시술 사전"],

@@ -7,8 +7,7 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      # NAS 공유 폴더에 직접 마운트 → RaiDrive(Z:\docker-jogons\uni-portal\data)로 DB 관리 가능
-      - /volume1/docker-jogons/uni-portal/data:/app/data
+      - portal-data:/app/data
     restart: always
     deploy:
       resources:
@@ -24,3 +23,7 @@ services:
       # ── 이벤트 수집 (Google Sheets) ──
       - EVENT_SHEET_ID=${EVENT_SHEET_ID:-}
       - GOOGLE_CREDENTIALS_FILE=/app/credentials.json
+
+volumes:
+  portal-data:
+    driver: local

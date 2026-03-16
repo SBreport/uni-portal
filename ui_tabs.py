@@ -113,35 +113,42 @@ def _show_lookup_dialog(equip_name: str, branch_name: str, selected_branches: li
         unsafe_allow_html=True,
     )
 
-    # ── 1. 시술 정보 (DB) ──
-    device_matched = []
-    seen_names = set()
-    name_lower = equip_name.lower().strip()
+    # ── 0. 부위 수식어 제거 (바디/얼굴 등 괄호 안 부위는 장비명이 아님) ──
+    core_name = re.sub(r"\s*[(\（][^)\）]*[)\）]", "", equip_name).strip()
+    if not core_name:
+        core_name = equip_name.strip()
 
-    for canonical, aliases in DEVICE_ALIASES.items():
-        for alias in aliases:
-            if alias.lower() in name_lower or name_lower in alias.lower():
-                results = search_device_info(canonical)
-                for r in results:
-                    if r["name"] not in seen_names:
-                        device_matched.append(r)
-                        seen_names.add(r["name"])
-                break
+    # ── 1. 시술 정보 (DB) — 양방향 부분 매칭 ──
+    from equipment.db import find_matching_devices
 
+    device_matched = find_matching_devices(core_name)
+
+    # DEVICE_ALIASES 보조 매칭 (DB에 없는 별칭 커버)
     if not device_matched:
-        raw = re.sub(r"[0-9\s\-_/()（）]", " ", equip_name).strip()
-        kws = [w for w in raw.split() if len(w) >= 2]
-        if not kws:
-            kws = [equip_name.strip()]
-        for kw in kws:
-            results = search_device_info(kw)
-            for r in results:
-                if r["name"] not in seen_names:
-                    device_matched.append(r)
-                    seen_names.add(r["name"])
+        seen_names = set()
+        name_lower = core_name.lower()
+        for canonical, aliases in DEVICE_ALIASES.items():
+            for alias in aliases:
+                if alias.lower() in name_lower or name_lower in alias.lower():
+                    results = search_device_info(canonical)
+                    for r in results:
+                        if r["name"] not in seen_names:
+                            device_matched.append(r)
+                            seen_names.add(r["name"])
+                    break
 
-    if device_matched:
-        for info in device_matched:
+    # 이벤트 검색용 키워드는 모든 매칭 결과 보존 (써마지FLX → 써마지 이벤트도 찾기)
+    all_matched_names = [r["name"] for r in device_matched]
+
+    # 시술 정보 카드 표시용: 정확 매칭이 있으면 부모(부분 매칭) 항목은 제거
+    exact_names = {r["name"] for r in device_matched if r["name"].lower() == core_name.lower()}
+    if exact_names:
+        device_display = [r for r in device_matched if r["name"] in exact_names]
+    else:
+        device_display = device_matched
+
+    if device_display:
+        for info in device_display:
             st.markdown(f"""
 <div style="background:var(--bg-card,#F8FAFC); border:1px solid var(--border,#E2E8F0);
     border-left:4px solid var(--accent,#2563EB); border-radius:8px; padding:0.75rem 1rem; margin-bottom:0.5rem;">
@@ -200,15 +207,24 @@ def _show_lookup_dialog(equip_name: str, branch_name: str, selected_branches: li
     else:
         branch_label = "전체"
 
-    # 키워드 추출 + 매칭
-    raw = re.sub(r"[0-9\s\-_/()（）]", " ", equip_name).strip()
-    keywords = [w for w in raw.split() if len(w) >= 2]
-    if not keywords:
-        keywords = [equip_name.strip()]
+    # 키워드 추출: core_name + 매칭된 시술명 활용 (정확매칭 필터 전 전체)
+    keywords = set()
+    keywords.add(core_name)
+    # 매칭된 시술명도 키워드에 추가 (써마지FLX → 써마지 이벤트 찾기)
+    for name in all_matched_names:
+        keywords.add(name)
+    # DEVICE_ALIASES 역매핑 키워드 추가
+    for canonical, aliases in DEVICE_ALIASES.items():
+        for alias in aliases:
+            if alias.lower() in core_name.lower() or core_name.lower() in alias.lower():
+                keywords.add(canonical)
+                keywords.update(aliases)
+                break
+    keywords = [kw for kw in keywords if len(kw) >= 2]
 
     mask = pd.Series(False, index=evt_df.index)
     for kw in keywords:
-        mask = mask | evt_df["이벤트명"].str.contains(kw, case=False, na=False)
+        mask = mask | evt_df["이벤트명"].str.contains(re.escape(kw), case=False, na=False)
     matched_evt = evt_df[mask]
 
     # 기간 표시
@@ -217,7 +233,7 @@ def _show_lookup_dialog(equip_name: str, branch_name: str, selected_branches: li
         period_label = evt_df["기간"].dropna().unique()
         period_label = period_label[0] if len(period_label) > 0 else ""
     period_text = f" · 기간: {period_label}" if period_label else ""
-    st.caption(f"지점: {branch_label} · 키워드: {', '.join(keywords)}{period_text}")
+    st.caption(f"지점: {branch_label} · 키워드: {', '.join(sorted(keywords))}{period_text}")
 
     if len(matched_evt) == 0:
         st.info(f"'{equip_name}' 관련 운영 중인 이벤트가 없습니다.")

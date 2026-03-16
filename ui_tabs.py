@@ -58,11 +58,20 @@ def render_tab_equipment(filtered_df, df, selected_branches, permissions):
         )
         filtered_df = filtered_df[_mask]
 
-    # ── 서브 뷰 ──
-    sub_view = st.radio(
-        "보기 선택", ["장비 목록", "장비 검색", "지점 비교"],
-        horizontal=True, label_visibility="collapsed",
-    )
+    # ── 서브 뷰 (라디오 + 건수 한 줄) ──
+    col_radio, col_count = st.columns([3, 1])
+    with col_radio:
+        sub_view = st.radio(
+            "보기 선택", ["장비 목록", "장비 검색", "지점 비교"],
+            horizontal=True, label_visibility="collapsed",
+        )
+    with col_count:
+        st.markdown(
+            f"<div style='text-align:right; font-size:0.85rem; font-weight:600; "
+            f"color:var(--text-secondary,#64748B); padding-top:0.45rem;'>"
+            f"{len(filtered_df):,}건</div>",
+            unsafe_allow_html=True,
+        )
     if sub_view == "장비 목록":
         render_tab_equipment_list(filtered_df, df, selected_branches, permissions)
     elif sub_view == "장비 검색":
@@ -283,8 +292,6 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
             else:
                 st.error(msg)
 
-    st.markdown(f"**장비 목록** · {len(filtered_df):,}건")
-
     # AG-Grid 데이터 준비
     grid_df = filtered_df[["순번", "지점명", "기기명", "카테고리", "사진유무", "수량", "비고"]].copy()
     grid_df = grid_df.reset_index(drop=True)
@@ -323,10 +330,8 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
     gb.configure_selection(selection_mode="single", use_checkbox=False)
     gb.configure_grid_options(domLayout="normal", headerHeight=32)
 
-    # AG-Grid 높이: 뷰포트에서 상단(필터+라디오+제목≈250px) + 하단(버튼≈100px)을 뺀 나머지
-    st.markdown("""<style>
-    .equip-grid iframe { height: calc(100vh - 350px) !important; min-height: 350px !important; }
-    </style><div class="equip-grid">""", unsafe_allow_html=True)
+    # AG-Grid: JS가 뷰포트 기준으로 iframe 높이를 자동 계산
+    st.markdown('<div class="equip-grid">', unsafe_allow_html=True)
 
     grid_response = AgGrid(
         grid_df[["순번", "지점명", "기기명", "카테고리", "사진", "수량", "비고"]],
@@ -373,17 +378,20 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
                 name_changes.append((eq_id, new_name))
     total_changes = len(photo_changes) + len(name_changes)
 
-    # 선택 정보 바
+    # 선택 정보 바 (항상 공간 확보 — 클릭 시 높이 변동 방지)
     if has_selection:
-        st.markdown(
-            f"<div style='background:var(--bg-card,#F8FAFC); border-left:3px solid var(--accent,#2563EB); "
-            f"border-radius:4px; padding:0.35rem 0.75rem; margin:0.25rem 0; font-size:0.82rem; "
-            f"color:var(--text-primary,#1E293B);'>"
+        sel_html = (
             f"선택: <b>{branch_name}</b> · <b style=\"color:var(--accent,#2563EB);\">{equip_name}</b>"
             f"{'  |  변경: ' + str(total_changes) + '건' if total_changes > 0 else ''}"
-            f"</div>",
-            unsafe_allow_html=True,
         )
+    else:
+        sel_html = "<span style='color:var(--text-muted,#94A3B8);'>장비를 선택하세요</span>"
+    st.markdown(
+        f"<div style='background:var(--bg-card,#F8FAFC); border-left:3px solid var(--accent,#2563EB); "
+        f"border-radius:4px; padding:0.35rem 0.75rem; margin:0.25rem 0; font-size:0.82rem; "
+        f"color:var(--text-primary,#1E293B);'>{sel_html}</div>",
+        unsafe_allow_html=True,
+    )
 
     # 버튼 한 줄 배치: 조회 | 변경 저장 | CSV
     if can_edit:
@@ -459,7 +467,7 @@ def render_tab_search(filtered_df, df):
         st.dataframe(
             group_summary,
             use_container_width=True,
-            height=600,
+            height=min(700, max(400, 35 * len(group_summary) + 38)),
             column_config={
                 "장비그룹": st.column_config.TextColumn("장비명 (통합)", width="large"),
                 "보유 지점 수": st.column_config.NumberColumn("보유 지점 수", width="medium"),

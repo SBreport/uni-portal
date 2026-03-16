@@ -83,12 +83,47 @@ html.dark-theme {
 }
 
 /* ================================================================
-   공통 레이아웃
+   공통 레이아웃 — 뷰포트 100vh 완전 맞춤 (스크롤 자체 차단)
    ================================================================ */
+html, body, .stApp {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
 [data-testid="stToolbar"] > div > div:last-child { display: none !important; }
-.block-container { padding-top: 0 !important; padding-bottom: 0 !important; }
+.block-container {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    max-width: 100% !important;
+}
 
-/* sticky 탭을 위한 overflow 해제 (stMain은 스크롤 컨테이너이므로 제외) */
+/* 상단 여백 압축 — Streamlit 위젯 간격 최소화 */
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div {
+    margin-bottom: -0.25rem;
+}
+[data-testid="stMain"] .stSelectbox,
+[data-testid="stMain"] .stTextInput {
+    margin-bottom: 0 !important;
+}
+[data-testid="stMain"] .stRadio {
+    margin-top: -0.25rem !important;
+    margin-bottom: -0.25rem !important;
+}
+
+/* 사이드바: 100vh 맞춤 */
+section[data-testid="stSidebar"] > div {
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
+
+/* 메인: 100vh 맞춤, 스크롤 자체 차단 */
+[data-testid="stMain"] {
+    height: 100vh !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+}
+
+/* sticky 탭을 위한 overflow 해제 (stMain 하위만) */
 [data-testid="stMainBlockContainer"],
 [data-testid="stVerticalBlockBorderWrapper"],
 .main .block-container {
@@ -640,6 +675,34 @@ components.html("""
         main.style.opacity = '1';
       }
     }).observe(pd.body, { childList: true, subtree: true, attributes: true });
+  })();
+
+  /* 6. 뷰포트 맞춤 — 그리드 iframe 높이를 동적으로 계산 */
+  (function() {
+    function fitGrids() {
+      var vh = window.innerHeight || pd.documentElement.clientHeight;
+      var grids = pd.querySelectorAll('.equip-grid, .evt-grid');
+      grids.forEach(function(wrap) {
+        var iframe = wrap.querySelector('iframe');
+        if (!iframe) return;
+        /* iframe 상단 위치 측정 */
+        var rect = iframe.getBoundingClientRect();
+        /* 하단 여백 130px (선택 정보 바 + 버튼 행) */
+        var h = vh - rect.top - 130;
+        if (h < 300) h = 300;
+        iframe.style.height = h + 'px';
+      });
+    }
+    /* 초기 + DOM 변경 시 재계산 */
+    var timer = null;
+    function debouncedFit() {
+      clearTimeout(timer);
+      timer = setTimeout(fitGrids, 200);
+    }
+    new MutationObserver(debouncedFit).observe(pd.body, { childList: true, subtree: true });
+    window.addEventListener('resize', debouncedFit);
+    setTimeout(fitGrids, 500);
+    setTimeout(fitGrids, 1500);
   })();
 })();
 </script>

@@ -23,6 +23,55 @@ from events.db import (
 from auth import get_permissions
 
 
+# ── 시술 정보 툴팁 캐시 ──
+_device_tooltip_cache = {}
+
+
+def _build_device_tooltip_map():
+    """device_info DB에서 {name: summary} 맵 + aliases 역매핑 구축 (1회 캐싱)."""
+    if _device_tooltip_cache:
+        return _device_tooltip_cache
+    try:
+        from equipment.db import get_all_device_info
+        devices = get_all_device_info()
+        for d in devices:
+            name = d.get("name", "")
+            summary = d.get("summary", "")
+            category = d.get("category", "")
+            if not name:
+                continue
+            short = (summary[:35] + "…") if len(summary) > 35 else summary
+            tip = f"{name}: {short}" if short else name
+            _device_tooltip_cache[name.lower()] = tip
+            # aliases도 등록
+            for alias in (d.get("aliases", "") or "").split(","):
+                alias = alias.strip()
+                if alias:
+                    _device_tooltip_cache[alias.lower()] = tip
+    except Exception:
+        pass
+    return _device_tooltip_cache
+
+
+def _match_device_tooltip(event_name: str) -> str:
+    """이벤트명에서 시술명을 추출하여 device_info 툴팁 반환."""
+    if not event_name or pd.isna(event_name):
+        return ""
+    tip_map = _build_device_tooltip_map()
+    name_lower = str(event_name).lower().strip()
+
+    # 1. 정확 매칭
+    if name_lower in tip_map:
+        return tip_map[name_lower]
+
+    # 2. 이벤트명에 시술명이 포함되어 있는지 (긴 이름부터 매칭)
+    sorted_keys = sorted(tip_map.keys(), key=len, reverse=True)
+    for key in sorted_keys:
+        if len(key) >= 2 and key in name_lower:
+            return tip_map[key]
+    return ""
+
+
 def _format_price(val):
     """가격을 천 단위 콤마 형식으로 변환."""
     if pd.isna(val) or val is None:
@@ -159,26 +208,32 @@ def _render_event_list():
         lambda x: f"{x:.0f}%" if pd.notna(x) and x is not None else "-"
     )
 
+    # 시술 정보 툴팁 매칭: 이벤트명 → device_info summary
+    display_df["_tooltip"] = display_df["이벤트명"].apply(_match_device_tooltip)
+
     # AG-Grid 렌더링 (보유장비 탭과 동일 스타일)
     gb = GridOptionsBuilder.from_dataframe(display_df)
     gb.configure_column("지점명", header_name="지점", width=80, cellStyle={"textAlign": "center"})
     gb.configure_column("카테고리", width=90, cellStyle={"textAlign": "center"})
-    gb.configure_column("이벤트명", width=250, flex=2)
+    gb.configure_column("이벤트명", width=250, flex=2, tooltipField="_tooltip")
     gb.configure_column("정상가", width=90, cellStyle={"textAlign": "right"})
     gb.configure_column("이벤트가", width=90, cellStyle={"textAlign": "right"})
     gb.configure_column("할인율", width=65, cellStyle={"textAlign": "center"})
     gb.configure_column("비고", width=200, flex=2, wrapText=True, autoHeight=True,
                         cellStyle={"lineHeight": "1.4", "whiteSpace": "normal", "wordBreak": "break-word"})
+    gb.configure_column("_tooltip", hide=True)
     gb.configure_default_column(sortable=True, filter=True, resizable=True)
-    gb.configure_grid_options(domLayout="normal", headerHeight=32)
+    gb.configure_grid_options(domLayout="normal", headerHeight=32, tooltipShowDelay=300)
 
     from ui_tabs import _aggrid_dark_css
+    st.markdown('<div class="evt-grid">', unsafe_allow_html=True)
     AgGrid(
         display_df, gridOptions=gb.build(), custom_css=_aggrid_dark_css(),
-        height=600, update_mode=GridUpdateMode.NO_UPDATE,
+        height=500, update_mode=GridUpdateMode.NO_UPDATE,
         data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
         fit_columns_on_grid_load=True, allow_unsafe_jscode=True, theme="streamlit",
     )
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # CSV 다운로드
     csv = filtered[["지점명", "카테고리", "이벤트명", "정상가", "이벤트가", "할인율", "비고"]].to_csv(index=False).encode("utf-8-sig")

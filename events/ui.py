@@ -117,13 +117,14 @@ def _render_tab_events_inner():
     with col_f2:
         st.text_input("이벤트 검색", placeholder="시술명/이벤트명을 입력하세요", key="evt_top_search")
     with col_f3:
-        _p_min = st.number_input("최소 금액", min_value=0, max_value=5_000_000,
-                                  value=0, step=10_000, format="%d", key="evt_price_min_input")
+        _p_min_man = st.number_input("최소 (만원)", min_value=0, max_value=500,
+                                      value=0, step=1, format="%d", key="evt_price_min_input")
     with col_f4:
-        _p_max = st.number_input("최대 금액", min_value=0, max_value=5_000_000,
-                                  value=5_000_000, step=10_000, format="%d", key="evt_price_max_input")
-    st.session_state["evt_price_min"] = _p_min
-    st.session_state["evt_price_max"] = _p_max
+        _p_max_man = st.number_input("최대 (만원)", min_value=0, max_value=500,
+                                      value=500, step=1, format="%d", key="evt_price_max_input")
+    # 만원 → 원 변환 (1만원 이하 선택 시 9,900원 등도 포함되도록 올림 처리)
+    st.session_state["evt_price_min"] = _p_min_man * 10_000
+    st.session_state["evt_price_max"] = _p_max_man * 10_000 + 9_999 if _p_max_man < 500 else 5_000_000
 
     # 동기화 기능은 사용자 관리 탭으로 이동됨
 
@@ -151,9 +152,10 @@ def _render_tab_events_inner():
         _render_treatment_dictionary()
 
 
+@st.fragment
 def _render_event_list():
     """현재 기간 이벤트 목록."""
-    df = load_current_events()
+    df, is_fallback = load_current_events()
 
     if len(df) == 0:
         from datetime import datetime
@@ -163,6 +165,15 @@ def _render_event_list():
         sm, em = _pm[_bm_idx]
         st.warning(f"{now.year}년 {sm}-{em}월 이벤트 정보가 아직 입력되지 않았습니다.")
         return
+
+    if is_fallback:
+        from datetime import datetime
+        now = datetime.now()
+        _bm_idx = min((now.month - 1) // 2, 5)
+        _pm = {0: (1, 2), 1: (3, 4), 2: (5, 6), 3: (7, 8), 4: (9, 10), 5: (11, 12)}
+        sm, em = _pm[_bm_idx]
+        period_label = df["기간"].iloc[0] if len(df) > 0 else ""
+        st.info(f"{now.year}년 {sm}-{em}월 이벤트가 아직 입력되지 않았습니다. 이전 기간({period_label}) 데이터를 표시합니다.")
 
     # 해시태그 필터링 (#xxx 제거)
     df = df[~df["이벤트명"].str.startswith("#", na=False)]
@@ -240,6 +251,7 @@ def _render_event_list():
     st.download_button("CSV 다운로드", csv, f"events_{period}.csv", "text/csv", use_container_width=True)
 
 
+@st.fragment
 def _render_event_search():
     """이벤트 통합 검색 — 이벤트명 + 패키지 내 시술명까지 분해 검색."""
     st.subheader("이벤트 검색")
@@ -333,9 +345,10 @@ def _render_event_search():
     )
 
 
+@st.fragment
 def _render_branch_compare():
     """지점별 이벤트 비교."""
-    df = load_current_events()
+    df, _ = load_current_events()
     if len(df) == 0:
         st.warning("이벤트 데이터가 없습니다.")
         return
@@ -377,6 +390,7 @@ def _render_branch_compare():
     st.dataframe(avg_discount, use_container_width=True, hide_index=True)
 
 
+@st.fragment
 def _render_price_history():
     """기간별 가격 변동 — 같은 이벤트의 가격이 기간에 따라 어떻게 바뀌었는지 추적."""
     st.caption("동일 시술의 가격이 기간(격월)마다 어떻게 변동되었는지 확인합니다.")
@@ -411,6 +425,7 @@ def _render_price_history():
 # 시술 사전 뷰
 # ============================================================
 
+@st.fragment
 def _render_treatment_dictionary():
     """시술 사전 — 시술/장비 설명 조회 + 관리자 편집."""
     permissions = get_permissions()
@@ -519,7 +534,7 @@ def _render_treatment_dictionary():
                 if ok:
                     st.success("저장 완료!")
                     st.cache_data.clear()
-                    st.rerun()
+                    st.rerun(scope="app")
                 else:
                     st.error("저장 실패")
 
@@ -541,6 +556,6 @@ def _render_treatment_dictionary():
                     if ok:
                         st.success(f"'{at_name}' 추가 완료!")
                         st.cache_data.clear()
-                        st.rerun()
+                        st.rerun(scope="app")
                     else:
                         st.error("추가 실패 (중복 확인)")

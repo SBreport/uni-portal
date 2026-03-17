@@ -90,6 +90,10 @@ html, body, .stApp {
     max-height: 100vh !important;
     overflow: hidden !important;
 }
+/* 모달은 position:fixed이므로 독립적으로 스크롤 허용 */
+[data-testid="stModal"] {
+    overflow-y: auto !important;
+}
 [data-testid="stToolbar"] > div > div:last-child { display: none !important; }
 .block-container {
     padding-top: 0 !important;
@@ -552,14 +556,15 @@ html.dark-theme [data-testid="stCaptionContainer"] * { color: var(--text-muted) 
     max-width: 1300px !important;
     min-width: 800px !important;
     max-height: 90vh !important;
+    overflow-y: auto !important;
 }
 [data-testid="stModal"] [data-testid="stVerticalBlock"] {
     width: 100% !important;
 }
-/* 다이얼로그 내부 AG-Grid iframe 높이 확장 */
+/* 다이얼로그 내부 AG-Grid iframe — 컨텐츠 기반 높이 (Python height 우선) */
 [data-testid="stModal"] iframe {
-    min-height: 55vh !important;
-    height: 60vh !important;
+    min-height: 200px !important;
+    max-height: 50vh !important;
 }
 /* dialog fallback selectors */
 div[role="dialog"] {
@@ -642,9 +647,27 @@ components.html("""
   });
   pd.body.appendChild(btn);
 
-  /* 4. 새로 추가되는 iframe 자동 동기화 (AG-Grid 지연 렌더링 대응) */
+  /* 4. 새로 추가되는 iframe 자동 동기화 + scrollbar CSS 주입 */
+  var _injectedFrames = new WeakSet();
+  var _scrollbarCSS = '.ag-body-viewport::-webkit-scrollbar,.ag-body-horizontal-scroll-viewport::-webkit-scrollbar{width:6px;height:6px}'
+    + '.ag-body-viewport::-webkit-scrollbar-thumb,.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-thumb{background:rgba(148,163,184,.35);border-radius:3px}'
+    + '.ag-body-viewport::-webkit-scrollbar-track,.ag-body-horizontal-scroll-viewport::-webkit-scrollbar-track{background:transparent}'
+    + '.ag-body-viewport,.ag-body-horizontal-scroll-viewport{scrollbar-width:thin;scrollbar-color:rgba(148,163,184,.35) transparent}'
+    + '.ag-paging-panel{display:none!important}';
+  function injectScrollbarCSS(iframe) {
+    try {
+      var d = iframe.contentDocument || iframe.contentWindow.document;
+      if (!d || !d.head) return;
+      if (_injectedFrames.has(iframe)) return;
+      var s = d.createElement('style');
+      s.textContent = _scrollbarCSS;
+      d.head.appendChild(s);
+      _injectedFrames.add(iframe);
+    } catch(e) {}
+  }
   new MutationObserver(function() {
     syncIframes(html.classList.contains('dark-theme'));
+    pd.querySelectorAll('iframe').forEach(injectScrollbarCSS);
   }).observe(pd.body, { childList: true, subtree: true });
 
   /* 5. 탭 전환 잔상 방지 — 사이드바 라디오 변경 시 메인 영역 즉시 숨김 */
@@ -703,6 +726,60 @@ components.html("""
     window.addEventListener('resize', debouncedFit);
     setTimeout(fitGrids, 500);
     setTimeout(fitGrids, 1500);
+  })();
+
+  /* 7. AG-Grid 스크롤 위치 보존 — 리런 시 위치 복원 */
+  (function() {
+    /* 200ms마다 현재 스크롤 위치를 sessionStorage에 저장 */
+    setInterval(function() {
+      pd.querySelectorAll('.equip-grid iframe, .evt-grid iframe').forEach(function(iframe) {
+        try {
+          var d = iframe.contentDocument || iframe.contentWindow.document;
+          var vp = d && d.querySelector('.ag-body-viewport');
+          if (vp && vp.scrollTop > 0) {
+            var cls = iframe.closest('.equip-grid,.evt-grid').className.split(/\s+/)[0];
+            sessionStorage.setItem('_agScroll_' + cls, vp.scrollTop);
+          }
+        } catch(e) {}
+      });
+    }, 200);
+
+    /* iframe 로드 시 저장된 위치로 복원 */
+    var _restoredFrames = new WeakSet();
+    new MutationObserver(function(mutations) {
+      mutations.forEach(function(m) {
+        m.addedNodes.forEach(function(n) {
+          if (n.nodeType !== 1) return;
+          var iframes = n.tagName === 'IFRAME' ? [n] : (n.querySelectorAll ? n.querySelectorAll('iframe') : []);
+          Array.prototype.forEach.call(iframes, function(iframe) {
+            if (_restoredFrames.has(iframe)) return;
+            _restoredFrames.add(iframe);
+            iframe.addEventListener('load', function() {
+              injectScrollbarCSS(iframe);
+              var wrap = iframe.closest('.equip-grid,.evt-grid');
+              if (!wrap) return;
+              var cls = wrap.className.split(/\s+/)[0];
+              var saved = sessionStorage.getItem('_agScroll_' + cls);
+              if (saved && parseInt(saved) > 0) {
+                /* AG-Grid 렌더링 완료 대기 후 복원 */
+                var attempts = 0;
+                var tid = setInterval(function() {
+                  try {
+                    var d = iframe.contentDocument || iframe.contentWindow.document;
+                    var vp = d && d.querySelector('.ag-body-viewport');
+                    if (vp && vp.scrollHeight > vp.clientHeight) {
+                      vp.scrollTop = parseInt(saved);
+                      clearInterval(tid);
+                    }
+                  } catch(e) { clearInterval(tid); }
+                  if (++attempts > 20) clearInterval(tid);
+                }, 100);
+              }
+            });
+          });
+        });
+      });
+    }).observe(pd.body, { childList: true, subtree: true });
   })();
 })();
 </script>

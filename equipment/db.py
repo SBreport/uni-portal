@@ -267,6 +267,7 @@ def get_device_info_by_name(name):
     return dict(row) if row else None
 
 
+@st.cache_data(ttl=300)
 def search_device_info(keyword):
     """키워드로 시술 정보 검색 (이름 + aliases 부분 매칭)"""
     _ensure_device_info_table()
@@ -308,6 +309,7 @@ def _is_safe_substring(short, long_str):
     return True
 
 
+@st.cache_data(ttl=300)
 def find_matching_devices(equip_name):
     """장비명으로 관련 시술 정보를 양방향 부분 매칭으로 찾기.
 
@@ -405,29 +407,36 @@ def delete_device_info(name):
     conn.close()
 
 
-def seed_device_info_from_config():
-    """config.py의 DEVICE_INFO를 DB로 이관 (기존 데이터 있으면 스킵)"""
+def seed_device_info_from_json():
+    """data/device_master.json의 장비 데이터를 DB로 이관 (기존 데이터 있으면 업데이트)"""
+    import json, os
     _ensure_device_info_table()
-    from config import DEVICE_INFO, DEVICE_ALIASES
-    conn = _get_conn()
-    c = conn.cursor()
+    master_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               "data", "device_master.json")
+    if not os.path.exists(master_path):
+        return
 
-    for name, info in DEVICE_INFO.items():
-        # aliases 구성
-        alias_list = DEVICE_ALIASES.get(name, [])
-        aliases_str = ", ".join(alias_list) if alias_list else ""
+    with open(master_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
 
-        c.execute("SELECT id FROM device_info WHERE name = ?", (name,))
-        if not c.fetchone():
-            c.execute("""
-                INSERT INTO device_info (name, category, summary, target, mechanism, note, aliases, is_verified)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-            """, (name, info.get("category", ""), info.get("summary", ""),
-                  info.get("target", ""), info.get("mechanism", ""),
-                  info.get("note", ""), aliases_str))
+    devices = data.get("devices", [])
+    for dev in devices:
+        aliases_str = ", ".join(dev.get("aliases", []))
+        is_verified = 1 if dev.get("is_verified", False) else 0
+        upsert_device_info(
+            name=dev["name"],
+            category=dev.get("category", ""),
+            summary=dev.get("summary", ""),
+            target=dev.get("target", ""),
+            mechanism=dev.get("mechanism", ""),
+            note=dev.get("note", ""),
+            aliases=aliases_str,
+            is_verified=is_verified,
+        )
 
-    conn.commit()
-    conn.close()
+
+# 하위 호환: 기존 호출부가 있을 경우 대비
+seed_device_info_from_config = seed_device_info_from_json
 
 
 def update_device_usage_counts():

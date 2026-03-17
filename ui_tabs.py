@@ -197,7 +197,7 @@ def _show_lookup_dialog(equip_name: str, branch_name: str, selected_branches: li
 
     try:
         from events.db import load_current_events
-        evt_df = load_current_events()
+        evt_df, _ = load_current_events()
     except Exception:
         st.error("이벤트 데이터를 불러올 수 없습니다.")
         return
@@ -271,12 +271,13 @@ def _show_lookup_dialog(equip_name: str, branch_name: str, selected_branches: li
         display, gridOptions=gb.build(), custom_css=_aggrid_dark_css(),
         height=max(250, min(600, 32 + len(display) * 30)),
         update_mode=GridUpdateMode.NO_UPDATE,
-        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        data_return_mode=DataReturnMode.AS_INPUT,
         fit_columns_on_grid_load=True, allow_unsafe_jscode=True, theme="streamlit",
         key="evt_dialog_grid",
     )
 
 
+@st.fragment
 def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
     if len(filtered_df) == 0:
         st.warning("선택한 조건에 해당하는 장비가 없습니다.")
@@ -337,8 +338,8 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
         grid_df[["순번", "지점명", "기기명", "카테고리", "사진", "수량", "비고"]],
         gridOptions=gb.build(), custom_css=_aggrid_dark_css(),
         height=500,
-        update_mode=GridUpdateMode.MODEL_CHANGED if can_edit else GridUpdateMode.SELECTION_CHANGED,
-        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        data_return_mode=DataReturnMode.AS_INPUT if not can_edit else DataReturnMode.FILTERED_AND_SORTED,
         fit_columns_on_grid_load=True, allow_unsafe_jscode=True, theme="streamlit",
     )
 
@@ -353,36 +354,13 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
     branch_name = ""
     if has_selection:
         sel = selected_rows.iloc[0] if hasattr(selected_rows, "iloc") else selected_rows[0]
-        sel_idx = sel.get("순번", None)
         equip_name = sel.get("기기명", "")
         branch_name = sel.get("지점명", "")
-        # 편집된 이름이 있으면 사용
-        if can_edit and sel_idx is not None:
-            match = edited_data[edited_data["순번"] == sel_idx]
-            if len(match) > 0:
-                equip_name = str(match.iloc[0]["기기명"]).strip() or equip_name
-
-    # 변경 사항 감지 (편집자용)
-    photo_changes = []
-    name_changes = []
-    if can_edit:
-        for i in range(min(len(edited_data), len(grid_df))):
-            eq_id = int(filtered_df.iloc[i]["순번"])
-            orig_photo = grid_df.iloc[i]["사진"]
-            new_photo = edited_data.iloc[i]["사진"]
-            if new_photo != orig_photo:
-                photo_changes.append((eq_id, "O" if new_photo else ""))
-            orig_name = grid_df.iloc[i]["기기명"]
-            new_name = str(edited_data.iloc[i]["기기명"]).strip()
-            if new_name and new_name != orig_name:
-                name_changes.append((eq_id, new_name))
-    total_changes = len(photo_changes) + len(name_changes)
 
     # 선택 정보 바 (항상 공간 확보 — 클릭 시 높이 변동 방지)
     if has_selection:
         sel_html = (
             f"선택: <b>{branch_name}</b> · <b style=\"color:var(--accent,#2563EB);\">{equip_name}</b>"
-            f"{'  |  변경: ' + str(total_changes) + '건' if total_changes > 0 else ''}"
         )
     else:
         sel_html = "<span style='color:var(--text-muted,#94A3B8);'>장비를 선택하세요</span>"
@@ -408,6 +386,20 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
     if can_edit:
         with col_save:
             if st.button("변경 사항 저장", use_container_width=True):
+                # 변경 감지를 저장 버튼 클릭 시에만 실행 (클릭마다 O(n) 방지)
+                photo_changes = []
+                name_changes = []
+                for i in range(min(len(edited_data), len(grid_df))):
+                    eq_id = int(filtered_df.iloc[i]["순번"])
+                    orig_photo = grid_df.iloc[i]["사진"]
+                    new_photo = edited_data.iloc[i]["사진"]
+                    if new_photo != orig_photo:
+                        photo_changes.append((eq_id, "O" if new_photo else ""))
+                    orig_name = grid_df.iloc[i]["기기명"]
+                    new_name = str(edited_data.iloc[i]["기기명"]).strip()
+                    if new_name and new_name != orig_name:
+                        name_changes.append((eq_id, new_name))
+                total_changes = len(photo_changes) + len(name_changes)
                 if total_changes > 0:
                     save_msgs = []
                     if photo_changes:
@@ -430,7 +422,7 @@ def render_tab_equipment_list(filtered_df, df, selected_branches, permissions):
                             save_msgs.append(f"기기명 {name_ok}건 저장 완료")
                     st.session_state["save_result"] = [f"✅ {m}" if "오류" not in m else f"❌ {m}" for m in save_msgs]
                     load_data.clear()
-                    st.rerun()
+                    st.rerun(scope="app")
                 else:
                     st.info("변경된 항목이 없습니다.")
 
@@ -905,7 +897,7 @@ def render_admin_panel():
         with tab_dict:
             from equipment.db import (
                 get_all_device_info, upsert_device_info, delete_device_info,
-                update_device_usage_counts, seed_device_info_from_config,
+                update_device_usage_counts, seed_device_info_from_json,
             )
 
             st.markdown("**시술/장비 정보 사전 관리**")
@@ -1000,9 +992,9 @@ def render_admin_panel():
                         st.success("보유수 업데이트 완료")
                         st.rerun()
                 with uc2:
-                    if st.button("config → DB 시딩", use_container_width=True, key="dict_seed"):
-                        seed_device_info_from_config()
-                        st.success("config.py 데이터 시딩 완료")
+                    if st.button("JSON → DB 동기화", use_container_width=True, key="dict_seed"):
+                        seed_device_info_from_json()
+                        st.success("device_master.json 동기화 완료")
                         st.rerun()
 
 

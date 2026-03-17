@@ -670,32 +670,65 @@ components.html("""
     pd.querySelectorAll('iframe').forEach(injectScrollbarCSS);
   }).observe(pd.body, { childList: true, subtree: true });
 
-  /* 5. 탭 전환 잔상 방지 — 사이드바 라디오 변경 시 메인 영역 즉시 숨김 */
+  /* 5. 탭 전환 잔상 방지 — 사이드바 라디오 클릭 즉시 숨김 + 렌더링 완료 후 페이드인 */
   (function() {
     var sb = pd.querySelector('[data-testid="stSidebar"]');
     if (!sb) return;
-    var lastVal = '';
-    sb.addEventListener('change', function(e) {
-      if (e.target.type !== 'radio') return;
-      var cur = e.target.value || '';
-      if (lastVal && cur !== lastVal) {
-        var main = pd.querySelector('[data-testid="stMain"]');
-        if (main) {
-          main.style.opacity = '0';
-          main.style.transition = 'none';
-        }
-      }
-      lastVal = cur;
-    });
-    /* Streamlit 렌더링 완료 감지 → 메인 영역 복원 */
-    new MutationObserver(function() {
+    var hiding = false;
+    var hideTimer = null;
+
+    /* mousedown (change보다 먼저 발생) 시점에 즉시 숨김 */
+    sb.addEventListener('mousedown', function(e) {
+      var label = e.target.closest('[data-testid="stSidebar"] .stRadio label');
+      if (!label) return;
+      /* 이미 선택된 항목 클릭이면 무시 */
+      var input = label.querySelector('input[type="radio"]');
+      if (input && input.checked) return;
+
       var main = pd.querySelector('[data-testid="stMain"]');
-      if (!main || main.style.opacity !== '0') return;
+      if (main) {
+        main.style.transition = 'none';
+        main.style.opacity = '0';
+        main.style.pointerEvents = 'none';
+        hiding = true;
+        /* 안전장치: 3초 후에도 복원 안 됐으면 강제 복원 */
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(function() {
+          if (hiding) {
+            main.style.transition = 'opacity 0.15s ease';
+            main.style.opacity = '1';
+            main.style.pointerEvents = '';
+            hiding = false;
+          }
+        }, 3000);
+      }
+    }, true);
+
+    /* Streamlit 렌더링 완료 감지 → 페이드인 복원 */
+    var restoreDelay = null;
+    new MutationObserver(function() {
+      if (!hiding) return;
       var status = pd.querySelector('[data-testid="stStatusWidget"]');
       var isRunning = status && status.querySelector('[data-testid="stLoading"]');
-      if (!isRunning) {
-        main.style.transition = 'opacity 0.12s ease';
-        main.style.opacity = '1';
+      /* 로딩 중이면 대기 */
+      if (isRunning) {
+        clearTimeout(restoreDelay);
+        restoreDelay = null;
+        return;
+      }
+      /* 로딩이 끝난 뒤 짧은 지연 후 복원 (DOM 안정화 대기) */
+      if (!restoreDelay) {
+        restoreDelay = setTimeout(function() {
+          var main = pd.querySelector('[data-testid="stMain"]');
+          if (main) {
+            main.style.transition = 'opacity 0.15s ease';
+            main.style.opacity = '1';
+            main.style.pointerEvents = '';
+          }
+          hiding = false;
+          restoreDelay = null;
+          clearTimeout(hideTimer);
+        }, 80);
       }
     }).observe(pd.body, { childList: true, subtree: true, attributes: true });
   })();

@@ -25,10 +25,12 @@ from auth import get_permissions
 
 # ── 시술 정보 툴팁 캐시 ──
 _device_tooltip_cache = {}
+_device_tooltip_sorted_keys = []
 
 
 def _build_device_tooltip_map():
     """device_info DB에서 {name: summary} 맵 + aliases 역매핑 구축 (1회 캐싱)."""
+    global _device_tooltip_sorted_keys
     if _device_tooltip_cache:
         return _device_tooltip_cache
     try:
@@ -37,39 +39,62 @@ def _build_device_tooltip_map():
         for d in devices:
             name = d.get("name", "")
             summary = d.get("summary", "")
-            category = d.get("category", "")
             if not name:
                 continue
             short = (summary[:35] + "…") if len(summary) > 35 else summary
             tip = f"{name}: {short}" if short else name
             _device_tooltip_cache[name.lower()] = tip
-            # aliases도 등록
             for alias in (d.get("aliases", "") or "").split(","):
                 alias = alias.strip()
                 if alias:
                     _device_tooltip_cache[alias.lower()] = tip
+        # sorted_keys를 1회만 생성하여 캐싱
+        _device_tooltip_sorted_keys = sorted(
+            (k for k in _device_tooltip_cache if len(k) >= 2),
+            key=len, reverse=True,
+        )
     except Exception:
         pass
     return _device_tooltip_cache
 
 
-def _match_device_tooltip(event_name: str) -> str:
-    """이벤트명에서 시술명을 추출하여 device_info 툴팁 반환."""
-    if not event_name or pd.isna(event_name):
-        return ""
+_tooltip_result_cache = {}
+
+
+def _match_device_tooltips(event_names: pd.Series) -> pd.Series:
+    """이벤트명 Series 전체를 벡터로 툴팁 매칭 (결과 캐싱 + sorted_keys 1회 생성)."""
     tip_map = _build_device_tooltip_map()
-    name_lower = str(event_name).lower().strip()
+    if not tip_map:
+        return pd.Series("", index=event_names.index)
 
-    # 1. 정확 매칭
-    if name_lower in tip_map:
-        return tip_map[name_lower]
-
-    # 2. 이벤트명에 시술명이 포함되어 있는지 (긴 이름부터 매칭)
-    sorted_keys = sorted(tip_map.keys(), key=len, reverse=True)
-    for key in sorted_keys:
-        if len(key) >= 2 and key in name_lower:
-            return tip_map[key]
-    return ""
+    sorted_keys = _device_tooltip_sorted_keys
+    result_cache = _tooltip_result_cache
+    results = []
+    for event_name in event_names:
+        if not event_name or pd.isna(event_name):
+            results.append("")
+            continue
+        name_lower = str(event_name).lower().strip()
+        # 캐싱된 결과 우선 사용 (동일 이벤트명 중복 매칭 방지)
+        cached = result_cache.get(name_lower)
+        if cached is not None:
+            results.append(cached)
+            continue
+        # 1. 정확 매칭
+        tip = tip_map.get(name_lower)
+        if tip:
+            result_cache[name_lower] = tip
+            results.append(tip)
+            continue
+        # 2. substring 매칭 (캐싱된 sorted_keys 사용)
+        matched = ""
+        for key in sorted_keys:
+            if key in name_lower:
+                matched = tip_map[key]
+                break
+        result_cache[name_lower] = matched
+        results.append(matched)
+    return pd.Series(results, index=event_names.index)
 
 
 def _format_price(val):
@@ -220,7 +245,7 @@ def _render_event_list():
     )
 
     # 시술 정보 툴팁 매칭: 이벤트명 → device_info summary
-    display_df["_tooltip"] = display_df["이벤트명"].apply(_match_device_tooltip)
+    display_df["_tooltip"] = _match_device_tooltips(display_df["이벤트명"])
 
     # AG-Grid 렌더링 (보유장비 탭과 동일 스타일)
     gb = GridOptionsBuilder.from_dataframe(display_df)

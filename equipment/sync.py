@@ -5,7 +5,7 @@ Google Sheets → SQLite 동기화 모듈
   1. DB 자동 백업 후 동기화 시작
   2. Sheets에 있고 DB에 없는 행 → 새로 추가
   3. Sheets에 있고 DB에도 있고 내용 동일 → 스킵
-  4. Sheets에 있고 DB에도 있고 내용 다름 → 로그만 남김 (덮어쓰지 않음)
+  4. Sheets에 있고 DB에도 있고 내용 다름 → 시트 기준 업데이트 (단, 사진 상태는 DB 값 우선)
   5. DB에만 있는 행 (내부 추가분) → 유지
 """
 
@@ -179,20 +179,26 @@ def sync_from_sheets():
             # 기존 행 → 내용 비교
             db_id = existing[0]
             db_qty, db_photo, db_note, db_cat_id = existing[1], existing[2], existing[3], existing[4]
-            if (db_qty == quantity and db_photo == photo_status
+            # 사진 상태는 DB 값 우선 (웹앱에서 수정한 내용 보존)
+            effective_photo = db_photo
+
+            if (db_qty == quantity and effective_photo == photo_status
                     and (db_note or "") == note and db_cat_id == category_id):
                 skipped += 1
             else:
-                # 내용 다름 → 시트 기준으로 업데이트
+                # 내용 다름 → 시트 기준 업데이트 (사진은 DB 값 유지)
                 c.execute("""
                     UPDATE equipment
                     SET quantity = ?, photo_status = ?, note = ?, category_id = ?
                     WHERE id = ?
-                """, (quantity, photo_status, note, category_id, db_id))
+                """, (quantity, effective_photo, note, category_id, db_id))
                 updated += 1
+                photo_note = ""
+                if db_photo != photo_status:
+                    photo_note = f" [사진: DB값({db_photo}) 유지, 시트값({photo_status}) 무시]"
                 conflict_details.append(
                     f"{branch_name}/{device_name}: "
-                    f"DB({db_qty},{db_photo},{db_note}) → Sheets({quantity},{photo_status},{note})"
+                    f"수량({db_qty}->{quantity}), 비고({db_note}->{note}){photo_note}"
                 )
 
     # 4. 동기화 로그 기록

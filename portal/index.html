@@ -113,11 +113,13 @@
   </div>
 
   <script>
-    // 포트 기반 리다이렉트 (Docker 환경에서는 nginx reverse proxy 사용)
-    // 로컬 개발 시에는 직접 포트로 연결
+    // 포트 기반 리다이렉트
+    // NAS: http://NAS_IP:8501 (Stream), http://NAS_IP:8080 (Fast)
+    // 로컬: http://localhost:8501, http://localhost:8080
     const host = window.location.hostname;
-    document.getElementById('btn-stream').href = `http://${host}:8501`;
-    document.getElementById('btn-fast').href = `http://${host}:8080`;
+    const protocol = window.location.protocol;
+    document.getElementById('btn-stream').href = `${protocol}//${host}:8501`;
+    document.getElementById('btn-fast').href = `${protocol}//${host}:8080`;
   </script>
 </body>
 </html>

@@ -1,0 +1,20 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Python 패키지 (API + 공유 모듈 의존성)
+COPY api/requirements.txt ./api/
+RUN pip install --no-cache-dir -r api/requirements.txt
+
+# 전체 앱 코드 복사 (공유 모듈 포함)
+COPY . .
+
+# 데이터 디렉토리 생성
+RUN mkdir -p /app/data/backups
+
+# DB 초기화
+RUN python init_db.py
+
+EXPOSE 8000
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

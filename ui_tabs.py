@@ -893,6 +893,52 @@ def render_admin_panel():
                         load_current_events.clear()
                         st.rerun()
 
+            st.markdown("---")
+            st.markdown("**카페 원고 데이터 가져오기**")
+            from datetime import datetime as _dt_cafe
+            _cafe_now = _dt_cafe.now()
+            cafe_col1, cafe_col2, cafe_col3 = st.columns(3)
+            with cafe_col1:
+                cafe_year = st.number_input("연도", min_value=2024, max_value=2030,
+                                             value=_cafe_now.year, key="admin_cafe_year")
+            with cafe_col2:
+                cafe_month = st.number_input("월", min_value=1, max_value=12,
+                                              value=_cafe_now.month, key="admin_cafe_month")
+            with cafe_col3:
+                cafe_branch = st.text_input("지점 필터", value="동탄점", key="admin_cafe_branch",
+                                             help="빈 칸이면 전체 지점")
+
+            cafe_sheet_url = st.text_input(
+                "카페 시트 URL (CAFE_SHEET_ID)",
+                placeholder="Google Sheets URL 또는 환경변수에 CAFE_SHEET_ID 설정",
+                key="admin_cafe_sheet_url",
+            )
+            if st.button("카페 원고 가져오기", type="primary", use_container_width=True, key="admin_cafe_sync_btn"):
+                import os as _os_cafe
+                if cafe_sheet_url.strip():
+                    # URL에서 시트 ID 추출
+                    import re as _re_cafe
+                    _match = _re_cafe.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", cafe_sheet_url)
+                    if _match:
+                        _os_cafe.environ["CAFE_SHEET_ID"] = _match.group(1)
+                    else:
+                        _os_cafe.environ["CAFE_SHEET_ID"] = cafe_sheet_url.strip()
+
+                from cafe.sync import run_cafe_import
+                from cafe.db import load_cafe_articles
+                with st.spinner("카페 원고 가져오는 중..."):
+                    result = run_cafe_import(cafe_year, cafe_month, cafe_branch)
+                if result["errors"]:
+                    st.warning(f"완료: {result['processed']}개 지점, "
+                               f"{result['total_articles']}건 (오류 {len(result['errors'])}건)")
+                    with st.expander("오류 상세"):
+                        for err in result["errors"]:
+                            st.text(f"  {err}")
+                else:
+                    st.success(f"완료: {result['processed']}개 지점, {result['total_articles']}건")
+                load_cafe_articles.clear()
+                st.rerun()
+
         # ── 시술 사전 관리 ──
         with tab_dict:
             from equipment.db import (
@@ -1111,11 +1157,11 @@ def render_tab_events():
 
 
 # ============================================================
-# 탭: 카페 (placeholder)
+# 탭: 카페 마케팅
 # ============================================================
 def render_tab_cafe():
-    st.subheader("카페")
-    st.info("곧 업데이트 됩니다.")
+    from cafe.ui import render_tab_cafe as _render
+    _render()
 
 
 # ============================================================

@@ -11,8 +11,14 @@ data/backups/
 # 인증/비밀 파일 (절대 Git에 올리지 않음)
 .streamlit/secrets.toml
 credentials.json
-*.json
+
+# JSON — 데이터/설정 파일은 허용, 민감 파일만 차단
 !normalization/*.json
+!data/device_master.json
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/tsconfig*.json
+!frontend/.vscode/*.json
 
 # 환경 변수
 .env
@@ -30,7 +36,13 @@ Thumbs.db
 desktop.ini
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
+
+# Node.js (Vue frontend)
+frontend/node_modules/
+frontend/dist/
+
+# API
+api/requirements.txt.bak

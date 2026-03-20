@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>유앤아이의원 통합 관리 시스템</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f8fafc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      color: #1e293b;
+    }
+    .container {
+      text-align: center;
+      max-width: 480px;
+      padding: 48px 32px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #64748b;
+      margin-bottom: 48px;
+    }
+    .buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+    }
+    .btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 180px;
+      padding: 32px 24px;
+      border-radius: 12px;
+      text-decoration: none;
+      transition: transform 0.15s, box-shadow 0.15s;
+      border: 1px solid #e2e8f0;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    .btn-stream {
+      background: #ffffff;
+      color: #1e293b;
+    }
+    .btn-fast {
+      background: #1e40af;
+      color: #ffffff;
+      border-color: #1e40af;
+    }
+    .btn-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+    .btn-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .btn-desc {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    .btn-badge {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-top: 8px;
+      font-weight: 600;
+    }
+    .badge-stable { background: #dcfce7; color: #166534; }
+    .badge-beta { background: #fef3c7; color: #92400e; }
+    .footer {
+      margin-top: 48px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>유앤아이의원</h1>
+    <p class="subtitle">통합 관리 시스템</p>
+
+    <div class="buttons">
+      <a href="/stream/" class="btn btn-stream" id="btn-stream">
+        <span class="btn-icon">S</span>
+        <span class="btn-title">Stream</span>
+        <span class="btn-desc">현재 운영 버전</span>
+        <span class="btn-badge badge-stable">안정</span>
+      </a>
+      <a href="/fast/" class="btn btn-fast" id="btn-fast">
+        <span class="btn-icon">F</span>
+        <span class="btn-title">Fast</span>
+        <span class="btn-desc">신규 개발 버전</span>
+        <span class="btn-badge badge-beta">베타</span>
+      </a>
+    </div>
+
+    <p class="footer">Developed by smartbranding</p>
+  </div>
+
+  <script>
+    // 포트 기반 리다이렉트 (Docker 환경에서는 nginx reverse proxy 사용)
+    // 로컬 개발 시에는 직접 포트로 연결
+    const host = window.location.hostname;
+    document.getElementById('btn-stream').href = `http://${host}:8501`;
+    document.getElementById('btn-fast').href = `http://${host}:8080`;
+  </script>
+</body>
+</html>

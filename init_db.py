@@ -245,6 +245,129 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_evt_treatments_name ON evt_treatments(name)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_evt_cat_aliases_alias ON evt_category_aliases(alias)")
 
+    # ============================================================
+    # 카페 마케팅 테이블 (cafe_ 접두사)
+    # ============================================================
+
+    # 카페 원고 기간 (월 단위)
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS cafe_periods (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        year        INTEGER NOT NULL,
+        month       INTEGER NOT NULL,
+        label       TEXT NOT NULL,
+        source_url  TEXT,
+        is_current  INTEGER DEFAULT 0,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(year, month)
+    )
+    """)
+
+    # 카페 지점-월 메타데이터 (담당자, 발행건수 등)
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS cafe_branch_periods (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        cafe_period_id      INTEGER NOT NULL REFERENCES cafe_periods(id) ON DELETE CASCADE,
+        branch_id           INTEGER NOT NULL REFERENCES evt_branches(id),
+        smart_manager       TEXT DEFAULT '',
+        writer              TEXT DEFAULT '',
+        publisher           TEXT DEFAULT '',
+        publish_count       INTEGER DEFAULT 0,
+        review_count        INTEGER DEFAULT 0,
+        superset_count      INTEGER DEFAULT 0,
+        self_made           TEXT DEFAULT '',
+        report_link         TEXT DEFAULT '',
+        comment_link        TEXT DEFAULT '',
+        photo_link          TEXT DEFAULT '',
+        general_photo_link  TEXT DEFAULT '',
+        progress_note       TEXT DEFAULT '',
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(cafe_period_id, branch_id)
+    )
+    """)
+
+    # 카페 원고 (월 20건)
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS cafe_articles (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        branch_period_id    INTEGER NOT NULL REFERENCES cafe_branch_periods(id) ON DELETE CASCADE,
+        article_order       INTEGER NOT NULL,
+        keyword             TEXT DEFAULT '',
+        category            TEXT DEFAULT '',
+        equipment_name      TEXT DEFAULT '',
+        photo_ref           TEXT DEFAULT '',
+        title               TEXT DEFAULT '',
+        body                TEXT DEFAULT '',
+        status              TEXT DEFAULT '작성대기',
+        published_url       TEXT DEFAULT '',
+        published_at        TIMESTAMP,
+        published_by        TEXT DEFAULT '',
+        status_updated_at   TIMESTAMP,
+        created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # 카페 원고 댓글/대댓글 (원고당 3슬롯)
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS cafe_comments (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        article_id      INTEGER NOT NULL REFERENCES cafe_articles(id) ON DELETE CASCADE,
+        slot_number     INTEGER NOT NULL CHECK(slot_number BETWEEN 1 AND 3),
+        comment_text    TEXT DEFAULT '',
+        reply_text      TEXT DEFAULT '',
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(article_id, slot_number)
+    )
+    """)
+
+    # 카페 원고 피드백 (이력 누적)
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS cafe_feedbacks (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        article_id  INTEGER NOT NULL REFERENCES cafe_articles(id) ON DELETE CASCADE,
+        author      TEXT NOT NULL,
+        content     TEXT NOT NULL,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # 카페 원고 상태 변경 이력
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS cafe_status_log (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        article_id  INTEGER NOT NULL REFERENCES cafe_articles(id) ON DELETE CASCADE,
+        old_status  TEXT NOT NULL,
+        new_status  TEXT NOT NULL,
+        changed_by  TEXT DEFAULT '',
+        note        TEXT DEFAULT '',
+        changed_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # 카페 동기화 로그
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS cafe_sync_log (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        cafe_period_id  INTEGER NOT NULL REFERENCES cafe_periods(id),
+        status          TEXT NOT NULL DEFAULT 'started',
+        total_branches  INTEGER DEFAULT 0,
+        total_articles  INTEGER DEFAULT 0,
+        error_log       TEXT,
+        started_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed_at    TIMESTAMP
+    )
+    """)
+
+    # 카페 인덱스
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cafe_bp_period ON cafe_branch_periods(cafe_period_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cafe_bp_branch ON cafe_branch_periods(branch_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cafe_articles_bp ON cafe_articles(branch_period_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cafe_articles_status ON cafe_articles(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cafe_comments_article ON cafe_comments(article_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cafe_feedbacks_article ON cafe_feedbacks(article_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_cafe_status_log_article ON cafe_status_log(article_id)")
+
     conn.commit()
 
     # ============================================================

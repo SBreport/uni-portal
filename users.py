@@ -5,7 +5,11 @@
 
 import sqlite3
 import os
-import streamlit as st
+
+try:
+    import streamlit as st
+except (ImportError, ModuleNotFoundError):
+    st = None
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "data")
 DB_PATH = os.path.join(DB_DIR, "equipment.db")
@@ -19,7 +23,7 @@ def _get_conn():
 
 def load_users():
     """사용자 목록을 로드한다. 캐시는 session_state에 저장."""
-    if "_users_cache" in st.session_state:
+    if st and "_users_cache" in st.session_state:
         return st.session_state["_users_cache"]
 
     users = []
@@ -48,11 +52,14 @@ def load_users():
             admin_pw_hash = None
             admin_role = "admin"
             try:
-                auth_secrets = st.secrets["auth"]
-                admin_id = auth_secrets["bootstrap_admin_id"]
-                admin_pw_hash = auth_secrets["bootstrap_admin_pw_hash"]
-                admin_role = auth_secrets.get("bootstrap_admin_role", "admin")
-            except (KeyError, FileNotFoundError):
+                if st:
+                    auth_secrets = st.secrets["auth"]
+                    admin_id = auth_secrets["bootstrap_admin_id"]
+                    admin_pw_hash = auth_secrets["bootstrap_admin_pw_hash"]
+                    admin_role = auth_secrets.get("bootstrap_admin_role", "admin")
+                else:
+                    raise KeyError("no streamlit")
+            except (KeyError, FileNotFoundError, AttributeError):
                 admin_id = os.environ.get("AUTH_BOOTSTRAP_ADMIN_ID")
                 admin_pw_hash = os.environ.get("AUTH_BOOTSTRAP_ADMIN_PW_HASH")
                 admin_role = os.environ.get("AUTH_BOOTSTRAP_ADMIN_ROLE", "admin")
@@ -67,7 +74,8 @@ def load_users():
         except Exception:
             pass
 
-    st.session_state["_users_cache"] = users
+    if st:
+        st.session_state["_users_cache"] = users
     return users
 
 
@@ -189,4 +197,5 @@ def ensure_memo_column():
 
 
 def invalidate_users_cache():
-    st.session_state.pop("_users_cache", None)
+    if st:
+        st.session_state.pop("_users_cache", None)

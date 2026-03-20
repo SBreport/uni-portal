@@ -10,7 +10,13 @@ import os
 from datetime import datetime
 
 import pandas as pd
-import streamlit as st
+
+try:
+    import streamlit as st
+    _cache = st.cache_data
+except (ImportError, ModuleNotFoundError):
+    st = None
+    _cache = lambda **kw: lambda f: f  # no-op decorator
 
 from events.parser import ParsedEvent
 
@@ -245,7 +251,7 @@ def _event_query():
     """
 
 
-@st.cache_data(ttl=300)
+@_cache(ttl=300)
 def load_current_events() -> tuple:
     """현재 날짜 기준 격월 기간의 이벤트 데이터 로드.
 

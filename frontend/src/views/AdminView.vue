@@ -10,7 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
 
 // ── 탭 ──
-const activeTab = ref<'users' | 'sync'>('users')
+const activeTab = ref<'users' | 'sync' | 'device'>('users')
 
 // ── 사용자 관리 ──
 interface User { username: string; role: string; branch_id: number | null; memo: string }
@@ -28,6 +28,7 @@ const editingUser = ref<string | null>(null)
 const editRole = ref('')
 const editPassword = ref('')
 const editMemo = ref('')
+const editBranchId = ref<number | null>(null)
 
 const roles = [
   { value: 'viewer', label: '뷰어' },
@@ -35,6 +36,13 @@ const roles = [
   { value: 'editor', label: '편집자' },
   { value: 'admin', label: '관리자' },
 ]
+
+// 지점 ID→이름 매핑
+const branchMap = computed(() => {
+  const m = new Map<number, string>()
+  branches.value.forEach(b => m.set(b.id, b.name))
+  return m
+})
 
 async function loadUsers() {
   loading.value = true
@@ -56,13 +64,14 @@ async function handleDelete(username: string) {
   if (username === auth.username) return
   await usersApi.deleteUser(username); await loadUsers()
 }
-function startEdit(user: User) { editingUser.value = user.username; editRole.value = user.role; editPassword.value = ''; editMemo.value = user.memo || '' }
+function startEdit(user: User) { editingUser.value = user.username; editRole.value = user.role; editPassword.value = ''; editMemo.value = user.memo || ''; editBranchId.value = user.branch_id }
 async function handleUpdate() {
   if (!editingUser.value) return
-  const u: Record<string, string> = {}
+  const u: Record<string, any> = {}
   if (editRole.value) u.role = editRole.value
   if (editPassword.value) u.password = editPassword.value
   if (editMemo.value !== undefined) u.memo = editMemo.value
+  u.branch_id = editBranchId.value
   await usersApi.updateUser(editingUser.value, u); editingUser.value = null; await loadUsers()
 }
 
@@ -118,36 +127,68 @@ function onEvtFileChange(e: Event) {
 }
 
 // 카페
-const cafeYear = ref(now.getFullYear())
-const cafeMonth = ref(now.getMonth() + 1)
-const cafeBranch = ref('동탄점')
+const cafeBranch = ref('')
 const cafeSheetUrl = ref('')
 
 async function syncCafe() {
   syncing.value = true; syncMsg.value = ''; syncError.value = ''
   try {
-    if (cafeSheetUrl.value) {
-      const match = cafeSheetUrl.value.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)
-      // URL에서 ID 추출은 서버에서 처리
-    }
-    const { data } = await cafeApi.syncCafe(cafeYear.value, cafeMonth.value, cafeBranch.value)
+    const now = new Date()
+    const { data } = await cafeApi.syncCafe(now.getFullYear(), now.getMonth() + 1, cafeBranch.value, cafeSheetUrl.value)
     const errors = data.errors || []
     syncMsg.value = `카페 원고 완료: ${data.processed}개 지점, ${data.total_articles}건` + (errors.length ? ` (오류 ${errors.length}건)` : '')
-  } catch (e: any) { syncError.value = e.response?.data?.detail || '카페 동기화 실패' }
+  } catch (e: any) {
+    const detail = e.response?.data?.detail
+    const status = e.response?.status
+    if (detail) {
+      syncError.value = `카페 동기화 실패 (${status}): ${detail}`
+    } else if (e.code === 'ECONNABORTED') {
+      syncError.value = '카페 동기화 실패: 요청 시간 초과 (30초). 다시 시도해주세요.'
+    } else if (!e.response) {
+      syncError.value = '카페 동기화 실패: 서버에 연결할 수 없습니다.'
+    } else {
+      syncError.value = `카페 동기화 실패 (${status}): 알 수 없는 오류`
+    }
+  }
   finally { syncing.value = false }
+}
+
+// ── 시술사전 관리 ──
+const deviceMsg = ref('')
+const deviceSyncing = ref(false)
+
+async function updateDeviceCounts() {
+  deviceSyncing.value = true; deviceMsg.value = ''
+  try {
+    await equipApi.updateDeviceCounts()
+    deviceMsg.value = '보유수 업데이트 완료'
+    setTimeout(() => deviceMsg.value = '', 3000)
+  } catch (e: any) { deviceMsg.value = '오류: ' + (e.response?.data?.detail || e.message) }
+  finally { deviceSyncing.value = false }
+}
+
+async function syncDeviceJson() {
+  deviceSyncing.value = true; deviceMsg.value = ''
+  try {
+    await equipApi.syncDeviceJson()
+    deviceMsg.value = 'JSON → DB 동기화 완료'
+    setTimeout(() => deviceMsg.value = '', 3000)
+  } catch (e: any) { deviceMsg.value = '오류: ' + (e.response?.data?.detail || e.message) }
+  finally { deviceSyncing.value = false }
 }
 
 </script>
 
 <template>
   <div class="p-5">
-    <h2 class="text-xl font-bold text-slate-800 mb-4">사용자 관리</h2>
+    <h2 class="text-xl font-bold text-slate-800 mb-4">관리자 모드</h2>
 
     <!-- 서브 탭 -->
     <div class="flex gap-4 mb-5 border-b border-slate-200">
       <button v-for="tab in [
         { key: 'users', label: '사용자' },
-        { key: 'sync', label: '동기화' },
+        { key: 'sync', label: '데이터 동기화' },
+        { key: 'device', label: '시술정보 관리' },
       ]" :key="tab.key"
         @click="activeTab = tab.key as any"
         :class="['pb-2 text-sm font-medium border-b-2 transition',
@@ -187,6 +228,7 @@ async function syncCafe() {
             <tr>
               <th class="text-left px-4 py-2 font-medium text-slate-500">ID</th>
               <th class="text-left px-4 py-2 font-medium text-slate-500">역할</th>
+              <th class="text-left px-4 py-2 font-medium text-slate-500">지점</th>
               <th class="text-left px-4 py-2 font-medium text-slate-500">메모</th>
               <th class="text-right px-4 py-2 font-medium text-slate-500">작업</th>
             </tr>
@@ -201,6 +243,7 @@ async function syncCafe() {
                     {{ roles.find(r => r.value === user.role)?.label || user.role }}
                   </span>
                 </td>
+                <td class="px-4 py-2 text-sm text-slate-600">{{ user.branch_id ? branchMap.get(user.branch_id) || '-' : '-' }}</td>
                 <td class="px-4 py-2 text-slate-400">{{ user.memo || '-' }}</td>
                 <td class="px-4 py-2 text-right space-x-2">
                   <button @click="startEdit(user)" class="text-blue-500 hover:text-blue-700 text-xs">수정</button>
@@ -212,6 +255,12 @@ async function syncCafe() {
                 <td class="px-4 py-2">
                   <select v-model="editRole" class="px-2 py-1 border border-slate-300 rounded text-xs">
                     <option v-for="r in roles" :key="r.value" :value="r.value">{{ r.label }}</option>
+                  </select>
+                </td>
+                <td class="px-4 py-2">
+                  <select v-model="editBranchId" class="px-2 py-1 border border-slate-300 rounded text-xs">
+                    <option :value="null">없음</option>
+                    <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
                   </select>
                 </td>
                 <td class="px-4 py-2">
@@ -281,27 +330,48 @@ async function syncCafe() {
       <!-- 카페 동기화 -->
       <div class="bg-white border border-slate-200 rounded-lg p-4">
         <h3 class="text-sm font-bold text-slate-700 mb-2">카페 원고 가져오기</h3>
-        <div class="grid grid-cols-4 gap-3 mb-3">
+        <div class="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <label class="text-xs text-slate-500">연도</label>
-            <input v-model.number="cafeYear" type="number" min="2024" max="2030" class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" />
-          </div>
-          <div>
-            <label class="text-xs text-slate-500">월</label>
-            <input v-model.number="cafeMonth" type="number" min="1" max="12" class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" />
-          </div>
-          <div>
-            <label class="text-xs text-slate-500">지점 필터</label>
-            <input v-model="cafeBranch" placeholder="빈 칸이면 전체" class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" />
-          </div>
-          <div>
-            <label class="text-xs text-slate-500">시트 URL</label>
+            <label class="text-xs text-slate-500">시트 링크</label>
             <input v-model="cafeSheetUrl" placeholder="Google Sheets URL" class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">지점</label>
+            <select v-model="cafeBranch" class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm">
+              <option value="">전체 지점</option>
+              <option v-for="b in branches" :key="b.id" :value="b.name">{{ b.name }}</option>
+            </select>
           </div>
         </div>
         <button @click="syncCafe" :disabled="syncing"
           class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
           {{ syncing ? '가져오는 중...' : '카페 원고 가져오기' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- ========== 시술사전 관리 탭 ========== -->
+    <div v-if="activeTab === 'device'" class="space-y-6">
+      <div v-if="deviceMsg" class="px-4 py-2 rounded text-sm"
+        :class="deviceMsg.startsWith('오류') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'">
+        {{ deviceMsg }}
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <h3 class="text-sm font-bold text-slate-700 mb-2">보유수 업데이트</h3>
+        <p class="text-xs text-slate-400 mb-3">장비 테이블 기준으로 각 시술의 보유 지점 수를 재계산합니다.</p>
+        <button @click="updateDeviceCounts" :disabled="deviceSyncing"
+          class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
+          {{ deviceSyncing ? '처리 중...' : '보유수 업데이트' }}
+        </button>
+      </div>
+
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <h3 class="text-sm font-bold text-slate-700 mb-2">JSON → DB 동기화</h3>
+        <p class="text-xs text-slate-400 mb-3">device_info.json 파일의 시술 정보를 DB에 반영합니다.</p>
+        <button @click="syncDeviceJson" :disabled="deviceSyncing"
+          class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
+          {{ deviceSyncing ? '동기화 중...' : 'JSON → DB 동기화' }}
         </button>
       </div>
     </div>

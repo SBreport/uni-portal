@@ -21,6 +21,9 @@ export const useEventsStore = defineStore('events', () => {
   const filterBranch = ref('')
   const filterCategory = ref('')
   const filterSearch = ref('')
+  const filterGlobal = ref('')
+  const filterPriceMin = ref<number | null>(null)
+  const filterPriceMax = ref<number | null>(null)
 
   const filteredEvents = computed(() => {
     let result = events.value
@@ -31,6 +34,22 @@ export const useEventsStore = defineStore('events', () => {
       result = result.filter((e: any) =>
         (e['이벤트명'] || '').toLowerCase().includes(q) ||
         (e['표시명'] || '').toLowerCase().includes(q)
+      )
+    }
+    // 가격대 필터
+    if (filterPriceMin.value != null && filterPriceMin.value > 0) {
+      const min = filterPriceMin.value * 10000
+      result = result.filter((e: any) => (e['이벤트가'] || 0) >= min)
+    }
+    if (filterPriceMax.value != null && filterPriceMax.value > 0) {
+      const max = filterPriceMax.value * 10000
+      result = result.filter((e: any) => (e['이벤트가'] || 0) <= max)
+    }
+    // 테이블 전체 검색
+    if (filterGlobal.value) {
+      const q = filterGlobal.value.toLowerCase()
+      result = result.filter((e: any) =>
+        Object.values(e).some(v => String(v ?? '').toLowerCase().includes(q))
       )
     }
     return result
@@ -53,7 +72,8 @@ export const useEventsStore = defineStore('events', () => {
 
   return {
     events, branches, categories, loading, isFallback,
-    filterBranch, filterCategory, filterSearch, filteredEvents,
+    filterBranch, filterCategory, filterSearch, filterGlobal,
+    filterPriceMin, filterPriceMax, filteredEvents,
     loadAll,
   }
 })

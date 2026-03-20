@@ -1,7 +1,17 @@
-streamlit>=1.45.0
+# FastAPI 백엔드 의존성
+fastapi
+uvicorn[standard]
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+
+# 데이터 처리
 pandas
-plotly
-streamlit-aggrid
+openpyxl
+
+# 구글 시트 동기화
 gspread
 google-auth
-openpyxl
+
+# 시각화 (보고서용)
+plotly

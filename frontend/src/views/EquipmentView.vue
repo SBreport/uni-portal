@@ -1,41 +1,125 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useEquipmentStore } from '@/stores/equipment'
-import DataTable from '@/components/common/DataTable.vue'
-import { createColumnHelper } from '@tanstack/vue-table'
+import { useAuthStore } from '@/stores/auth'
+import * as equipApi from '@/api/equipment'
 
 const store = useEquipmentStore()
-const col = createColumnHelper<any>()
+const auth = useAuthStore()
+
+// 수정 추적
+const pendingChanges = ref<Map<number, Record<string, any>>>(new Map())
+const saving = ref(false)
+const saveMsg = ref('')
+
+// 상세 패널
+const selectedRow = ref<any>(null)
+const detailLoading = ref(false)
+const detailData = ref<{
+  device_info: any | null
+  events: any[]
+  is_owned: boolean
+  quantity: number
+} | null>(null)
 
 onMounted(async () => {
   await Promise.all([store.loadBranches(), store.loadCategories()])
   await store.loadEquipment()
 })
 
-const columns = [
-  col.accessor('지점', { header: '지점', size: 90 }),
-  col.accessor('카테고리', { header: '카테고리', size: 90 }),
-  col.accessor('기기명', { header: '장비명', size: 200 }),
-  col.accessor('수량', { header: '수량', size: 55 }),
-  col.accessor('사진', {
-    header: '사진',
-    size: 55,
-    cell: (info) => info.getValue() === '있음' ? '✅' : '',
-  }),
-  col.accessor('비고', { header: '비고', size: 150 }),
-]
+// 사진 토글
+function togglePhoto(row: any) {
+  const id = row.id
+  const current = row['사진'] === '있음'
+  const newVal = !current
+  row['사진'] = newVal ? '있음' : ''
+  if (!pendingChanges.value.has(id)) pendingChanges.value.set(id, {})
+  pendingChanges.value.get(id)!.photo_status = newVal ? 1 : 0
+}
+
+// 수량 변경
+function updateQuantity(row: any, val: string) {
+  const id = row.id
+  const num = parseInt(val) || 1
+  row['수량'] = num
+  if (!pendingChanges.value.has(id)) pendingChanges.value.set(id, {})
+  pendingChanges.value.get(id)!.quantity = num
+}
+
+// 비고 변경
+function updateNote(row: any, val: string) {
+  const id = row.id
+  row['비고'] = val
+  if (!pendingChanges.value.has(id)) pendingChanges.value.set(id, {})
+  pendingChanges.value.get(id)!.note = val
+}
+
+// 일괄 저장
+async function saveAll() {
+  if (pendingChanges.value.size === 0) return
+  saving.value = true
+  saveMsg.value = ''
+  try {
+    const promises = Array.from(pendingChanges.value.entries()).map(([id, changes]) =>
+      equipApi.updateEquipment(id, changes)
+    )
+    await Promise.all(promises)
+    saveMsg.value = `${pendingChanges.value.size}건 저장 완료`
+    pendingChanges.value.clear()
+    setTimeout(() => saveMsg.value = '', 3000)
+  } catch (e: any) {
+    saveMsg.value = '저장 실패: ' + (e.response?.data?.detail || e.message)
+  } finally {
+    saving.value = false
+  }
+}
+
+// 장비 클릭 → 상세 로드
+async function openDetail(row: any) {
+  if (selectedRow.value?.id === row.id) return
+  selectedRow.value = row
+  detailLoading.value = true
+  detailData.value = null
+  try {
+    const { data } = await equipApi.getEquipmentContext(row['지점'], row['기기명'])
+    detailData.value = data
+  } catch {
+    detailData.value = { device_info: null, events: [], is_owned: false, quantity: 0 }
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+const canEdit = ['admin', 'editor', 'branch'].includes(auth.role)
 
 function handleSearch() {
   store.loadEquipment()
 }
+
+function formatPrice(n: number | null) {
+  if (!n) return '-'
+  return n.toLocaleString() + '원'
+}
 </script>
 
 <template>
-  <div class="p-5 max-w-6xl">
-    <h2 class="text-xl font-bold text-slate-800 mb-4">보유장비</h2>
+  <div class="p-5 h-[calc(100vh-1rem)]">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-xl font-bold text-slate-800">보유장비</h2>
+      <div v-if="canEdit" class="flex items-center gap-3">
+        <span v-if="saveMsg" class="text-sm" :class="saveMsg.includes('실패') ? 'text-red-500' : 'text-emerald-600'">{{ saveMsg }}</span>
+        <span v-if="pendingChanges.size > 0" class="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+          {{ pendingChanges.size }}건 변경됨
+        </span>
+        <button @click="saveAll" :disabled="pendingChanges.size === 0 || saving"
+          class="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-40 transition">
+          {{ saving ? '저장 중...' : '변경사항 저장' }}
+        </button>
+      </div>
+    </div>
 
     <!-- 필터 바 -->
-    <div class="flex items-center gap-3 mb-4 flex-wrap">
+    <div class="flex items-center gap-3 mb-3 flex-wrap">
       <select v-model="store.filterBranch" @change="handleSearch"
         class="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white">
         <option value="">전체 지점</option>
@@ -51,14 +135,215 @@ function handleSearch() {
       <input v-model="store.filterSearch" placeholder="장비명 검색"
         class="px-3 py-1.5 border border-slate-300 rounded-md text-sm w-48 focus:outline-none focus:ring-1 focus:ring-blue-400"
         @input="handleSearch" />
+
+      <span class="text-xs text-slate-400">{{ store.rows.length.toLocaleString() }}건</span>
     </div>
 
-    <!-- 테이블 -->
-    <DataTable
-      :data="store.rows"
-      :columns="columns"
-      :page-size="50"
-      height="600px"
-    />
+    <!-- 2컬럼: 테이블(좌) + 상세 정보(우, 상시 존재) -->
+    <div class="flex gap-4" style="height: calc(100vh - 160px)">
+
+      <!-- ===== 좌측: 장비 테이블 ===== -->
+      <div class="w-[35%] shrink-0 bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col">
+        <div class="overflow-auto flex-1">
+          <table class="w-full text-[13px] table-fixed">
+            <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+              <tr>
+                <th class="text-left pl-3 pr-1 py-2 font-medium text-slate-500 whitespace-nowrap w-14">지점</th>
+                <th class="text-left px-1 py-2 font-medium text-slate-500 whitespace-nowrap w-16">카테고리</th>
+                <th class="text-left px-1 py-2 font-medium text-slate-500 whitespace-nowrap w-28">장비명</th>
+                <th class="text-center px-1 py-2 font-medium text-slate-500 w-8">qty</th>
+                <th class="text-center px-1 py-2 font-medium text-slate-500 w-6">📷</th>
+                <th class="text-left px-1 pr-2 py-2 font-medium text-slate-500 w-16">비고</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in store.rows" :key="row.id"
+                class="border-b border-slate-100 cursor-pointer transition-colors"
+                :class="{
+                  'bg-amber-50': pendingChanges.has(row.id) && selectedRow?.id !== row.id,
+                  '!bg-blue-50': selectedRow?.id === row.id,
+                  'hover:bg-slate-50': selectedRow?.id !== row.id
+                }"
+                @click="openDetail(row)">
+                <td class="pl-3 pr-1 py-1 text-slate-500 whitespace-nowrap text-xs">{{ row['지점'] }}</td>
+                <td class="px-1 py-1 whitespace-nowrap">
+                  <span class="px-1 py-0.5 bg-slate-100 rounded text-[11px] text-slate-500 leading-none">{{ row['카테고리'] }}</span>
+                </td>
+                <td class="px-1 py-1 font-medium text-slate-800 text-xs truncate max-w-[112px]" :title="row['기기명']">{{ row['기기명'] }}</td>
+                <td class="px-1 py-1 text-center text-xs" @click.stop>
+                  <template v-if="canEdit">
+                    <input type="number" :value="row['수량']" min="1"
+                      @change="updateQuantity(row, ($event.target as HTMLInputElement).value)"
+                      class="w-9 text-center py-0.5 border border-slate-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  </template>
+                  <template v-else>{{ row['수량'] }}</template>
+                </td>
+                <td class="px-1 py-1 text-center" @click.stop>
+                  <template v-if="canEdit">
+                    <button @click="togglePhoto(row)"
+                      class="w-4 h-4 rounded border transition inline-flex items-center justify-center"
+                      :class="row['사진'] === '있음'
+                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                        : 'bg-white border-slate-300 hover:border-blue-400'">
+                      <span v-if="row['사진'] === '있음'" class="text-[10px] leading-none">&#x2713;</span>
+                    </button>
+                  </template>
+                  <template v-else>
+                    <span class="text-[10px]">{{ row['사진'] === '있음' ? '✅' : '' }}</span>
+                  </template>
+                </td>
+                <td class="px-1 pr-2 py-1" @click.stop>
+                  <template v-if="canEdit">
+                    <input :value="row['비고']"
+                      @change="updateNote(row, ($event.target as HTMLInputElement).value)"
+                      class="w-full px-1 py-0.5 border border-slate-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      placeholder="비고" />
+                  </template>
+                  <template v-else>
+                    <span class="text-slate-400 text-[11px] truncate block max-w-[60px]" :title="row['비고']">{{ row['비고'] || '-' }}</span>
+                  </template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== 우측: 장비 상세 정보 (상시 표시) ===== -->
+      <div class="flex-1 min-w-0 overflow-auto">
+        <!-- 미선택 상태: 안내 -->
+        <div v-if="!selectedRow" class="h-full flex items-center justify-center bg-white border border-slate-200 rounded-lg">
+          <div class="text-center">
+            <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+              <span class="text-xl text-slate-300">🔍</span>
+            </div>
+            <p class="text-sm text-slate-400 font-medium">장비를 선택하세요</p>
+            <p class="text-xs text-slate-300 mt-1">좌측 목록에서 장비를 클릭하면<br>시술 정보와 이벤트를 확인할 수 있습니다.</p>
+          </div>
+        </div>
+
+        <!-- 선택됨: 상세 정보 -->
+        <div v-else class="h-full flex flex-col bg-white border border-slate-200 rounded-lg overflow-hidden">
+          <!-- 헤더 -->
+          <div class="px-5 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+            <h3 class="text-base font-bold text-slate-800">{{ selectedRow['기기명'] }}</h3>
+            <div class="flex items-center gap-2 mt-1 flex-wrap">
+              <span class="text-xs text-slate-500">{{ selectedRow['지점'] }}</span>
+              <span class="text-slate-300">·</span>
+              <span class="px-1.5 py-0.5 bg-slate-200 rounded text-[11px] text-slate-600">{{ selectedRow['카테고리'] }}</span>
+              <span v-if="selectedRow['수량'] > 1" class="text-slate-300">·</span>
+              <span v-if="selectedRow['수량'] > 1" class="text-xs text-slate-500">{{ selectedRow['수량'] }}대 보유</span>
+              <template v-if="selectedRow['비고']">
+                <span class="text-slate-300">·</span>
+                <span class="text-xs text-slate-400 truncate" :title="selectedRow['비고']">{{ selectedRow['비고'] }}</span>
+              </template>
+            </div>
+          </div>
+
+          <!-- 로딩 -->
+          <div v-if="detailLoading" class="flex-1 flex items-center justify-center">
+            <div class="text-center">
+              <div class="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+              <p class="text-xs text-slate-400">정보를 불러오는 중...</p>
+            </div>
+          </div>
+
+          <!-- 콘텐츠 -->
+          <div v-else-if="detailData" class="flex-1 overflow-auto p-5 space-y-5">
+
+            <!-- ── 시술 정보 ── -->
+            <section>
+              <h4 class="text-sm font-bold text-slate-700 mb-3 flex items-center gap-1.5">
+                <span class="w-5 h-5 bg-blue-100 text-blue-600 rounded flex items-center justify-center text-xs font-bold">T</span>
+                시술 정보
+              </h4>
+              <template v-if="detailData.device_info">
+                <div class="bg-slate-50 rounded-lg p-4 space-y-2.5">
+                  <div v-if="detailData.device_info.category" class="flex gap-3">
+                    <span class="text-xs text-slate-400 w-10 shrink-0 pt-0.5">분류</span>
+                    <span class="text-sm text-slate-700 font-medium">{{ detailData.device_info.category }}</span>
+                  </div>
+                  <div v-if="detailData.device_info.summary" class="flex gap-3">
+                    <span class="text-xs text-slate-400 w-10 shrink-0 pt-0.5">설명</span>
+                    <span class="text-sm text-slate-700 leading-relaxed">{{ detailData.device_info.summary }}</span>
+                  </div>
+                  <div v-if="detailData.device_info.target" class="flex gap-3">
+                    <span class="text-xs text-slate-400 w-10 shrink-0 pt-0.5">부위</span>
+                    <span class="text-sm text-slate-700">{{ detailData.device_info.target }}</span>
+                  </div>
+                  <div v-if="detailData.device_info.mechanism">
+                    <span class="text-xs text-slate-400 block mb-1">작용 원리</span>
+                    <p class="text-sm text-slate-600 leading-relaxed bg-white rounded p-3 border border-slate-200">{{ detailData.device_info.mechanism }}</p>
+                  </div>
+                  <div class="flex flex-wrap gap-x-6 gap-y-1 pt-1">
+                    <div v-if="detailData.device_info.aliases" class="flex gap-2 items-start">
+                      <span class="text-xs text-slate-400 shrink-0">별칭</span>
+                      <div class="flex flex-wrap gap-1">
+                        <span v-for="alias in detailData.device_info.aliases.split(',')" :key="alias"
+                          class="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[11px] text-slate-600">{{ alias.trim() }}</span>
+                      </div>
+                    </div>
+                    <div v-if="detailData.device_info.usage_count" class="flex gap-2 items-center">
+                      <span class="text-xs text-slate-400">보유</span>
+                      <span class="text-sm text-blue-600 font-semibold">{{ detailData.device_info.usage_count }}개 지점</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <div class="bg-slate-50 rounded-lg p-4 text-center">
+                  <p class="text-sm text-slate-400">등록된 시술 정보가 없습니다.</p>
+                  <p class="text-xs text-slate-300 mt-1">시술정보 &gt; 시술사전에서 추가할 수 있습니다.</p>
+                </div>
+              </template>
+            </section>
+
+            <!-- ── 현재 이벤트 ── -->
+            <section>
+              <h4 class="text-sm font-bold text-slate-700 mb-3 flex items-center gap-1.5">
+                <span class="w-5 h-5 bg-amber-100 text-amber-600 rounded flex items-center justify-center text-xs font-bold">E</span>
+                현재 이벤트
+                <span v-if="detailData.events.length" class="ml-auto text-[11px] text-slate-400 font-normal">{{ detailData.events.length }}건</span>
+              </h4>
+              <template v-if="detailData.events.length">
+                <div class="space-y-2">
+                  <div v-for="(evt, i) in detailData.events" :key="i"
+                    class="bg-slate-50 rounded-lg p-3 hover:bg-slate-100 transition">
+                    <p class="text-sm font-medium text-slate-700 mb-1">{{ evt.display_name }}</p>
+                    <div class="flex items-center gap-4 text-xs">
+                      <span v-if="evt.event_price" class="text-blue-600 font-bold text-sm">{{ formatPrice(evt.event_price) }}</span>
+                      <span v-if="evt.regular_price" class="line-through text-slate-400">{{ formatPrice(evt.regular_price) }}</span>
+                      <span v-if="evt.regular_price && evt.event_price"
+                        class="px-1.5 py-0.5 bg-red-50 text-red-500 rounded text-[11px] font-medium">
+                        {{ Math.round((1 - evt.event_price / evt.regular_price) * 100) }}% OFF
+                      </span>
+                      <span v-if="evt.session_count" class="text-slate-500">{{ evt.session_count }}{{ evt.session_unit || '회' }}</span>
+                    </div>
+                    <p v-if="evt.notes" class="text-xs text-slate-400 mt-1">{{ evt.notes }}</p>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <div class="bg-slate-50 rounded-lg p-4 text-center">
+                  <p class="text-sm text-slate-400">현재 진행 중인 이벤트가 없습니다.</p>
+                </div>
+              </template>
+            </section>
+
+            <!-- ── 관련 논문 (준비 중) ── -->
+            <section class="opacity-50">
+              <h4 class="text-sm font-bold text-slate-700 mb-3 flex items-center gap-1.5">
+                <span class="w-5 h-5 bg-emerald-100 text-emerald-600 rounded flex items-center justify-center text-xs font-bold">P</span>
+                관련 논문
+                <span class="ml-auto text-[11px] text-slate-400 font-normal bg-slate-100 px-2 py-0.5 rounded">준비 중</span>
+              </h4>
+              <div class="bg-slate-50 rounded-lg p-4 text-center">
+                <p class="text-sm text-slate-400">시술 관련 논문 정보가 곧 연동됩니다.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

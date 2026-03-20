@@ -165,7 +165,22 @@ async def get_summary(
     period_id: int,
     user: Annotated[dict, Depends(get_current_user)],
 ):
-    return load_cafe_summary(period_id)
+    rows = load_cafe_summary(period_id)
+    # DB 컬럼명 → 프론트엔드 필드명 매핑
+    rename = {
+        "total_articles": "total",
+        "cnt_waiting": "작성대기",
+        "cnt_written": "작성완료",
+        "cnt_revision": "수정요청",
+        "cnt_reviewed": "검수완료",
+        "cnt_published": "발행완료",
+        "cnt_hold": "보류",
+    }
+    for r in rows:
+        for old_key, new_key in rename.items():
+            if old_key in r:
+                r[new_key] = r.pop(old_key)
+    return rows
 
 
 # ── 장비 컨텍스트 ──
@@ -184,6 +199,26 @@ async def post_sync(
     req: CafeSyncRequest,
     user: Annotated[dict, Depends(require_role("admin"))],
 ):
-    from cafe.sync import run_cafe_import
-    result = run_cafe_import(req.year, req.month, req.branch_filter)
-    return result
+    import re, os, traceback
+
+    # URL에서 시트 ID 추출
+    sheet_id = ""
+    if req.sheet_url:
+        m = re.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", req.sheet_url)
+        if m:
+            sheet_id = m.group(1)
+        else:
+            sheet_id = req.sheet_url.strip()  # ID 직접 입력 대비
+
+    # 시트 ID가 있으면 환경변수 임시 오버라이드
+    if sheet_id:
+        os.environ["CAFE_SHEET_ID"] = sheet_id
+
+    try:
+        from cafe.sync import run_cafe_import
+        result = run_cafe_import(req.year, req.month, req.branch_filter)
+        return result
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[CAFE SYNC ERROR] {e}\n{tb}")
+        raise HTTPException(status_code=500, detail=f"동기화 오류: {str(e)}")

@@ -193,32 +193,41 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
 
 
 def _parse_header_meta(rows: list) -> dict:
-    """시트 Row 1~3에서 메타데이터 추출."""
+    """시트 Row 1~3에서 메타데이터 추출.
+
+    시트 구조:
+      Row 1 (idx 0): [지점명, '', '구분', '정보성', '후기성', '슈퍼세트', ...]
+      Row 2 (idx 1): ['스마트 담당자', 이름, '발행건수', '1~10', '', 총건수, ...]
+      Row 3 (idx 2): ['원고작가', 작가명, '진행상황', 정보성건수, 후기성건수, 슈퍼세트건수, ...]
+    """
     meta = {}
 
-    # Row 2 (idx 1): 스마트 담당자, 발행건수, 후기성, 슈퍼세트
+    # Row 2 (idx 1): B열=담당자 이름, F열(idx 5)=발행건수
     if len(rows) > 1:
         r2 = rows[1]
-        meta["smart_manager"] = _safe_get(r2, 0)
-        # 발행건수는 D열 (idx 3)
-        pub_str = _safe_get(r2, 3)
+        meta["smart_manager"] = _safe_get(r2, 1)   # B열: 실제 이름
+        pub_str = _safe_get(r2, 5)
         if pub_str and pub_str.isdigit():
             meta["publish_count"] = int(pub_str)
 
-    # Row 3 (idx 2): 원고작가, 자체제작, 진행상황
+    # Row 3 (idx 2): B열=작가명, D열=정보성건수, E열=후기성건수, F열=슈퍼세트건수
     if len(rows) > 2:
         r3 = rows[2]
-        meta["writer"] = _safe_get(r3, 0)
-        meta["self_made"] = _safe_get(r3, 1)
-        meta["progress_note"] = _safe_get(r3, 3)
+        meta["writer"] = _safe_get(r3, 1)           # B열: 실제 작가명
+        # 정보성/후기성/슈퍼세트 건수
+        info_str = _safe_get(r3, 3)
+        if info_str and info_str.isdigit():
+            meta["review_count"] = int(_safe_get(r3, 4)) if _safe_get(r3, 4).isdigit() else 0
+            meta["superset_count"] = int(_safe_get(r3, 5)) if _safe_get(r3, 5).isdigit() else 0
+        meta["progress_note"] = _safe_get(r3, 7)    # H열: 지역 정보 등
 
-    # 보고서/댓글침투/사진 링크 (Row 2의 F~L열)
+    # 보고서/댓글침투/사진 링크 (Row 2: G~J열)
     if len(rows) > 1:
         r2 = rows[1]
-        meta["report_link"] = _safe_get(r2, 6)      # G열
-        meta["comment_link"] = _safe_get(r2, 7)      # H열 근처
-        meta["photo_link"] = _safe_get(r2, 8)        # I열
-        meta["general_photo_link"] = _safe_get(r2, 9) # J열
+        meta["report_link"] = _safe_get(r2, 6)        # G열: 보고서링크
+        meta["comment_link"] = _safe_get(r2, 7)        # H열: 댓글침투 링크
+        meta["photo_link"] = _safe_get(r2, 8)          # I열: 시술사진
+        meta["general_photo_link"] = _safe_get(r2, 9)  # J열: 일반사진
 
     return meta
 

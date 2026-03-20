@@ -11,12 +11,6 @@ from datetime import datetime
 
 import pandas as pd
 
-try:
-    import streamlit as st
-    _cache = st.cache_data
-except (ImportError, ModuleNotFoundError):
-    st = None
-    _cache = lambda **kw: lambda f: f  # no-op decorator
 
 from events.parser import ParsedEvent
 
@@ -251,7 +245,7 @@ def _event_query():
     """
 
 
-@_cache(ttl=300)
+
 def load_current_events() -> tuple:
     """현재 날짜 기준 격월 기간의 이벤트 데이터 로드.
 
@@ -306,7 +300,7 @@ def load_current_events() -> tuple:
 
 
 def load_evt_branches() -> list[dict]:
-    """이벤트 지점 목록."""
+    """이벤트 지점 목록 (ㄱㄴㄷ 순)."""
     conn = _get_conn()
     c = conn.cursor()
     c.execute("""
@@ -314,7 +308,7 @@ def load_evt_branches() -> list[dict]:
         FROM evt_branches eb
         JOIN evt_regions er ON eb.region_id = er.id
         WHERE eb.is_active = 1
-        ORDER BY er.sort_order, eb.name
+        ORDER BY eb.name
     """)
     rows = [dict(r) for r in c.fetchall()]
     conn.close()

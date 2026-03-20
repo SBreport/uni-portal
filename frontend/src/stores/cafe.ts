@@ -14,8 +14,17 @@ export interface ArticleDetail extends Article {
   feedbacks: { id: number; author: string; content: string; created_at: string }[]
 }
 export interface SummaryRow {
-  branch_name: string; smart_manager: string; total: number
+  branch_name: string
+  smart_manager: string
+  writer: string
+  total: number
+  // 상태별 카운트
   작성대기: number; 작성완료: number; 수정요청: number; 검수완료: number; 발행완료: number; 보류: number
+  // 유형별 카운트
+  cnt_info: number; cnt_review_type: number; cnt_superset: number
+  cnt_info_done: number; cnt_review_done: number; cnt_superset_done: number
+  // 메타
+  photo_link: string; general_photo_link: string; progress_note: string
 }
 
 export const useCafeStore = defineStore('cafe', () => {

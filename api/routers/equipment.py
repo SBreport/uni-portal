@@ -37,6 +37,20 @@ async def get_equipment(
     df = load_data()
     if df.empty:
         return []
+
+    # 컬럼명 정규화 (DB 쿼리가 '지점명', '순번'을 반환하므로)
+    rename_map = {}
+    if "지점명" in df.columns and "지점" not in df.columns:
+        rename_map["지점명"] = "지점"
+    if "순번" in df.columns and "id" not in df.columns:
+        rename_map["순번"] = "id"
+    if rename_map:
+        df = df.rename(columns=rename_map)
+
+    # 사진 값 정규화 ('O' → '있음')
+    if "사진" in df.columns:
+        df["사진"] = df["사진"].apply(lambda x: "있음" if str(x).strip() in ("O", "o", "있음") else "")
+
     # 필터 적용
     if branch:
         df = df[df["지점"] == branch]

@@ -16,11 +16,6 @@ const router = createRouter({
       component: () => import('@/views/HomeView.vue'),
     },
     {
-      path: '/cafe',
-      name: 'cafe',
-      component: () => import('@/views/CafeView.vue'),
-    },
-    {
       path: '/equipment',
       name: 'equipment',
       component: () => import('@/views/EquipmentView.vue'),
@@ -31,20 +26,38 @@ const router = createRouter({
       component: () => import('@/views/EventsView.vue'),
     },
     {
+      path: '/treatment-info',
+      name: 'treatment-info',
+      component: () => import('@/views/TreatmentInfoView.vue'),
+    },
+    // ── 마케팅 하위 ──
+    {
+      path: '/cafe',
+      name: 'cafe',
+      component: () => import('@/views/CafeView.vue'),
+    },
+    {
       path: '/blog',
       name: 'blog',
       component: () => import('@/views/BlogView.vue'),
     },
     {
-      path: '/dictionary',
-      name: 'dictionary',
-      component: () => import('@/views/DictionaryView.vue'),
+      path: '/place',
+      name: 'place',
+      component: () => import('@/views/PlaceView.vue'),
     },
     {
-      path: '/papers',
-      name: 'papers',
-      component: () => import('@/views/PapersView.vue'),
+      path: '/webpage',
+      name: 'webpage',
+      component: () => import('@/views/WebpageView.vue'),
     },
+    // ── 보고서 ──
+    {
+      path: '/reports',
+      name: 'reports',
+      component: () => import('@/views/ReportsView.vue'),
+    },
+    // ── 관리자 ──
     {
       path: '/admin',
       name: 'admin',

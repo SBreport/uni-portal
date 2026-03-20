@@ -6,6 +6,10 @@
 import sqlite3
 import os
 
+try:
+    import streamlit as st
+except (ImportError, ModuleNotFoundError):
+    st = None
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "data")
 DB_PATH = os.path.join(DB_DIR, "equipment.db")
@@ -48,7 +52,13 @@ def load_users():
             admin_pw_hash = None
             admin_role = "admin"
             try:
-                raise KeyError("use env vars")
+                if st:
+                    auth_secrets = st.secrets["auth"]
+                    admin_id = auth_secrets["bootstrap_admin_id"]
+                    admin_pw_hash = auth_secrets["bootstrap_admin_pw_hash"]
+                    admin_role = auth_secrets.get("bootstrap_admin_role", "admin")
+                else:
+                    raise KeyError("no streamlit")
             except (KeyError, FileNotFoundError, AttributeError):
                 admin_id = os.environ.get("AUTH_BOOTSTRAP_ADMIN_ID")
                 admin_pw_hash = os.environ.get("AUTH_BOOTSTRAP_ADMIN_PW_HASH")

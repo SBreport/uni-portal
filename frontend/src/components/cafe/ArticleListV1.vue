@@ -5,13 +5,13 @@ import { useCafeStore } from '@/stores/cafe'
 const emit = defineEmits<{ open: [id: number] }>()
 const store = useCafeStore()
 
-const statusColor: Record<string, { bg: string; border: string; dot: string }> = {
-  '작성대기': { bg: 'bg-slate-400', border: 'border-slate-400', dot: '#94a3b8' },
-  '작성완료': { bg: 'bg-amber-500', border: 'border-amber-500', dot: '#f59e0b' },
-  '수정요청': { bg: 'bg-red-500', border: 'border-red-500', dot: '#ef4444' },
-  '검수완료': { bg: 'bg-blue-500', border: 'border-blue-500', dot: '#3b82f6' },
-  '발행완료': { bg: 'bg-emerald-500', border: 'border-emerald-500', dot: '#10b981' },
-  '보류': { bg: 'bg-purple-500', border: 'border-purple-500', dot: '#8b5cf6' },
+const statusColor: Record<string, { bg: string; dot: string }> = {
+  '작성대기': { bg: 'bg-slate-400', dot: '#94a3b8' },
+  '작성완료': { bg: 'bg-amber-500', dot: '#f59e0b' },
+  '수정요청': { bg: 'bg-red-500', dot: '#ef4444' },
+  '검수완료': { bg: 'bg-blue-500', dot: '#3b82f6' },
+  '발행완료': { bg: 'bg-emerald-500', dot: '#10b981' },
+  '보류': { bg: 'bg-purple-500', dot: '#8b5cf6' },
 }
 
 // 필터
@@ -88,69 +88,60 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
         </div>
       </div>
 
-      <!-- 2단(좌:제목+본문 / 우:댓글·대댓글) 블록 리스트 -->
+      <!-- 3컬럼: 순번+상태 | 제목+본문 | 댓글+대댓글 -->
       <div class="overflow-auto" style="max-height: calc(100vh - 260px)">
         <div
           v-for="(article, idx) in filteredArticles"
           :key="article.id"
-          class="article-block"
+          class="article-row"
           :class="{ 'row-even': idx % 2 === 1 }"
         >
-          <!-- 상태 컬러 바 -->
-          <div class="status-bar" :style="{ backgroundColor: statusColor[article.status]?.dot || '#94a3b8' }"></div>
+          <!-- 1열: 순번 + 상태 -->
+          <div class="col-num">
+            <span class="order-num">{{ article.article_order }}</span>
+            <span :class="'status-badge ' + (statusColor[article.status]?.bg || 'bg-slate-400')">{{ article.status }}</span>
+          </div>
 
-          <!-- 콘텐츠 2컬럼 -->
-          <div class="content-grid">
-            <!-- 좌측: 순번 + 상태 + 제목 + 본문 -->
-            <div class="col-left">
-              <!-- 헤더 라인: 순번, 상태, 장비, 제목, 편집 -->
-              <div class="meta-line">
-                <span class="order-num">{{ article.article_order }}</span>
-                <span :class="'status-badge ' + (statusColor[article.status]?.bg || 'bg-slate-400')">{{ article.status }}</span>
-                <span v-if="article.equipment_name" class="equip-tag">{{ article.equipment_name }}</span>
-                <span class="title-text">{{ article.title || '(미작성)' }}</span>
-                <a v-if="article.published_url" :href="article.published_url" target="_blank"
-                  class="text-blue-400 hover:text-blue-600 text-[10px] shrink-0">🔗</a>
-                <button @click="emit('open', article.id)"
-                  class="edit-btn ml-auto" title="원고 편집">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                </button>
-              </div>
-
-              <!-- 본문 -->
-              <div class="body-area">
-                <p v-if="article.body" class="body-text">{{ article.body }}</p>
-                <p v-else class="text-[11px] text-slate-300 italic">본문 미작성</p>
-              </div>
+          <!-- 2열: 제목 + 장비 + 본문 -->
+          <div class="col-content">
+            <div class="content-header">
+              <span v-if="article.equipment_name" class="equip-tag">{{ article.equipment_name }}</span>
+              <span class="title-text">{{ article.title || '(미작성)' }}</span>
+              <a v-if="article.published_url" :href="article.published_url" target="_blank"
+                class="link-icon" title="발행 링크">🔗</a>
+              <button @click="emit('open', article.id)"
+                class="edit-btn ml-auto" title="원고 편집">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
             </div>
+            <p v-if="article.body" class="body-text">{{ article.body }}</p>
+            <p v-else class="text-[11px] text-slate-300 italic">본문 미작성</p>
+          </div>
 
-            <!-- 우측: 댓글·대댓글 세로 쌍 -->
-            <div class="col-right">
-              <template v-if="parseComments(article).length">
-                <div
-                  v-for="cmt in parseComments(article)"
-                  :key="cmt.slot"
-                  class="comment-pair"
-                >
-                  <!-- 댓글 -->
-                  <div class="cmt-row">
-                    <span class="cmt-label">댓{{ cmt.slot }}</span>
-                    <span v-if="cmt.comment" class="cmt-text">{{ cmt.comment }}</span>
-                    <span v-else class="cmt-empty">—</span>
-                  </div>
-                  <!-- 대댓글 -->
-                  <div class="reply-row">
-                    <span class="reply-arrow">↩</span>
-                    <span v-if="cmt.reply" class="reply-text">{{ cmt.reply }}</span>
-                    <span v-else class="cmt-empty">—</span>
-                  </div>
+          <!-- 3열: 댓글·대댓글 -->
+          <div class="col-comments">
+            <template v-if="parseComments(article).length">
+              <div
+                v-for="cmt in parseComments(article)"
+                :key="cmt.slot"
+                class="comment-pair"
+              >
+                <div class="cmt-row">
+                  <span class="cmt-label">댓{{ cmt.slot }}</span>
+                  <span v-if="cmt.comment" class="cmt-text">{{ cmt.comment }}</span>
+                  <span v-else class="cmt-empty">—</span>
                 </div>
-              </template>
-              <span v-else class="text-[11px] text-slate-300">댓글 없음</span>
-            </div>
+                <div class="reply-row">
+                  <span class="reply-arrow">↩</span>
+                  <span v-if="cmt.reply" class="reply-text">{{ cmt.reply }}</span>
+                  <span v-else class="cmt-empty">—</span>
+                </div>
+              </div>
+            </template>
+            <span v-else class="text-[11px] text-slate-300">댓글 없음</span>
           </div>
         </div>
       </div>
@@ -159,9 +150,10 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
 </template>
 
 <style scoped>
-/* 블록 */
-.article-block {
-  display: flex;
+/* 행 */
+.article-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 480px) 1fr;
   border-bottom: 1px solid #e2e8f0;
   background: white;
   transition: background-color 0.15s;
@@ -169,52 +161,47 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
 .row-even {
   background-color: #fafbfc;
 }
-.article-block:hover {
+.article-row:hover {
   background-color: #eff6ff;
 }
 
-/* 상태 컬러바 */
-.status-bar {
-  width: 3px;
-  flex-shrink: 0;
+/* 1열: 순번+상태 */
+.col-num {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-right: 1px solid #f1f5f9;
+}
+.order-num {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+.status-badge {
+  font-size: 8px;
+  font-weight: 700;
+  color: white;
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  text-align: center;
+  line-height: 1.4;
 }
 
-/* 2컬럼 그리드 */
-.content-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  min-width: 0;
-}
-
-/* 좌측 */
-.col-left {
+/* 2열: 제목+본문 */
+.col-content {
   padding: 8px 10px;
   border-right: 1px solid #f1f5f9;
   min-width: 0;
 }
-
-.meta-line {
+.content-header {
   display: flex;
   align-items: center;
   gap: 5px;
   margin-bottom: 4px;
-}
-.order-num {
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
-  color: #94a3b8;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.status-badge {
-  font-size: 9px;
-  font-weight: 700;
-  color: white;
-  padding: 1px 5px;
-  border-radius: 3px;
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 .equip-tag {
   font-size: 9px;
@@ -227,7 +214,7 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
   flex-shrink: 0;
 }
 .title-text {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   color: #1e293b;
   white-space: nowrap;
@@ -235,6 +222,12 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
   text-overflow: ellipsis;
   min-width: 0;
 }
+.link-icon {
+  font-size: 10px;
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+.link-icon:hover { color: #2563eb; }
 .edit-btn {
   color: #94a3b8;
   transition: color 0.15s;
@@ -245,11 +238,6 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
 .edit-btn:hover {
   color: #3b82f6;
   background: #eff6ff;
-}
-
-/* 본문 */
-.body-area {
-  padding-left: 0;
 }
 .body-text {
   font-size: 11px;
@@ -262,13 +250,12 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
   overflow: hidden;
 }
 
-/* 우측: 댓글 */
-.col-right {
+/* 3열: 댓글 */
+.col-comments {
   padding: 8px 10px;
   min-width: 0;
   overflow: hidden;
 }
-
 .comment-pair {
   margin-bottom: 6px;
   padding-bottom: 6px;
@@ -279,7 +266,6 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
   padding-bottom: 0;
   border-bottom: none;
 }
-
 .cmt-row, .reply-row {
   display: flex;
   gap: 4px;
@@ -290,7 +276,6 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
   padding-left: 18px;
   margin-top: 2px;
 }
-
 .cmt-label {
   flex-shrink: 0;
   font-size: 9px;

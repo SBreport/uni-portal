@@ -10,6 +10,12 @@ import os
 import re
 import pandas as pd
 
+try:
+    import streamlit as st
+    _cache = st.cache_data
+except (ImportError, ModuleNotFoundError):
+    st = None
+    _cache = lambda **kw: lambda f: f  # no-op decorator
 
 from config import PHOTO_YES, DEVICE_ALIASES
 
@@ -42,7 +48,7 @@ def get_device_group(clean_name):
     return clean_name
 
 
-
+@_cache(ttl=300)
 def load_data():
     """SQLite에서 장비 데이터 로드 → DataFrame 반환"""
     try:
@@ -268,7 +274,7 @@ def get_device_info_by_name(name):
     return dict(row) if row else None
 
 
-
+@_cache(ttl=300)
 def search_device_info(keyword):
     """키워드로 시술 정보 검색 (이름 + aliases 부분 매칭)"""
     _ensure_device_info_table()
@@ -310,7 +316,7 @@ def _is_safe_substring(short, long_str):
     return True
 
 
-
+@_cache(ttl=300)
 def find_matching_devices(equip_name):
     """장비명으로 관련 시술 정보를 양방향 부분 매칭으로 찾기.
 

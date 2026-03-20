@@ -32,18 +32,21 @@ const statuses = ['작성대기', '작성완료', '수정요청', '검수완료'
 
 const article = computed(() => store.currentArticle)
 
+// 현재 보고 있는 글 ID (props와 별도로 내부 추적)
+const currentId = ref<number | null>(null)
+
 // 이전/다음 글 이동
 const prevArticle = computed(() => {
-  const idx = store.articles.findIndex(a => a.id === props.articleId)
+  const idx = store.articles.findIndex(a => a.id === currentId.value)
   return idx > 0 ? store.articles[idx - 1] : null
 })
 const nextArticle = computed(() => {
-  const idx = store.articles.findIndex(a => a.id === props.articleId)
+  const idx = store.articles.findIndex(a => a.id === currentId.value)
   return idx >= 0 && idx < store.articles.length - 1 ? store.articles[idx + 1] : null
 })
 
 function navigateTo(id: number) {
-  // 부모에게 알리지 않고 직접 로드
+  currentId.value = id
   loadArticle(id)
 }
 
@@ -71,7 +74,12 @@ async function loadArticle(id: number) {
   }
 }
 
-watch(() => props.articleId, (id) => { if (id) loadArticle(id) }, { immediate: true })
+watch(() => props.articleId, (id) => {
+  if (id) {
+    currentId.value = id
+    loadArticle(id)
+  }
+}, { immediate: true })
 
 // 댓글 추가
 function addCommentSlot() {
@@ -139,23 +147,21 @@ async function copyText(text: string, label: string) {
   </div>
 
   <div v-else>
-    <!-- Row 1: 네비게이션 (3컬럼 — 1칸만 사용) -->
-    <div class="grid grid-cols-3 gap-4 mb-3">
-      <div class="flex items-center gap-2">
-        <button v-if="prevArticle" @click="navigateTo(prevArticle!.id)"
-          class="px-2 py-1 text-xs border border-slate-200 rounded hover:bg-slate-50">
-          ◀ #{{ prevArticle!.article_order }}
-        </button>
-        <span class="text-sm font-bold text-slate-800 truncate">
-          #{{ article.article_order }} {{ article.title || '(제목 없음)' }}
-        </span>
-        <button v-if="nextArticle" @click="navigateTo(nextArticle!.id)"
-          class="px-2 py-1 text-xs border border-slate-200 rounded hover:bg-slate-50">
-          #{{ nextArticle!.article_order }} ▶
-        </button>
-      </div>
-      <div></div>
-      <div></div>
+    <!-- Row 1: 네비게이션 — 고정 위치, 넘버링만 -->
+    <div class="flex items-center gap-2 mb-3">
+      <button v-if="prevArticle" @click="navigateTo(prevArticle!.id)"
+        class="px-3 py-1 text-xs border border-slate-200 rounded hover:bg-slate-50 shrink-0">
+        ◀ #{{ prevArticle!.article_order }}
+      </button>
+      <span v-else class="w-14 shrink-0"></span>
+      <span class="text-sm font-bold text-slate-800 shrink-0 px-2">
+        #{{ article.article_order }}
+      </span>
+      <button v-if="nextArticle" @click="navigateTo(nextArticle!.id)"
+        class="px-3 py-1 text-xs border border-slate-200 rounded hover:bg-slate-50 shrink-0">
+        #{{ nextArticle!.article_order }} ▶
+      </button>
+      <span v-else class="w-14 shrink-0"></span>
     </div>
 
     <!-- Row 2: 메타 정보 (3컬럼) -->
@@ -192,8 +198,8 @@ async function copyText(text: string, label: string) {
       </div>
     </div>
 
-    <!-- Row 3: 본문 / 댓글 / 피드백 (3컬럼) -->
-    <div class="grid grid-cols-3 gap-4" style="min-height: 500px;">
+    <!-- Row 3: 본문 / 댓글 / 피드백 (3컬럼 — 피드백 넓게) -->
+    <div class="grid gap-4" style="grid-template-columns: 1fr 1fr 1.5fr; min-height: 500px;">
       <!-- Col 1: 제목 + 본문 -->
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-1">
@@ -260,31 +266,33 @@ async function copyText(text: string, label: string) {
         </div>
       </div>
 
-      <!-- Col 3: 피드백 -->
-      <div class="flex flex-col gap-3">
+      <!-- Col 3: 피드백 (넓게) -->
+      <div class="flex flex-col gap-2 h-full">
         <label class="text-xs font-medium text-slate-500">📋 피드백</label>
 
-        <!-- 피드백 이력 -->
-        <div class="flex-1 overflow-y-auto space-y-2 max-h-[300px]">
-          <div v-if="!article.feedbacks?.length" class="text-xs text-slate-300">피드백 없음</div>
+        <!-- 피드백 입력 (상단 고정) -->
+        <div class="flex gap-2">
+          <textarea v-model="feedbackText" rows="3"
+            placeholder="수정 요청이나 승인 의견을 입력하세요"
+            class="flex-1 px-3 py-2 border border-slate-200 rounded text-sm" />
+          <button @click="submitFeedback"
+            class="px-4 py-2 border border-slate-200 rounded text-sm hover:bg-slate-50 transition shrink-0 self-end">
+            등록
+          </button>
+        </div>
+
+        <!-- 피드백 이력 (나머지 공간 모두 사용) -->
+        <div class="flex-1 overflow-y-auto space-y-2 border border-slate-100 rounded p-2 bg-slate-50/50">
+          <div v-if="!article.feedbacks?.length" class="text-xs text-slate-300 py-4 text-center">피드백 없음</div>
           <div v-for="fb in article.feedbacks" :key="fb.id"
-            class="border border-slate-100 rounded p-2">
-            <p class="text-xs text-slate-800">{{ fb.content }}</p>
-            <p class="text-[10px] text-slate-400 mt-1">{{ fb.author }} · {{ fb.created_at }}</p>
+            class="bg-white border border-slate-100 rounded p-3">
+            <p class="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{{ fb.content }}</p>
+            <p class="text-[10px] text-slate-400 mt-2">{{ fb.author }} · {{ fb.created_at }}</p>
           </div>
         </div>
 
-        <!-- 피드백 입력 -->
-        <textarea v-model="feedbackText" rows="3"
-          placeholder="수정 요청이나 승인 의견을 입력하세요"
-          class="w-full px-3 py-2 border border-slate-200 rounded text-sm" />
-        <button @click="submitFeedback"
-          class="w-full py-2 border border-slate-200 rounded text-sm hover:bg-slate-50 transition">
-          피드백 등록
-        </button>
-
         <!-- 상태 변경 이력 -->
-        <details class="mt-2">
+        <details>
           <summary class="text-xs text-slate-400 cursor-pointer">상태 변경 이력</summary>
           <div class="mt-1 text-xs text-slate-500 space-y-1" v-if="article.feedbacks">
             <p class="text-slate-300">별도 API 연동 예정</p>

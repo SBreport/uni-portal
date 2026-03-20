@@ -17,7 +17,7 @@
     }
     .container {
       text-align: center;
-      max-width: 480px;
+      max-width: 420px;
       padding: 48px 32px;
     }
     h1 {
@@ -30,58 +30,37 @@
       color: #64748b;
       margin-bottom: 48px;
     }
-    .buttons {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-    }
     .btn {
       display: flex;
       flex-direction: column;
       align-items: center;
-      width: 180px;
+      width: 240px;
+      margin: 0 auto;
       padding: 32px 24px;
       border-radius: 12px;
       text-decoration: none;
       transition: transform 0.15s, box-shadow 0.15s;
-      border: 1px solid #e2e8f0;
+      background: #1e40af;
+      color: #ffffff;
+      border: 1px solid #1e40af;
     }
     .btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-    }
-    .btn-stream {
-      background: #ffffff;
-      color: #1e293b;
-    }
-    .btn-fast {
-      background: #1e40af;
-      color: #ffffff;
-      border-color: #1e40af;
+      box-shadow: 0 8px 24px rgba(30, 64, 175, 0.25);
     }
     .btn-icon {
       font-size: 32px;
       margin-bottom: 12px;
     }
     .btn-title {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 600;
       margin-bottom: 4px;
     }
     .btn-desc {
       font-size: 12px;
-      opacity: 0.7;
+      opacity: 0.8;
     }
-    .btn-badge {
-      display: inline-block;
-      font-size: 10px;
-      padding: 2px 8px;
-      border-radius: 10px;
-      margin-top: 8px;
-      font-weight: 600;
-    }
-    .badge-stable { background: #dcfce7; color: #166534; }
-    .badge-beta { background: #fef3c7; color: #92400e; }
     .footer {
       margin-top: 48px;
       font-size: 12px;
@@ -94,32 +73,19 @@
     <h1>유앤아이의원</h1>
     <p class="subtitle">통합 관리 시스템</p>
 
-    <div class="buttons">
-      <a href="/stream/" class="btn btn-stream" id="btn-stream">
-        <span class="btn-icon">S</span>
-        <span class="btn-title">Stream</span>
-        <span class="btn-desc">현재 운영 버전</span>
-        <span class="btn-badge badge-stable">안정</span>
-      </a>
-      <a href="/fast/" class="btn btn-fast" id="btn-fast">
-        <span class="btn-icon">F</span>
-        <span class="btn-title">Fast</span>
-        <span class="btn-desc">신규 개발 버전</span>
-        <span class="btn-badge badge-beta">베타</span>
-      </a>
-    </div>
+    <a href="/" class="btn" id="btn-enter">
+      <span class="btn-icon">⚡</span>
+      <span class="btn-title">시스템 접속</span>
+      <span class="btn-desc">FastAPI + Vue.js</span>
+    </a>
 
     <p class="footer">Developed by smartbranding</p>
   </div>
 
   <script>
-    // 포트 기반 리다이렉트
-    // NAS: http://NAS_IP:8501 (Stream), http://NAS_IP:8080 (Fast)
-    // 로컬: http://localhost:8501, http://localhost:8080
     const host = window.location.hostname;
     const protocol = window.location.protocol;
-    document.getElementById('btn-stream').href = `${protocol}//${host}:8501`;
-    document.getElementById('btn-fast').href = `${protocol}//${host}:8080`;
+    document.getElementById('btn-enter').href = `${protocol}//${host}:8080`;
   </script>
 </body>
 </html>

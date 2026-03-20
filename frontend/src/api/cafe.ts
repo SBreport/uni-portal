@@ -45,5 +45,5 @@ export const getSummary = (periodId: number) =>
   api.get(`/cafe/summary/${periodId}`)
 
 // ── 동기화 ──
-export const syncCafe = (year: number, month: number, branchFilter = '') =>
-  api.post('/cafe/sync', { year, month, branch_filter: branchFilter })
+export const syncCafe = (year: number, month: number, branchFilter = '', sheetUrl = '') =>
+  api.post('/cafe/sync', { year, month, branch_filter: branchFilter, sheet_url: sheetUrl }, { timeout: 180000 })

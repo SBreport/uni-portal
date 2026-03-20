@@ -19,6 +19,14 @@ export const matchDeviceInfo = (name: string) => api.get('/equipment/device-info
 export const upsertDeviceInfo = (data: Record<string, any>) => api.post('/equipment/device-info', data)
 export const deleteDeviceInfo = (name: string) => api.delete(`/equipment/device-info/${encodeURIComponent(name)}`)
 
+// 장비 컨텍스트 (시술정보 + 이벤트 연계)
+export const getEquipmentContext = (branchName: string, equipmentName: string) =>
+  api.get('/cafe/equipment-context', { params: { branch_name: branchName, equipment_name: equipmentName } })
+
+// 이벤트 검색
+export const searchEvents = (q: string) =>
+  api.get('/events/search', { params: { q } })
+
 // 동기화
 export const syncFromSheets = () => api.post('/equipment/sync')
 export const updateDeviceCounts = () => api.post('/equipment/device-info/update-counts')

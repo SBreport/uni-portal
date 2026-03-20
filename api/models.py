@@ -81,6 +81,7 @@ class CafeSyncRequest(BaseModel):
     year: int
     month: int
     branch_filter: str = ""
+    sheet_url: str = ""
 
 
 # ── Equipment ──

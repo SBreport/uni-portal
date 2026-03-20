@@ -1,46 +1,7 @@
 version: "3.8"
 
 services:
-  # ── 포털: 버전 선택 페이지 ──
-  portal:
-    image: nginx:alpine
-    container_name: uni-portal-select
-    ports:
-      - "8500:80"
-    volumes:
-      - ./portal:/usr/share/nginx/html:ro
-      - ./portal/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    restart: always
-    deploy:
-      resources:
-        limits:
-          memory: 32M
-
-  # ── Stream 버전: 기존 Streamlit (수정 없음) ──
-  uni-portal:
-    build: .
-    container_name: uni-portal
-    ports:
-      - "8501:8501"
-    volumes:
-      - portal-data:/app/data
-    restart: always
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    environment:
-      - TZ=Asia/Seoul
-      # ── 인증 설정 ──
-      - AUTH_SALT=${AUTH_SALT:-uandi_equipment_2026}
-      - AUTH_BOOTSTRAP_ADMIN_ID=${AUTH_BOOTSTRAP_ADMIN_ID:-admin}
-      - AUTH_BOOTSTRAP_ADMIN_PW_HASH=${AUTH_BOOTSTRAP_ADMIN_PW_HASH:-9fd94e1caae92307047e2cfb6739f3610fb9a7c7c4924c53f4ae52f88ec7e9ad}
-      - AUTH_BOOTSTRAP_ADMIN_ROLE=${AUTH_BOOTSTRAP_ADMIN_ROLE:-admin}
-      # ── 이벤트 수집 (Google Sheets) ──
-      - EVENT_SHEET_ID=${EVENT_SHEET_ID:-}
-      - GOOGLE_CREDENTIALS_FILE=/app/credentials.json
-
-  # ── Fast 버전: FastAPI 백엔드 ──
+  # ── FastAPI 백엔드 ──
   api:
     build:
       context: .
@@ -65,7 +26,7 @@ services:
       - CAFE_SHEET_ID=${CAFE_SHEET_ID:-}
       - GOOGLE_CREDENTIALS_FILE=/app/credentials.json
 
-  # ── Fast 버전: Vue.js 프론트엔드 ──
+  # ── Vue.js 프론트엔드 ──
   frontend:
     build:
       context: .

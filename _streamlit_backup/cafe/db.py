@@ -10,6 +10,12 @@ from datetime import datetime
 
 import pandas as pd
 
+try:
+    import streamlit as st
+    _cache = st.cache_data
+except (ImportError, ModuleNotFoundError):
+    st = None
+    _cache = lambda **kw: lambda f: f  # no-op decorator
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 DB_PATH = os.path.join(DB_DIR, "equipment.db")
@@ -203,7 +209,7 @@ def set_published_info(article_id: int, url: str, published_by: str):
     conn.close()
 
 
-
+@_cache(ttl=300)
 def load_cafe_articles(branch_period_id: int) -> pd.DataFrame:
     """지점-기간의 원고 목록 반환 (본문 프리뷰 + 댓글/대댓글 포함)."""
     conn = _get_conn()
@@ -357,7 +363,7 @@ def load_status_history(article_id: int) -> list[dict]:
 # 대시보드 요약
 # ============================================================
 
-
+@_cache(ttl=300)
 def load_cafe_summary(period_id: int) -> list[dict]:
     """기간별 전 지점 원고 현황 요약."""
     conn = _get_conn()

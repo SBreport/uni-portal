@@ -36,7 +36,6 @@ const topItems: MenuItem[] = [
   { path: '/equipment', label: '보유장비', icon: 'E' },
   { path: '/events', label: '이벤트', icon: 'V' },
   { path: '/treatment-info', label: '시술정보', icon: 'T' },
-  { path: '/papers', label: '시술논문', icon: 'P' },
 ]
 
 const bottomItems: MenuItem[] = [

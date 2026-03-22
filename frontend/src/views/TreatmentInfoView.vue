@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import * as equipApi from '@/api/equipment'
+import PapersView from '@/views/PapersView.vue'
 
 // ── 탭 ──
 const activeTab = ref<'dictionary' | 'papers'>('dictionary')
@@ -191,13 +192,7 @@ function editDevice(d: any) {
 
     <!-- ========== 시술논문 탭 ========== -->
     <div v-if="activeTab === 'papers'">
-      <div class="flex items-center justify-center h-64 bg-white border border-slate-200 rounded-lg">
-        <div class="text-center">
-          <p class="text-4xl mb-3">📄</p>
-          <p class="text-slate-400 text-sm">시술논문 기능은 곧 업데이트 됩니다</p>
-          <p class="text-slate-300 text-xs mt-1">시술별 관련 논문 자료를 열람할 수 있습니다</p>
-        </div>
-      </div>
+      <PapersView />
     </div>
   </div>
 </template>

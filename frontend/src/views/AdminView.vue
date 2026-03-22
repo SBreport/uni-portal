@@ -178,6 +178,49 @@ async function syncDeviceJson() {
   finally { deviceSyncing.value = false }
 }
 
+// ── DB 파일 관리 ──
+const dbUploading = ref(false)
+const dbMsg = ref('')
+const dbResult = ref<any>(null)
+
+async function uploadDb(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (!input.files?.length) return
+  const file = input.files[0]
+
+  dbUploading.value = true
+  dbMsg.value = ''
+  dbResult.value = null
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await equipApi.uploadDb(formData)
+    dbResult.value = res.data
+    dbMsg.value = `DB 업로드 완료 (시술사전: ${res.data.device_info_count}건, 논문: ${res.data.papers_count}건)`
+  } catch (e: any) {
+    dbMsg.value = '오류: ' + (e.response?.data?.detail || e.message)
+  } finally {
+    dbUploading.value = false
+    input.value = ''
+  }
+}
+
+async function downloadDb() {
+  try {
+    const res = await equipApi.downloadDb()
+    const blob = new Blob([res.data])
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'equipment.db'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e: any) {
+    dbMsg.value = '다운로드 오류: ' + (e.response?.data?.detail || e.message)
+  }
+}
+
 // ── 논문 폴더 분석 ──
 const paperFolderPath = ref('')
 const paperApiKey = ref('')
@@ -389,6 +432,36 @@ async function runPaperAnalysis() {
           class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
           {{ syncing ? '가져오는 중...' : '카페 원고 가져오기' }}
         </button>
+      </div>
+    </div>
+
+      <!-- DB 파일 관리 -->
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <h3 class="text-sm font-bold text-slate-700 mb-1">DB 파일 관리</h3>
+        <p class="text-xs text-slate-400 mb-3">로컬에서 작업한 DB를 서버에 업로드하거나, 현재 서버 DB를 백업합니다.</p>
+
+        <div v-if="dbMsg" class="mb-3 px-3 py-2 rounded text-sm"
+          :class="dbMsg.startsWith('오류') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'">
+          {{ dbMsg }}
+        </div>
+
+        <div v-if="dbResult" class="mb-3 p-3 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600">
+          <p>파일 크기: {{ (dbResult.size_bytes / 1024 / 1024).toFixed(1) }}MB</p>
+          <p>시술사전: {{ dbResult.device_info_count }}건 / 논문: {{ dbResult.papers_count }}건</p>
+          <p>테이블: {{ dbResult.tables?.join(', ') }}</p>
+        </div>
+
+        <div class="flex gap-3">
+          <label class="px-4 py-2 bg-blue-600 text-white text-sm rounded cursor-pointer hover:bg-blue-700"
+            :class="{ 'opacity-50 pointer-events-none': dbUploading }">
+            {{ dbUploading ? '업로드 중...' : 'DB 업로드' }}
+            <input type="file" accept=".db" class="hidden" @change="uploadDb" :disabled="dbUploading" />
+          </label>
+          <button @click="downloadDb"
+            class="px-4 py-2 bg-slate-600 text-white text-sm rounded hover:bg-slate-700">
+            DB 다운로드 (백업)
+          </button>
+        </div>
       </div>
     </div>
 

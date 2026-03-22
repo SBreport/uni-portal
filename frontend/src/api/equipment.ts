@@ -31,3 +31,9 @@ export const searchEvents = (q: string) =>
 export const syncFromSheets = () => api.post('/equipment/sync')
 export const updateDeviceCounts = () => api.post('/equipment/device-info/update-counts')
 export const syncDeviceJson = () => api.post('/equipment/device-info/sync-json')
+
+// DB 파일 관리
+export const uploadDb = (formData: FormData) =>
+  api.post('/equipment/db-upload', formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 })
+export const downloadDb = () =>
+  api.get('/equipment/db-download', { responseType: 'blob' })

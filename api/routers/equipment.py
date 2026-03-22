@@ -2,7 +2,8 @@
 
 from typing import Annotated, Optional
 import math
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 
 
 def _clean_df(df):
@@ -164,3 +165,64 @@ async def post_sync_json(
     from equipment.db import seed_device_info_from_json
     seed_device_info_from_json()
     return {"ok": True}
+
+
+# ── DB 파일 관리 (admin 전용) ──
+
+@router.get("/db-download")
+async def download_db(user: Annotated[dict, Depends(require_role("admin"))]):
+    """현재 서버 DB 파일 다운로드 (백업용)."""
+    import os
+    db_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "equipment.db")
+    db_path = os.path.abspath(db_path)
+    if not os.path.exists(db_path):
+        raise HTTPException(404, "DB 파일 없음")
+    return FileResponse(db_path, filename="equipment.db", media_type="application/octet-stream")
+
+
+@router.post("/db-upload")
+async def upload_db(
+    file: UploadFile = File(...),
+    user: Annotated[dict, Depends(require_role("admin"))] = None,
+):
+    """로컬 DB 파일을 서버에 업로드 (덮어쓰기). 기존 파일은 자동 백업."""
+    import os, shutil
+    from datetime import datetime
+
+    db_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data")
+    db_dir = os.path.abspath(db_dir)
+    db_path = os.path.join(db_dir, "equipment.db")
+
+    # 기존 DB 백업
+    if os.path.exists(db_path):
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_dir = os.path.join(db_dir, "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        backup_path = os.path.join(backup_dir, f"equipment_{ts}.db")
+        shutil.copy2(db_path, backup_path)
+
+    # 업로드 파일 저장
+    content = await file.read()
+    with open(db_path, "wb") as f:
+        f.write(content)
+
+    # 검증: 기본 테이블 존재 확인
+    import sqlite3
+    try:
+        conn = sqlite3.connect(db_path)
+        tables = [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()]
+        di_count = conn.execute("SELECT COUNT(*) FROM device_info").fetchone()[0] if "device_info" in tables else 0
+        paper_count = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0] if "papers" in tables else 0
+        conn.close()
+    except Exception as e:
+        return {"ok": False, "error": f"DB 검증 실패: {str(e)}"}
+
+    return {
+        "ok": True,
+        "size_bytes": len(content),
+        "tables": tables,
+        "device_info_count": di_count,
+        "papers_count": paper_count,
+    }

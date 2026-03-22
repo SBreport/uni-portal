@@ -10,7 +10,6 @@ from api.models import UserCreate, UserUpdate
 from users import (
     load_users, add_user, remove_user,
     update_user_role, update_user_password, update_user_memo,
-    invalidate_users_cache,
 )
 
 router = APIRouter()
@@ -33,7 +32,7 @@ async def create_user(req: UserCreate, user: Annotated[dict, Depends(_admin)]):
     ok = add_user(req.username, pw_hash, req.role, req.branch_id, req.memo)
     if not ok:
         raise HTTPException(status_code=409, detail="이미 존재하는 사용자입니다.")
-    invalidate_users_cache()
+
     return {"ok": True, "username": req.username}
 
 
@@ -42,7 +41,7 @@ async def delete_user(username: str, user: Annotated[dict, Depends(_admin)]):
     ok = remove_user(username)
     if not ok:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
-    invalidate_users_cache()
+
     return {"ok": True}
 
 
@@ -55,5 +54,5 @@ async def update_user(username: str, req: UserUpdate, user: Annotated[dict, Depe
         update_user_password(username, pw_hash)
     if req.memo is not None:
         update_user_memo(username, req.memo)
-    invalidate_users_cache()
+
     return {"ok": True}

@@ -9,6 +9,44 @@ const selectedPaper = ref<Paper | null>(null)
 const detailLoading = ref(false)
 const detailData = ref<Paper | null>(null)
 
+// JSON 업로드
+const showUploadModal = ref(false)
+const uploadFile = ref<File | null>(null)
+const uploading = ref(false)
+const uploadResult = ref<{ inserted: number; duplicates: any[]; errors: any[]; message: string } | null>(null)
+
+function onFileSelect(e: Event) {
+  const target = e.target as HTMLInputElement
+  uploadFile.value = target.files?.[0] || null
+  uploadResult.value = null
+}
+
+async function doUpload() {
+  if (!uploadFile.value) return
+  uploading.value = true
+  uploadResult.value = null
+  try {
+    const { data } = await papersApi.uploadPapersJson(uploadFile.value)
+    uploadResult.value = data
+    if (data.inserted > 0) {
+      store.loadPapers()  // 목록 새로고침
+    }
+  } catch (err: any) {
+    uploadResult.value = {
+      inserted: 0, duplicates: [], errors: [],
+      message: err.response?.data?.detail || '업로드 실패',
+    }
+  } finally {
+    uploading.value = false
+  }
+}
+
+function closeUploadModal() {
+  showUploadModal.value = false
+  uploadFile.value = null
+  uploadResult.value = null
+}
+
 onMounted(() => {
   store.loadPapers()
 })
@@ -61,7 +99,13 @@ function handleSearch() {
   <div class="p-5 h-[calc(100vh-1rem)]">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-xl font-bold text-slate-800">시술논문</h2>
-      <span class="text-xs text-slate-400">{{ store.papers.length }}건</span>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-slate-400">{{ store.papers.length }}건</span>
+        <button @click="showUploadModal = true"
+          class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition">
+          📄 JSON 업로드
+        </button>
+      </div>
     </div>
 
     <!-- 필터 바 -->
@@ -246,5 +290,66 @@ function handleSearch() {
         </div>
       </div>
     </div>
+
+    <!-- ===== JSON 업로드 모달 ===== -->
+    <Teleport to="body">
+      <div v-if="showUploadModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-slate-800">논문 분석 결과 업로드</h3>
+            <button @click="closeUploadModal" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+          </div>
+
+          <p class="text-xs text-slate-500 mb-4">
+            <code>paper_analyzer.py</code>로 생성된 JSON 파일을 업로드하면 논문 DB에 일괄 등록됩니다.
+            중복 논문(DOI/제목 동일)은 자동으로 건너뜁니다.
+          </p>
+
+          <div class="mb-4">
+            <input type="file" accept=".json" @change="onFileSelect"
+              class="w-full text-sm text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-md
+                     file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700
+                     hover:file:bg-blue-100 cursor-pointer" />
+          </div>
+
+          <button @click="doUpload"
+            :disabled="!uploadFile || uploading"
+            class="w-full py-2.5 rounded-md text-sm font-medium transition
+                   disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed
+                   bg-blue-600 text-white hover:bg-blue-700">
+            <template v-if="uploading">
+              <span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2 align-middle"></span>
+              업로드 중...
+            </template>
+            <template v-else>업로드</template>
+          </button>
+
+          <!-- 결과 -->
+          <div v-if="uploadResult" class="mt-4 p-4 rounded-lg border" :class="uploadResult.inserted > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'">
+            <p class="text-sm font-medium" :class="uploadResult.inserted > 0 ? 'text-emerald-700' : 'text-amber-700'">
+              {{ uploadResult.message }}
+            </p>
+
+            <div v-if="uploadResult.duplicates.length" class="mt-2">
+              <p class="text-xs text-slate-500 mb-1">중복 건너뜀:</p>
+              <ul class="text-xs text-slate-500 space-y-0.5">
+                <li v-for="(dup, i) in uploadResult.duplicates" :key="i" class="truncate">
+                  · {{ dup.title }} <span class="text-slate-400">({{ dup.reason }})</span>
+                </li>
+              </ul>
+            </div>
+
+            <div v-if="uploadResult.errors.length" class="mt-2">
+              <p class="text-xs text-red-500 mb-1">오류:</p>
+              <ul class="text-xs text-red-400 space-y-0.5">
+                <li v-for="(err, i) in uploadResult.errors" :key="i">
+                  · #{{ err.index }}: {{ err.error }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

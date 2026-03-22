@@ -424,16 +424,11 @@ def get_equipment_context(branch_name: str, equipment_name: str) -> dict:
     c = conn.cursor()
     result = {"device_info": None, "events": [], "is_owned": False, "quantity": 0}
 
-    # 1. device_info에서 장비 상세
-    equip_lower = equipment_name.strip().lower()
-    c.execute("SELECT * FROM device_info")
-    for row in c.fetchall():
-        d = dict(row)
-        name_lower = d["name"].lower()
-        aliases = [a.strip().lower() for a in (d.get("aliases") or "").split(",") if a.strip()]
-        if equip_lower in name_lower or name_lower in equip_lower or equip_lower in aliases:
-            result["device_info"] = d
-            break
+    # 1. device_info에서 장비 상세 (공용 matcher 엔진 사용)
+    from equipment.matcher import match_devices
+    matched = match_devices(equipment_name.strip())
+    if matched:
+        result["device_info"] = matched[0]
 
     # 2. 해당 지점의 현재 이벤트 가격
     c.execute("""

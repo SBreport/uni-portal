@@ -413,6 +413,21 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_papers_status ON papers(status)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_papers_doi ON papers(doi)")
 
+    # 논문-블로그 연동 테이블 (추후 블로그 탭에서 사용)
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS paper_blog_links (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        paper_id   INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+        blog_url   TEXT NOT NULL DEFAULT '',
+        blog_title TEXT NOT NULL DEFAULT '',
+        link_type  TEXT NOT NULL DEFAULT 'reference',
+        note       TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        UNIQUE(paper_id, blog_url)
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_paper_blog_paper ON paper_blog_links(paper_id)")
+
     conn.commit()
 
     # ============================================================

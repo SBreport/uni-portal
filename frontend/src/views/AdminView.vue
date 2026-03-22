@@ -4,6 +4,7 @@ import * as usersApi from '@/api/users'
 import * as equipApi from '@/api/equipment'
 import * as eventsApi from '@/api/events'
 import * as cafeApi from '@/api/cafe'
+import * as papersApi from '@/api/papers'
 // equipApi는 동기화 탭(장비시트 동기화)에서 사용
 import { useAuthStore } from '@/stores/auth'
 
@@ -175,6 +176,47 @@ async function syncDeviceJson() {
     setTimeout(() => deviceMsg.value = '', 3000)
   } catch (e: any) { deviceMsg.value = '오류: ' + (e.response?.data?.detail || e.message) }
   finally { deviceSyncing.value = false }
+}
+
+// ── 논문 폴더 분석 ──
+const paperFolderPath = ref('')
+const paperApiKey = ref('')
+const paperDryRun = ref(false)
+const paperScanning = ref(false)
+const paperScanResult = ref<{ pdf_count: number; files: string[]; has_more: boolean } | null>(null)
+const paperAnalyzing = ref(false)
+const paperAnalyzeResult = ref<any>(null)
+const paperError = ref('')
+
+async function scanPaperFolder() {
+  if (!paperFolderPath.value.trim()) return
+  paperScanning.value = true
+  paperScanResult.value = null
+  paperAnalyzeResult.value = null
+  paperError.value = ''
+  try {
+    const { data } = await papersApi.scanFolder(paperFolderPath.value.trim())
+    paperScanResult.value = data
+  } catch (e: any) {
+    paperError.value = e.response?.data?.detail || '폴더 스캔 실패'
+  } finally {
+    paperScanning.value = false
+  }
+}
+
+async function runPaperAnalysis() {
+  if (!paperFolderPath.value.trim() || !paperApiKey.value.trim()) return
+  paperAnalyzing.value = true
+  paperAnalyzeResult.value = null
+  paperError.value = ''
+  try {
+    const { data } = await papersApi.analyzeDir(paperFolderPath.value.trim(), paperApiKey.value.trim(), paperDryRun.value)
+    paperAnalyzeResult.value = data
+  } catch (e: any) {
+    paperError.value = e.response?.data?.detail || '분석 실행 실패'
+  } finally {
+    paperAnalyzing.value = false
+  }
 }
 
 </script>
@@ -373,6 +415,68 @@ async function syncDeviceJson() {
           class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
           {{ deviceSyncing ? '동기화 중...' : 'JSON → DB 동기화' }}
         </button>
+      </div>
+
+      <!-- 논문 폴더 분석 -->
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <h3 class="text-sm font-bold text-slate-700 mb-1">🔬 논문 폴더 분석</h3>
+        <p class="text-xs text-slate-400 mb-3">로컬 폴더의 논문 PDF를 Claude API로 일괄 분석하여 DB에 저장합니다.</p>
+
+        <!-- 폴더 경로 -->
+        <div class="flex gap-2 mb-3">
+          <input v-model="paperFolderPath" placeholder="논문 PDF 폴더 경로 (예: Z:\...\00_리프팅시술)"
+            class="flex-1 px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            @keyup.enter="scanPaperFolder" />
+          <button @click="scanPaperFolder" :disabled="!paperFolderPath.trim() || paperScanning"
+            class="px-4 py-2 bg-slate-600 text-white text-xs font-medium rounded-md hover:bg-slate-700 disabled:opacity-50 shrink-0">
+            {{ paperScanning ? '확인 중...' : '폴더 확인' }}
+          </button>
+        </div>
+
+        <!-- 스캔 결과 -->
+        <div v-if="paperScanResult" class="mb-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+          <p class="text-sm font-medium text-slate-700 mb-1">📁 PDF {{ paperScanResult.pdf_count }}건 발견</p>
+          <div class="max-h-24 overflow-auto text-xs text-slate-500 space-y-0.5">
+            <p v-for="f in paperScanResult.files" :key="f" class="truncate">· {{ f }}</p>
+            <p v-if="paperScanResult.has_more" class="text-slate-400 italic">...외 {{ paperScanResult.pdf_count - 50 }}건</p>
+          </div>
+        </div>
+
+        <!-- API 키 + 실행 -->
+        <div v-if="paperScanResult && paperScanResult.pdf_count > 0">
+          <input v-model="paperApiKey" type="password" placeholder="Anthropic API Key (sk-ant-api03-...)"
+            class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm mb-2 focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+          <div class="flex items-center gap-3 mb-3">
+            <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+              <input type="checkbox" v-model="paperDryRun" class="rounded" />
+              테스트 모드 (DB 저장 안 함)
+            </label>
+            <span class="text-xs text-slate-400">
+              예상: {{ Math.ceil(paperScanResult.pdf_count * 0.7) }}~{{ paperScanResult.pdf_count }}분
+            </span>
+          </div>
+          <button @click="runPaperAnalysis" :disabled="!paperApiKey.trim() || paperAnalyzing"
+            class="px-4 py-2 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 disabled:opacity-50">
+            <template v-if="paperAnalyzing">
+              <span class="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5 align-middle"></span>
+              분석 중... (창을 닫지 마세요)
+            </template>
+            <template v-else>🔬 {{ paperScanResult.pdf_count }}건 분석 시작</template>
+          </button>
+        </div>
+
+        <!-- 에러/결과 -->
+        <div v-if="paperError" class="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{{ paperError }}</div>
+        <div v-if="paperAnalyzeResult" class="mt-3 p-3 rounded border"
+          :class="paperAnalyzeResult.success ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'">
+          <p class="text-sm font-bold mb-1" :class="paperAnalyzeResult.success ? 'text-emerald-700' : 'text-amber-700'">
+            {{ paperAnalyzeResult.success ? '✅ 분석 완료' : '⚠️ 일부 오류' }}
+          </p>
+          <p class="text-xs text-slate-600">대상: {{ paperAnalyzeResult.pdf_count }}건 / 성공: {{ paperAnalyzeResult.analyzed }}건</p>
+          <div v-if="paperAnalyzeResult.summary.length" class="mt-2 p-2 bg-white/50 rounded text-xs font-mono">
+            <p v-for="(line, i) in paperAnalyzeResult.summary" :key="i">{{ line }}</p>
+          </div>
+        </div>
       </div>
     </div>
 

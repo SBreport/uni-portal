@@ -225,40 +225,15 @@ def get_treatments_list() -> list[dict]:
 
 
 def match_device_id(related_devices: list[str], device_list: list[dict]) -> tuple:
-    """장비명으로 device_info_id 매칭. (id, name) 반환."""
-    for name in related_devices:
-        name_lower = name.lower().strip()
-        if not name_lower:
-            continue
-        # 정확 매칭
-        for d in device_list:
-            if name_lower == d["name"].lower():
-                return d["id"], d["name"]
-        # aliases 매칭
-        for d in device_list:
-            for alias in (d.get("aliases") or "").split(","):
-                if alias.strip().lower() == name_lower:
-                    return d["id"], d["name"]
-        # 부분 매칭
-        for d in device_list:
-            db_name = d["name"].lower()
-            if len(name_lower) >= 2 and (name_lower in db_name or db_name in name_lower):
-                return d["id"], d["name"]
-    return None, None
+    """장비명으로 device_info_id 매칭. 공용 matcher 엔진 사용."""
+    from equipment.matcher import match_from_names
+    return match_from_names(related_devices, device_list)
 
 
 def match_treatment_id(related_devices: list[str], treatment_list: list[dict]) -> tuple:
-    """시술명으로 treatment_id 매칭. (id, name) 반환."""
-    for name in related_devices:
-        name_lower = name.lower().strip()
-        if not name_lower:
-            continue
-        for t in treatment_list:
-            if name_lower == t["name"].lower():
-                return t["id"], t["name"]
-            if t.get("brand") and name_lower == t["brand"].lower():
-                return t["id"], t["name"]
-    return None, None
+    """시술명으로 treatment_id 매칭. 공용 matcher 엔진 사용."""
+    from equipment.matcher import match_treatment_from_names
+    return match_treatment_from_names(related_devices, treatment_list)
 
 
 # ── DB 마이그레이션 ──

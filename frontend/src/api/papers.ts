@@ -20,3 +20,22 @@ export const updatePaper = (id: number, data: Record<string, any>) =>
 
 export const deletePaper = (id: number) =>
   api.delete(`/papers/${id}`)
+
+// JSON 파일 업로드 (로컬 분석 결과 일괄 등록)
+export const uploadPapersJson = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post('/papers/upload-json', formData, { timeout: 60000 })
+}
+
+// 폴더 스캔 (PDF 파일 목록 확인)
+export const scanFolder = (folderPath: string) =>
+  api.post('/papers/scan-folder', { folder_path: folderPath })
+
+// 폴더 분석 실행 (paper_analyzer.py 호출)
+export const analyzeDir = (folderPath: string, apiKey: string, dryRun = false) =>
+  api.post('/papers/analyze-dir', {
+    folder_path: folderPath,
+    api_key: apiKey,
+    dry_run: dryRun,
+  }, { timeout: 660000 })  // 11분 (서버 10분 + 여유)

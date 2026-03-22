@@ -430,4 +430,111 @@ CREATE TABLE treatment_papers (
 3. **Streamlit import**: `cafe/db.py` 등에서 `import streamlit as st`가 try/except로 감싸져 있음. FastAPI에서도 import 가능.
 4. **CAFE_SHEET_ID 환경변수**: 카페 동기화 시 프론트에서 전달한 sheet_url에서 추출하여 동적으로 설정. 영구 설정이 아닌 요청별 오버라이드.
 5. **Vite 프록시 rewrite**: `/api` prefix를 제거하고 `localhost:8000`으로 전달. FastAPI의 `root_path="/api"`는 Swagger UI용.
-6. **DictionaryView.vue, PapersView.vue**: 사용하지 않는 레거시 파일. 라우터에서 제거됨. 삭제해도 무방.
+6. **Streamlit 백업**: `_streamlit_backup/` 폴더에 기존 Streamlit 관련 파일이 보존됨. 복원 방법은 해당 폴더의 README.md 참고.
+
+---
+
+## 11. 논문 분석 시스템 운영 매뉴얼
+
+### 11.1 개요
+
+미용의료 논문 PDF를 AI(Claude API)로 분석하여 서술형 요약을 생성하고 DB에 저장하는 시스템.
+칼럼 작가가 논문 내용을 쉽게 참고할 수 있도록 전문 용어를 풀어서 설명하는 방식으로 요약됨.
+
+```
+논문 PDF → [paper_analyzer.py] → Claude API 분석 → 로컬 DB 저장
+                                                        ↓
+                                            JSON 파일로 출력 (paper_results/)
+                                                        ↓
+                                          웹앱에서 JSON 업로드 → NAS DB 반영
+```
+
+### 11.2 사전 준비
+
+1. **Anthropic API 키 발급**: https://console.anthropic.com/ 에서 발급
+2. **환경변수 설정**:
+   ```bash
+   # Windows (PowerShell)
+   $env:ANTHROPIC_API_KEY = "sk-ant-api03-..."
+
+   # Mac/Linux
+   export ANTHROPIC_API_KEY="sk-ant-api03-..."
+   ```
+3. **Python 패키지 설치** (최초 1회):
+   ```bash
+   pip install anthropic pymupdf python-docx openpyxl
+   ```
+
+### 11.3 논문 분석 실행
+
+```bash
+# 프로젝트 루트에서 실행
+cd uni-portal
+
+# 폴더 내 모든 PDF 분석 (권장)
+python paper_analyzer.py --dir "Z:\스마트브랜딩 팀 공유 폴더\블로그 폴더\유앤아이의원\0. 논문 관련\00_리프팅시술"
+
+# 단일 파일 분석
+python paper_analyzer.py paper.pdf
+
+# 분석만 하고 DB 저장 안 함 (테스트용)
+python paper_analyzer.py --dry-run paper.pdf
+
+# 기존 JSON 결과에서 Word/Excel만 재출력
+python paper_analyzer.py --export-only paper_results/papers_20260322.json
+```
+
+#### 분석 파이프라인 (자동)
+```
+PDF 텍스트 추출 → DOI 추출 → 학술 논문 검증 → 중복 체크 → CrossRef 메타데이터
+→ Claude API 분석 → 장비/시술 매칭 → 로컬 DB 저장 + JSON/Word/Excel 출력
+```
+
+- **비학술 자료** (AI 정리본, 개인 컴파일): 자동 필터링 (API 비용 0)
+- **중복 논문** (파일 해시/DOI/제목 일치): 자동 건너뜀 (API 비용 0)
+- **1건당 소요 시간**: 약 30~60초 (Claude API 호출)
+- **1건당 비용**: 약 $0.01~0.03 (토큰 사용량에 따라 다름)
+
+### 11.4 분석 결과 웹앱에 업로드
+
+분석 완료 후 `paper_results/` 폴더에 생성된 JSON 파일을 웹앱에 업로드:
+
+1. 웹앱 접속 → **시술정보** → **시술논문** 탭 이동
+2. 우상단 **"JSON 업로드"** 버튼 클릭
+3. `paper_results/papers_YYYYMMDD_HHMMSS.json` 파일 선택
+4. **업로드** 클릭
+5. 결과 확인: `N건 등록, M건 중복 건너뜀`
+
+> 중복 논문(DOI/제목 동일)은 자동으로 건너뛰므로 같은 파일을 여러 번 업로드해도 안전합니다.
+
+### 11.5 권장 처리 순서 (대량 분석)
+
+논문 PDF가 폴더별로 정리되어 있으므로 순서대로 처리:
+
+```
+00_리프팅시술 (46건) → 01_필러 보톡스 (16건) → 02_색소질환 (10건)
+→ 03_스킨부스터 (29건) → 04_여드름 (3건) → 05_레이저시술 (2건)
+→ 06_흉터 모공 (13건) → 07_제모 (3건) → 09_비만 (7건)
+```
+
+각 폴더 처리 후 생성된 JSON을 웹앱에 업로드하면 됩니다.
+
+### 11.6 관련 파일
+
+| 파일 | 역할 |
+|------|------|
+| `paper_analyzer.py` | CLI 분석 도구 (메인) |
+| `paper_results/` | 분석 결과 출력 (JSON/Word/Excel) |
+| `PAPER_SYSTEM.md` | 시스템 상세 구조 문서 |
+| `api/routers/papers.py` | 논문 API (조회/등록/수정/삭제/JSON업로드) |
+| `frontend/src/views/PapersView.vue` | 논문 열람 UI |
+
+### 11.7 분석 프롬프트 수정
+
+분석 결과의 형식이나 내용을 변경하려면 `paper_analyzer.py`의 `ANALYSIS_PROMPT` 변수를 수정합니다.
+
+주요 규칙:
+- **제목 번역**: 원문 의미 최대한 보존, 과도한 함축 금지
+- **서술 방식**: 글머리 기호 나열 X, 서술형 줄 글
+- **전문 용어**: 첫 등장 시 괄호 안 쉬운 설명 추가
+- **근거 수준**: 0(미분류)~5(메타분석) 자동 판정

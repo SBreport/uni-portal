@@ -437,7 +437,7 @@ async function runPaperAnalysis() {
       <!-- DB 파일 관리 -->
       <div class="bg-white border border-slate-200 rounded-lg p-4">
         <h3 class="text-sm font-bold text-slate-700 mb-1">DB 파일 관리</h3>
-        <p class="text-xs text-slate-400 mb-3">로컬에서 작업한 DB를 서버에 업로드하거나, 현재 서버 DB를 백업합니다.</p>
+        <p class="text-xs text-slate-400 mb-3">로컬 DB에서 <strong>시술사전·논문</strong>만 서버에 병합합니다. 카페 원고·이벤트·사용자 데이터는 유지됩니다.</p>
 
         <div v-if="dbMsg" class="mb-3 px-3 py-2 rounded text-sm"
           :class="dbMsg.startsWith('오류') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'">
@@ -445,9 +445,9 @@ async function runPaperAnalysis() {
         </div>
 
         <div v-if="dbResult" class="mb-3 p-3 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600">
-          <p>파일 크기: {{ (dbResult.size_bytes / 1024 / 1024).toFixed(1) }}MB</p>
+          <p class="font-semibold text-slate-700 mb-1">{{ dbResult.message }}</p>
           <p>시술사전: {{ dbResult.device_info_count }}건 / 논문: {{ dbResult.papers_count }}건</p>
-          <p>테이블: {{ dbResult.tables?.join(', ') }}</p>
+          <p>카페 원고: {{ dbResult.cafe_articles_count }}건 (기존 유지)</p>
         </div>
 
         <div class="flex gap-3">

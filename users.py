@@ -8,7 +8,43 @@ import os
 
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "data")
-DB_PATH = os.path.join(DB_DIR, "equipment.db")
+DB_PATH = os.path.join(DB_DIR, "system.db")
+
+# 마이그레이션: equipment.db에서 users 테이블을 system.db로 복사
+def _migrate_users_if_needed():
+    """system.db가 없거나 비어있으면 equipment.db에서 users를 복사."""
+    old_db = os.path.join(DB_DIR, "equipment.db")
+    if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
+        # system.db 생성 + users 테이블
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username      TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                role          TEXT DEFAULT 'viewer',
+                branch_id     INTEGER,
+                memo          TEXT DEFAULT '',
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # equipment.db에서 복사
+        if os.path.exists(old_db):
+            try:
+                old_conn = sqlite3.connect(old_db)
+                old_conn.row_factory = sqlite3.Row
+                rows = old_conn.execute("SELECT username, password_hash, role, branch_id, memo FROM users").fetchall()
+                for r in rows:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO users (username, password_hash, role, branch_id, memo) VALUES (?,?,?,?,?)",
+                        (r["username"], r["password_hash"], r["role"], r["branch_id"], r["memo"] if "memo" in r.keys() else "")
+                    )
+                old_conn.close()
+            except Exception:
+                pass
+        conn.commit()
+        conn.close()
+
+_migrate_users_if_needed()
 
 
 def _get_conn():

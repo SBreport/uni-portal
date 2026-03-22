@@ -1,6 +1,6 @@
 # 유앤아이의원 통합 관리 시스템 — 작업 기록
 
-> 최종 업데이트: 2026-03-22
+> 최종 업데이트: 2026-03-22 (세션2)
 > 기술 스택: FastAPI + Vue 3 (Composition API) + TypeScript + Tailwind CSS 4.2 + SQLite
 
 ---
@@ -46,8 +46,9 @@ uni-portal/
 ├── cafe/                    # 카페 DB/동기화 모듈
 │   ├── db.py
 │   └── sync.py
-├── equipment/               # 장비 DB/동기화 모듈
+├── equipment/               # 장비 DB/동기화/매칭 모듈
 │   ├── db.py
+│   ├── matcher.py           # 공용 장비 매칭 엔진 (Single Source of Truth)
 │   └── sync.py
 ├── events/                  # 이벤트 DB/동기화/파서 모듈
 │   ├── db.py
@@ -259,17 +260,49 @@ requests.post("http://localhost:8000/papers/bulk", json=papers)
 
 ---
 
+### 2.8 장비 매칭 로직 통합 (2026-03-22)
+
+- **문제**: 장비 매칭 로직이 3곳에 분산 (각각 정밀도 다름)
+- **해결**: `equipment/matcher.py` 공용 모듈 생성 (Single Source of Truth)
+
+| 호출처 | Before | After |
+|--------|--------|-------|
+| `equipment/db.py` | 자체 4단계+한글체크 | `matcher.match_devices()` |
+| `paper_analyzer.py` | 자체 3단계 (한글체크 없음) | `matcher.match_from_names()` |
+| `cafe/db.py` | 단순 substring | `matcher.match_devices()` |
+
+- 매칭 우선순위: 정확→순방향포함→역방향포함→aliases
+- 한글 경계 체크: 울쎄라 ≠ 울쎄라피, 써마지 = 써마지FLX
+- 검증: 3곳 모두 동일 장비 id 반환 확인
+
+### 2.9 DB 파일 관리 기능 (2026-03-22)
+
+- **관리자 모드 → 데이터 동기화** 탭에 DB 업로드/다운로드 추가
+- `POST /equipment/db-upload`: 로컬 DB를 서버에 업로드 (자동 백업)
+- `GET /equipment/db-download`: 서버 DB를 로컬에 다운로드 (백업용)
+- 업로드 후 검증: 테이블 목록, device_info/papers 건수 표시
+- NAS 담당자 없이 웹 브라우저에서 직접 DB 관리 가능
+
+### 2.10 NAS Docker 배포 완료 (2026-03-22)
+
+- Portainer Stack으로 GitHub → 자동 빌드 배포
+- 포트포워딩: 외부:11973 → NAS:8080 (FastAPI+Vue)
+- Streamlit 컨테이너 제거, FastAPI 단일 버전 운영
+- **주의**: `users.py`에서 Streamlit 참조 제거 시 `invalidate_users_cache` 누락 → import 오류 해결
+
+---
+
 ## 6. 미완료/보류 항목
 
-| 항목 | 상태 | 비고 |
-|------|------|------|
-| 대시보드 지점 클릭 → 원고목록 이동 | 미구현 | CafeView subView + branch 연동 |
-| 원고 작성 피드백 영역 확장 | 미구현 | 여백 최대 활용 |
-| 논문 프론트엔드 UI | 미구현 | API+DB 준비 완료, EquipmentView 패널에 연동 예정 |
-| 블로그/플레이스/웹페이지 | placeholder | 콘텐츠 TBD |
-| 보고서 탭 | placeholder | 콘텐츠 TBD |
-| NAS Docker 배포 | 미완 | docker-compose 준비, 포트포워딩 미설정 |
-| 카페 동기화 실제 테스트 | 미확인 | gspread 크레덴셜 필요 |
+| 항목 | 상태 | 우선순위 | 비고 |
+|------|------|:--------:|------|
+| **DB 업로드 테스트** | 미확인 | 🔴 | 관리자모드→데이터동기화→DB업로드로 로컬 DB 반영 |
+| **논문↔블로그 연동** | 미구현 | 🟡 | paper_blog_links 테이블 + UI |
+| **웹앱 논문 분석** | 미구현 | 🟡 | editor 이상 권한, PDF 업로드→Claude API 분석 |
+| 대시보드 지점 클릭→원고목록 | 미구현 | 🟡 | CafeView subView + branch 연동 |
+| 원고 작성 피드백 영역 확장 | 미구현 | 🟡 | 여백 최대 활용 |
+| 블로그/플레이스/웹페이지 | placeholder | 🟢 | 콘텐츠 TBD |
+| 보고서 탭 | placeholder | 🟢 | 콘텐츠 TBD |
 
 ---
 
@@ -282,6 +315,10 @@ requests.post("http://localhost:8000/papers/bulk", json=papers)
 | 원고 ◀▶ 네비 오류 | props.articleId 내부 갱신 안 됨 | currentId ref 독립 관리 |
 | 담당자 "스마트 담당자" 표시 | 동기화 미실행 시 기본값 | 동기화 실행 필요 |
 | 사진값 O vs 있음 | DB원본 "O" vs 화면 "있음" | equipment.py apply 정규화 |
+| NAS 로그인 실패 (500) | users.py `st` 참조 잔존 | Streamlit 참조 완전 제거 |
+| NAS 컨테이너 crash | `invalidate_users_cache` import 누락 | users.py에 함수 추가 |
+| NAS DB 0건 | Docker Volume ≠ File Station 경로 | 웹앱 DB 업로드 기능으로 해결 |
+| GitHub push 차단 | API 키 감지 (Secret Scanning) | .gitignore + git filter-branch |
 
 ---
 

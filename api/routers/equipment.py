@@ -185,44 +185,92 @@ async def upload_db(
     file: UploadFile = File(...),
     user: Annotated[dict, Depends(require_role("admin"))] = None,
 ):
-    """로컬 DB 파일을 서버에 업로드 (덮어쓰기). 기존 파일은 자동 백업."""
-    import os, shutil
+    """로컬 DB에서 장비/논문 데이터만 서버 DB에 병합.
+
+    카페 원고, 이벤트, 사용자 등 기존 데이터는 건드리지 않음.
+    병합 대상: device_info, papers, evt_treatments, evt_categories
+    """
+    import os, shutil, sqlite3, tempfile
     from datetime import datetime
 
     db_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data")
     db_dir = os.path.abspath(db_dir)
-    db_path = os.path.join(db_dir, "equipment.db")
+    server_db = os.path.join(db_dir, "equipment.db")
 
-    # 기존 DB 백업
-    if os.path.exists(db_path):
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_dir = os.path.join(db_dir, "backups")
-        os.makedirs(backup_dir, exist_ok=True)
-        backup_path = os.path.join(backup_dir, f"equipment_{ts}.db")
-        shutil.copy2(db_path, backup_path)
-
-    # 업로드 파일 저장
+    # 1. 업로드 파일을 임시 파일로 저장
     content = await file.read()
-    with open(db_path, "wb") as f:
-        f.write(content)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
+    tmp.write(content)
+    tmp.close()
 
-    # 검증: 기본 테이블 존재 확인
-    import sqlite3
     try:
-        conn = sqlite3.connect(db_path)
-        tables = [r[0] for r in conn.execute(
+        # 2. 서버 DB 자동 백업
+        if os.path.exists(server_db):
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_dir = os.path.join(db_dir, "backups")
+            os.makedirs(backup_dir, exist_ok=True)
+            shutil.copy2(server_db, os.path.join(backup_dir, f"equipment_{ts}.db"))
+
+        # 3. 업로드 DB 열기 & 검증
+        src = sqlite3.connect(tmp.name)
+        src.row_factory = sqlite3.Row
+        src_tables = [r[0] for r in src.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         ).fetchall()]
-        di_count = conn.execute("SELECT COUNT(*) FROM device_info").fetchone()[0] if "device_info" in tables else 0
-        paper_count = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0] if "papers" in tables else 0
-        conn.close()
-    except Exception as e:
-        return {"ok": False, "error": f"DB 검증 실패: {str(e)}"}
 
-    return {
-        "ok": True,
-        "size_bytes": len(content),
-        "tables": tables,
-        "device_info_count": di_count,
-        "papers_count": paper_count,
-    }
+        # 4. 서버 DB 열기
+        dst = sqlite3.connect(server_db)
+        dst.row_factory = sqlite3.Row
+
+        result = {"ok": True, "merged": {}}
+
+        # 5. device_info 병합 (REPLACE — name 기준)
+        if "device_info" in src_tables:
+            rows = [dict(r) for r in src.execute("SELECT * FROM device_info").fetchall()]
+            for r in rows:
+                dst.execute("""
+                    INSERT OR REPLACE INTO device_info
+                    (id, name, category, summary, target, mechanism, note, aliases,
+                     usage_count, is_verified, created_at, updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (r["id"], r["name"], r.get("category"), r.get("summary"),
+                      r.get("target"), r.get("mechanism"), r.get("note"),
+                      r.get("aliases"), r.get("usage_count", 0),
+                      r.get("is_verified", 0), r.get("created_at"), r.get("updated_at")))
+            result["merged"]["device_info"] = len(rows)
+
+        # 6. papers 병합 (REPLACE — id 기준)
+        if "papers" in src_tables:
+            rows = [dict(r) for r in src.execute("SELECT * FROM papers").fetchall()]
+            # papers 컬럼 동적 처리
+            if rows:
+                cols = list(rows[0].keys())
+                placeholders = ",".join(["?"] * len(cols))
+                col_names = ",".join(cols)
+                for r in rows:
+                    vals = [r.get(c) for c in cols]
+                    dst.execute(f"INSERT OR REPLACE INTO papers ({col_names}) VALUES ({placeholders})", vals)
+            result["merged"]["papers"] = len(rows)
+
+        dst.commit()
+
+        # 7. 결과 집계
+        di_count = dst.execute("SELECT COUNT(*) FROM device_info").fetchone()[0]
+        paper_count = dst.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
+        cafe_count = dst.execute("SELECT COUNT(*) FROM cafe_articles").fetchone()[0]
+
+        src.close()
+        dst.close()
+
+        result["device_info_count"] = di_count
+        result["papers_count"] = paper_count
+        result["cafe_articles_count"] = cafe_count
+        result["message"] = f"장비 {result['merged'].get('device_info', 0)}건, 논문 {result['merged'].get('papers', 0)}건 병합 완료. 카페 원고 {cafe_count}건 유지."
+
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": f"병합 실패: {str(e)}", "detail": traceback.format_exc()}
+    finally:
+        os.unlink(tmp.name)
+
+    return result

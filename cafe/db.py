@@ -12,7 +12,42 @@ import pandas as pd
 
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-DB_PATH = os.path.join(DB_DIR, "equipment.db")
+DB_PATH = os.path.join(DB_DIR, "cafe.db")
+EQUIPMENT_DB_PATH = os.path.join(DB_DIR, "equipment.db")
+
+# 마이그레이션: equipment.db에서 cafe 테이블을 cafe.db로 복사
+def _migrate_cafe_if_needed():
+    """cafe.db가 없으면 equipment.db에서 cafe_* 테이블을 스키마+데이터 그대로 복사."""
+    old_db = os.path.join(DB_DIR, "equipment.db")
+    if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
+        return  # 이미 존재
+    if not os.path.exists(old_db):
+        return
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(f"ATTACH DATABASE ? AS src", (old_db,))
+
+    cafe_tables = ['cafe_periods', 'cafe_branch_periods', 'cafe_articles',
+                   'cafe_comments', 'cafe_feedbacks', 'cafe_status_log', 'cafe_sync_log']
+
+    for tbl in cafe_tables:
+        try:
+            # 스키마 복사
+            schema = conn.execute(
+                f"SELECT sql FROM src.sqlite_master WHERE type='table' AND name=?", (tbl,)
+            ).fetchone()
+            if schema and schema[0]:
+                conn.execute(schema[0])
+                # 데이터 복사
+                conn.execute(f"INSERT INTO main.{tbl} SELECT * FROM src.{tbl}")
+        except Exception:
+            pass
+
+    conn.commit()
+    conn.execute("DETACH DATABASE src")
+    conn.close()
+
+_migrate_cafe_if_needed()
 
 # 원고 상태 정의
 STATUSES = ["작성대기", "작성완료", "수정요청", "검수완료", "발행완료", "보류"]
@@ -27,10 +62,17 @@ STATUS_COLORS = {
 
 
 def _get_conn():
+    """cafe.db 연결. equipment.db를 ATTACH하여 evt_branches 등 참조 가능."""
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.row_factory = sqlite3.Row
+    # equipment.db를 ATTACH (evt_branches JOIN 등 크로스 DB 조회용)
+    if os.path.exists(EQUIPMENT_DB_PATH):
+        try:
+            conn.execute("ATTACH DATABASE ? AS equip", (EQUIPMENT_DB_PATH,))
+        except Exception:
+            pass
     return conn
 
 
@@ -406,8 +448,17 @@ def load_cafe_summary(period_id: int) -> list[dict]:
 # 장비 컨텍스트 (device_info + evt_items + equipment 조합)
 # ============================================================
 
+def _get_equipment_conn():
+    """equipment.db 전용 연결 (이벤트/보유장비 조회용)."""
+    conn = sqlite3.connect(EQUIPMENT_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def get_equipment_context(branch_name: str, equipment_name: str) -> dict:
     """장비 상세 정보 + 해당 지점 이벤트 가격 + 보유 여부 조회.
+
+    device_info, evt_*, equipment → equipment.db에서 조회.
 
     Returns:
         {
@@ -420,7 +471,7 @@ def get_equipment_context(branch_name: str, equipment_name: str) -> dict:
     if not equipment_name or not equipment_name.strip():
         return {"device_info": None, "events": [], "is_owned": False, "quantity": 0}
 
-    conn = _get_conn()
+    conn = _get_equipment_conn()
     c = conn.cursor()
     result = {"device_info": None, "events": [], "is_owned": False, "quantity": 0}
 

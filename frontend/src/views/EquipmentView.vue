@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useEquipmentStore } from '@/stores/equipment'
 import { useAuthStore } from '@/stores/auth'
 import * as equipApi from '@/api/equipment'
+import * as papersApi from '@/api/papers'
 
 const store = useEquipmentStore()
 const auth = useAuthStore()
@@ -21,6 +22,7 @@ const detailData = ref<{
   is_owned: boolean
   quantity: number
 } | null>(null)
+const detailPapers = ref<any[]>([])
 
 onMounted(async () => {
   await Promise.all([store.loadBranches(), store.loadCategories()])
@@ -80,9 +82,17 @@ async function openDetail(row: any) {
   selectedRow.value = row
   detailLoading.value = true
   detailData.value = null
+  detailPapers.value = []
   try {
     const { data } = await equipApi.getEquipmentContext(row['지점'], row['기기명'])
     detailData.value = data
+    // 관련 논문 로드 (device_info_id가 있을 때)
+    if (data.device_info?.id) {
+      try {
+        const { data: papers } = await papersApi.getPapersByDevice(data.device_info.id)
+        detailPapers.value = papers
+      } catch { /* 논문 없으면 무시 */ }
+    }
   } catch {
     detailData.value = { device_info: null, events: [], is_owned: false, quantity: 0 }
   } finally {
@@ -330,15 +340,40 @@ function formatPrice(n: number | null) {
               </template>
             </section>
 
-            <!-- ── 관련 논문 (준비 중) ── -->
-            <section class="opacity-50">
+            <!-- ── 관련 논문 ── -->
+            <section>
               <h4 class="text-sm font-bold text-slate-700 mb-3 flex items-center gap-1.5">
                 <span class="w-5 h-5 bg-emerald-100 text-emerald-600 rounded flex items-center justify-center text-xs font-bold">P</span>
                 관련 논문
-                <span class="ml-auto text-[11px] text-slate-400 font-normal bg-slate-100 px-2 py-0.5 rounded">준비 중</span>
+                <span v-if="detailPapers.length" class="ml-1 text-[11px] text-emerald-600 font-normal">{{ detailPapers.length }}건</span>
               </h4>
-              <div class="bg-slate-50 rounded-lg p-4 text-center">
-                <p class="text-sm text-slate-400">시술 관련 논문 정보가 곧 연동됩니다.</p>
+
+              <div v-if="detailPapers.length" class="space-y-2">
+                <div v-for="paper in detailPapers" :key="paper.id"
+                  class="bg-slate-50 rounded-lg p-3 border border-slate-100 hover:border-blue-200 transition cursor-pointer"
+                  @click="$router.push({ path: '/papers', query: { id: paper.id } })">
+                  <div class="flex items-center gap-1.5 mb-1">
+                    <span class="text-[11px] font-medium px-1.5 py-0.5 rounded"
+                      :class="paper.evidence_level >= 4 ? 'bg-emerald-100 text-emerald-700' : paper.evidence_level >= 3 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'">
+                      {{ '★'.repeat(paper.evidence_level) }}{{ '☆'.repeat(5 - paper.evidence_level) }}
+                    </span>
+                    <span v-if="paper.study_type" class="text-[11px] text-slate-400">{{ paper.study_type }}</span>
+                    <span class="ml-auto text-[11px] text-slate-400">{{ paper.pub_year }}</span>
+                  </div>
+                  <p class="text-sm font-medium text-slate-700 leading-snug line-clamp-2">
+                    {{ paper.title_ko || paper.title }}
+                  </p>
+                  <p v-if="paper.one_line_summary" class="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                    {{ paper.one_line_summary }}
+                  </p>
+                  <p v-if="paper.authors" class="text-[11px] text-slate-400 mt-1 truncate">
+                    {{ paper.authors }}{{ paper.journal ? ' / ' + paper.journal : '' }}
+                  </p>
+                </div>
+              </div>
+
+              <div v-else class="bg-slate-50 rounded-lg p-4 text-center">
+                <p class="text-sm text-slate-400">등록된 관련 논문이 없습니다.</p>
               </div>
             </section>
           </div>

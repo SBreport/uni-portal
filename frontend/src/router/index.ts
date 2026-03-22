@@ -30,6 +30,11 @@ const router = createRouter({
       name: 'treatment-info',
       component: () => import('@/views/TreatmentInfoView.vue'),
     },
+    {
+      path: '/papers',
+      name: 'papers',
+      component: () => import('@/views/PapersView.vue'),
+    },
     // ── 마케팅 하위 ──
     {
       path: '/cafe',

@@ -15,3 +15,8 @@ google-auth
 
 # 시각화 (보고서용)
 plotly
+
+# 논문 분석
+anthropic
+pymupdf
+python-docx

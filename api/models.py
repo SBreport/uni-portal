@@ -125,3 +125,62 @@ class EventSyncRequest(BaseModel):
     start_month: int
     end_month: int
     source_url: str = ""
+
+
+# ── Papers (논문) ──
+class PaperCreate(BaseModel):
+    device_info_id: Optional[int] = None
+    treatment_id: Optional[int] = None
+    doi: str = ""
+    title: str
+    title_ko: str = ""
+    authors: str = ""
+    journal: str = ""
+    pub_year: Optional[int] = None
+    pub_date: str = ""
+    abstract_summary: str = ""
+    key_findings: str = ""
+    keywords: str = "[]"
+    evidence_level: int = 0
+    study_type: str = ""
+    sample_size: str = ""
+    source_url: str = ""
+    source_file: str = ""
+    status: str = "draft"
+    one_line_summary: str = ""
+    research_purpose: str = ""
+    study_design_detail: str = ""
+    key_results: str = ""
+    conclusion: str = ""
+    quotable_stats: str = "[]"
+    cautions: str = ""
+    follow_up_period: str = ""
+
+
+class PaperUpdate(BaseModel):
+    device_info_id: Optional[int] = None
+    treatment_id: Optional[int] = None
+    doi: Optional[str] = None
+    title: Optional[str] = None
+    title_ko: Optional[str] = None
+    authors: Optional[str] = None
+    journal: Optional[str] = None
+    pub_year: Optional[int] = None
+    pub_date: Optional[str] = None
+    abstract_summary: Optional[str] = None
+    key_findings: Optional[str] = None
+    keywords: Optional[str] = None
+    evidence_level: Optional[int] = None
+    study_type: Optional[str] = None
+    sample_size: Optional[str] = None
+    source_url: Optional[str] = None
+    source_file: Optional[str] = None
+    status: Optional[str] = None
+    one_line_summary: Optional[str] = None
+    research_purpose: Optional[str] = None
+    study_design_detail: Optional[str] = None
+    key_results: Optional[str] = None
+    conclusion: Optional[str] = None
+    quotable_stats: Optional[str] = None
+    cautions: Optional[str] = None
+    follow_up_period: Optional[str] = None

@@ -1,519 +1,304 @@
 # 유앤아이의원 통합 관리 시스템 — 작업 기록
 
-> 최종 업데이트: 2026-03-20
-> 목적: Streamlit → FastAPI+Vue 마이그레이션 과정의 모든 작업 이력을 기록하여 후속 고도화에 활용
+> 최종 업데이트: 2026-03-22
+> 기술 스택: FastAPI + Vue 3 (Composition API) + TypeScript + Tailwind CSS 4.2 + SQLite
 
 ---
 
-## 목차
-
-1. [프로젝트 구조](#1-프로젝트-구조)
-2. [기술 스택](#2-기술-스택)
-3. [파일 맵 (전체)](#3-파일-맵)
-4. [화면별 구현 현황](#4-화면별-구현-현황)
-5. [API 엔드포인트 맵](#5-api-엔드포인트-맵)
-6. [DB 스키마 핵심](#6-db-스키마-핵심)
-7. [작업 이력 (상세)](#7-작업-이력-상세)
-8. [버그 수정 이력](#8-버그-수정-이력)
-9. [알려진 이슈 & 미완성](#9-알려진-이슈--미완성)
-10. [다음 작업 계획](#10-다음-작업-계획)
-
----
-
-## 1. 프로젝트 구조
+## 1. 프로젝트 구조 (FastAPI 전환 후)
 
 ```
 uni-portal/
-├── api/                          # FastAPI 백엔드
-│   ├── main.py                   # 앱 엔트리, CORS, 라우터 등록
-│   ├── auth_jwt.py               # JWT 토큰 생성/검증 (HS256)
-│   ├── deps.py                   # 의존성 주입 (인증 가드)
-│   ├── models.py                 # Pydantic 스키마
+├── api/                     # FastAPI 백엔드
+│   ├── main.py              # 앱 엔트리포인트
+│   ├── models.py            # Pydantic 스키마
 │   └── routers/
-│       ├── auth.py               # 로그인/사용자 정보
-│       ├── users.py              # 사용자 CRUD (관리자)
-│       ├── cafe.py               # 카페 마케팅 (17 엔드포인트)
-│       ├── equipment.py          # 보유장비 (13 엔드포인트)
-│       └── events.py             # 이벤트 (12 엔드포인트)
-│
-├── cafe/                         # 카페 모듈 (Streamlit/FastAPI 공용)
-│   ├── db.py                     # DB CRUD (load_cafe_articles 등)
-│   ├── sync.py                   # 구글 시트 동기화
-│   └── ui.py                     # Streamlit UI (레거시)
-│
-├── equipment/                    # 장비 모듈
-│   ├── db.py                     # DB CRUD + 장비사전
-│   └── sync.py                   # 구글 시트 동기화
-│
-├── events/                       # 이벤트 모듈
-│   ├── db.py                     # DB CRUD + 검색 (지점 ㄱㄴㄷ순)
-│   ├── sync.py                   # 구글 시트/엑셀 동기화
-│   ├── parser.py                 # 이벤트 파싱 엔진
-│   ├── price_parser.py           # 가격 추출
-│   ├── normalizer.py             # 시술명 정규화
-│   └── validators.py             # 데이터 검증
-│
-├── frontend/                     # Vue.js SPA
+│       ├── auth.py          # JWT 인증
+│       ├── users.py         # 사용자 관리
+│       ├── cafe.py          # 카페 마케팅 (17+ endpoints)
+│       ├── equipment.py     # 보유장비
+│       ├── events.py        # 이벤트
+│       └── papers.py        # 논문/연구자료 (신규)
+├── frontend/                # Vue.js 프론트엔드
 │   ├── src/
-│   │   ├── api/                  # Axios 클라이언트
-│   │   │   ├── client.ts         # 기본 설정 (baseURL, timeout 30s, JWT 인터셉터)
-│   │   │   ├── cafe.ts           # 카페 API (동기화 timeout 180s)
-│   │   │   ├── equipment.ts      # 장비 API
-│   │   │   ├── events.ts         # 이벤트 API
-│   │   │   └── users.ts          # 사용자 API
-│   │   ├── components/
-│   │   │   ├── common/
-│   │   │   │   ├── AppSidebar.vue     # 사이드바 (트리메뉴)
-│   │   │   │   └── DataTable.vue      # 공용 테이블 컴포넌트
-│   │   │   └── cafe/
-│   │   │       ├── ArticleEditor.vue  # 원고 편집기
-│   │   │       ├── ArticleList.vue    # 원고 목록 (구버전, 미사용)
-│   │   │       ├── ArticleListV1.vue  # 원고 목록 V1 (2단 구조)
-│   │   │       ├── ArticleListV2.vue  # 원고 목록 V2 (3컬럼+사이드패널)
-│   │   │       └── CafeDashboard.vue  # 카페 대시보드
-│   │   ├── stores/               # Pinia 상태관리
-│   │   │   ├── auth.ts
-│   │   │   ├── cafe.ts           # SummaryRow 인터페이스 포함
-│   │   │   ├── equipment.ts
-│   │   │   └── events.ts
-│   │   ├── views/                # 페이지 뷰
+│   │   ├── views/           # 메인 뷰
 │   │   │   ├── HomeView.vue
-│   │   │   ├── LoginView.vue
-│   │   │   ├── CafeView.vue      # 서브탭: 대시보드/원고목록/원고작성/발행결과
-│   │   │   ├── EquipmentView.vue  # 35:65 2컬럼, 상세패널
-│   │   │   ├── EventsView.vue    # 검색+가격필터
-│   │   │   ├── AdminView.vue     # 데이터동기화, 시술정보관리
-│   │   │   ├── DictionaryView.vue
-│   │   │   ├── TreatmentInfoView.vue
-│   │   │   ├── BlogView.vue      # 플레이스홀더
-│   │   │   ├── PlaceView.vue     # 플레이스홀더
-│   │   │   ├── WebpageView.vue   # 플레이스홀더
-│   │   │   ├── ReportsView.vue   # 플레이스홀더
-│   │   │   └── PapersView.vue
-│   │   └── router/
-│   │       └── index.ts          # 11개 라우트, 인증 가드
-│   └── vite.config.ts            # /api 프록시 → localhost:8000
-│
-├── data/                         # SQLite DB 파일
-│   └── equipment.db              # 전체 공유 DB (WAL 모드)
-│
-├── portal/                       # 버전 선택 포털
-│   └── index.html                # Stream vs Fast 선택
-│
-├── docker-compose.yml
-├── Dockerfile / Dockerfile.api / Dockerfile.frontend
-├── HANDOVER.md                   # 인수인계 기획안
-├── PROJECT_ROADMAP.md            # 로드맵
-└── WORK_LOG.md                   # ← 이 파일
+│   │   │   ├── CafeView.vue
+│   │   │   ├── EquipmentView.vue
+│   │   │   ├── EventsView.vue
+│   │   │   ├── AdminView.vue
+│   │   │   ├── ReportsView.vue    (placeholder)
+│   │   │   ├── PlaceView.vue      (placeholder)
+│   │   │   └── WebpageView.vue    (placeholder)
+│   │   ├── components/
+│   │   │   ├── cafe/
+│   │   │   │   ├── ArticleListV1.vue   # 3컬럼 그리드 (순번+상태|제목+본문|댓글)
+│   │   │   │   ├── ArticleListV2.vue   # 4컬럼 (원고정보|본문|댓글|메타+액션)
+│   │   │   │   ├── ArticleEditor.vue
+│   │   │   │   └── CafeDashboard.vue
+│   │   │   └── common/
+│   │   │       ├── AppSidebar.vue      # 트리형 사이드바
+│   │   │       └── DataTable.vue
+│   │   ├── stores/          # Pinia 상태관리
+│   │   ├── api/             # Axios API 클라이언트
+│   │   └── router/          # Vue Router
+│   └── vite.config.ts
+├── cafe/                    # 카페 DB/동기화 모듈
+│   ├── db.py
+│   └── sync.py
+├── equipment/               # 장비 DB/동기화 모듈
+│   ├── db.py
+│   └── sync.py
+├── events/                  # 이벤트 DB/동기화/파서 모듈
+│   ├── db.py
+│   ├── sync.py
+│   ├── parser.py
+│   ├── normalizer.py
+│   ├── validators.py
+│   └── price_parser.py
+├── data/
+│   └── equipment.db         # SQLite DB (WAL mode)
+├── _streamlit_backup/       # Streamlit 버전 백업 (2026-03-22)
+├── docker-compose.yml       # FastAPI + Vue 2서비스
+├── Dockerfile.api
+├── Dockerfile.frontend
+├── init_db.py               # DB 스키마 (25개 테이블) + 시드 데이터
+└── requirements.txt         # FastAPI 의존성
 ```
 
 ---
 
-## 2. 기술 스택
+## 2. 완료된 작업
 
-| 계층 | 기술 | 버전 | 비고 |
-|------|------|------|------|
-| 프론트엔드 | Vue 3 + TypeScript | Composition API | SPA, Vite 7.3 |
-| 상태관리 | Pinia | | auth, cafe, equipment, events |
-| UI | Tailwind CSS | 4.2 | 유틸리티 기반 |
-| 테이블 | TanStack Vue Table | | DataTable 컴포넌트 |
-| 백엔드 | FastAPI (Python) | | JWT(HS256), bcrypt |
-| DB | SQLite | WAL 모드 | 단일 파일 공유 |
-| 외부 연동 | gspread + google-auth | | 구글 시트 동기화 |
-| 레거시 | Streamlit | :8501 | 병행 운영 중 |
+### 2.1 카페 마케팅 (CafeView)
 
-### 주요 설정 패턴
+#### 탭 구성: 대시보드 — 원고 목록 — 원고 작성 — 발행 결과
 
-```
-Vite 프록시: /api/* → localhost:8000/* (prefix strip)
-FastAPI root_path="/api" → Swagger UI용
-Axios baseURL: '/api', timeout: 30000 (동기화만 180000)
-JWT: HS256, localStorage 저장, 인터셉터 자동 첨부
-```
+#### 대시보드
+- 전체 지점 요약 카드 (전체 원고, 발행 완료, 미착수, 발행률, 지점 수)
+- 지점별 테이블: 지점/담당자/작가/총건수/진행상황
+- 유형별 상세 토글 (정보성·후기성·슈퍼세트) — 접기/펼치기
 
----
+#### 원고 목록 (V1/V2 레이아웃 선택)
+- **V1 — 3컬럼 그리드**: `52px | minmax(0,480px) | 1fr`
+  - 1열: 순번 + 상태 배지 (세로 정렬, 최소 공간)
+  - 2열: 장비 태그 + 제목 + 본문 (8줄 clamp)
+  - 3열: 댓글·대댓글 쌍으로 묶어 표시
+- **V2 — 4컬럼 블록 + 사이드 패널**: `180px | 1fr | 1fr | 150px`
+  - 원고정보 | 본문 | 댓글·대댓글 | **메타+빠른액션**
+  - 사이드: 키워드, 카테고리, 작성/수정일, 상태 변경 드롭다운, 발행/편집 링크
+- 상단: 상태 필터 칩 + 전체 검색
+- 레이아웃 전환 버튼 (우상단)
+- 교대 배경색 + hover 하이라이트
 
-## 3. 파일 맵
+#### 원고 작성 (ArticleEditor)
+- 원고 메타(키워드/카테고리/장비명) 편집
+- 본문 작성 + 실시간 저장
+- 댓글·대댓글 3슬롯
+- **◀ ▶ 네비게이션**: `currentId` 내부 ref로 독립 관리 (번호만 표시)
+- 상태 변경 + 이력 조회
 
-### Vue 컴포넌트 (21개)
+#### 발행 결과
+- 컬럼: 지점명 / # / 발행일 / 카페명 / 발행링크 / 유형 / 제목 / 발행여부
+- 발행/미발행 배지 표시
 
-| 파일 | 역할 | 상태 |
-|------|------|------|
-| `App.vue` | 루트 레이아웃 | ✅ 완료 |
-| `LoginView.vue` | 로그인 | ✅ 완료 |
-| `HomeView.vue` | 홈 대시보드 | ✅ 기본 완료 |
-| `CafeView.vue` | 카페 메인 (4 서브탭) | ✅ 완료 |
-| `CafeDashboard.vue` | 카페 대시보드 테이블 | ✅ 완료 |
-| `ArticleListV1.vue` | 원고 목록 V1 (3컬럼: 순번\|제목+본문\|댓글) | ✅ 완료 |
-| `ArticleListV2.vue` | 원고 목록 V2 (4컬럼: 메타\|본문\|댓글\|사이드패널) | ✅ 완료 |
-| `ArticleList.vue` | 원고 목록 (초기 버전, 미사용) | ⚠️ 레거시 |
-| `ArticleEditor.vue` | 원고 편집기 | ✅ 완료 |
-| `EquipmentView.vue` | 보유장비 (35:65 2컬럼) | ✅ 완료 |
-| `EventsView.vue` | 이벤트 (검색+가격필터) | ✅ 완료 |
-| `AdminView.vue` | 관리자 모드 | ✅ 완료 |
-| `DictionaryView.vue` | 장비 사전 | ✅ 완료 |
-| `TreatmentInfoView.vue` | 시술 정보 | ✅ 완료 |
-| `BlogView.vue` | 블로그 | 📋 플레이스홀더 |
-| `PlaceView.vue` | 플레이스 | 📋 플레이스홀더 |
-| `WebpageView.vue` | 웹페이지 | 📋 플레이스홀더 |
-| `ReportsView.vue` | 보고서 | 📋 플레이스홀더 |
-| `PapersView.vue` | 논문 | 📋 플레이스홀더 |
-| `AppSidebar.vue` | 좌측 사이드바 | ✅ 완료 |
-| `DataTable.vue` | 공용 테이블 | ✅ 완료 |
+#### 동기화
+- 구글 시트 → DB 동기화 (gspread + google-auth)
+- **타임아웃**: 프론트 30초 → 180초 수정 (42개 지점 대응)
+- 에러 로깅 (traceback) + 프론트엔드 상세 에러 메시지
+- 카페 동기화 UI 간소화 (링크+지점만 유지, 연도/월 자동)
 
-### API 라우터 (5개, 총 47+ 엔드포인트)
+### 2.2 보유장비 (EquipmentView)
 
-| 파일 | 엔드포인트 수 |
-|------|-------------|
-| `routers/auth.py` | 2 |
-| `routers/users.py` | 3 |
-| `routers/cafe.py` | 17 |
-| `routers/equipment.py` | 13 |
-| `routers/events.py` | 12 |
+- 영구 2컬럼: 35% 테이블 : 65% 상세 패널
+- 장비 클릭 → 시술 정보 + 현재 이벤트 연동 표시 (GET /cafe/equipment-context)
+- 이벤트 할인율 배지, 장비 별명 태그
+- 필터: 지점/카테고리
+- **DB 컬럼명 정규화**: `지점명→지점`, 사진값 `O→있음` (equipment.py)
+- 상세 패널 헤더: 장비명 + 지점·카테고리·수량·비고 한 줄
+- 3섹션: [T] 시술 정보, [E] 현재 이벤트, [P] 관련 논문 (papers 연동 예정)
 
-### Pinia 스토어 (4개)
+### 2.3 이벤트 (EventsView)
 
-| 스토어 | 주요 상태 |
-|--------|----------|
-| `auth` | token, username, role, isLoggedIn |
-| `cafe` | periods, branches, articles, summary, currentArticle |
-| `equipment` | items, filters, selectedItem |
-| `events` | events, branches, filters (global/price/branch) |
+- 테이블 내 검색 + 이벤트명 검색 (필터바 통합)
+- **가격대 필터** (만원 단위 입력 → ×10000 비교)
+- 비고 컬럼: truncate + hover title 툴팁
+- 이벤트명 320px, 비고 100px
+- 지점 순서: ㄱㄴㄷ순 (`ORDER BY eb.name`)
 
----
+### 2.4 사이드바 (AppSidebar)
 
-## 4. 화면별 구현 현황
+- 트리형 마케팅 메뉴 (chevron 회전 애니메이션, CSS transition)
+  - 하위: 카페 / 블로그 / 플레이스 / 웹페이지
+  - 하위 탭 진입 시 자동 확장
+- 메뉴 순서: HOME → 보유장비 → 이벤트 → 시술정보 → 마케팅(트리) → separator → 보고서 → 관리자 모드
 
-### 4-1. 사이드바 (AppSidebar.vue)
+### 2.5 관리자 모드 (AdminView)
 
-```
-메뉴 구조:
-H  HOME           → /
-E  보유장비        → /equipment
-V  이벤트          → /events
-T  시술정보        → /treatment-info
-M  마케팅 ▼        (트리 메뉴, 자동 펼침)
-   C 카페          → /cafe
-   B 블로그        → /blog
-   P 플레이스      → /place
-   W 웹페이지      → /webpage
-───────────────────
-R  보고서          → /reports
-A  관리자 모드     → /admin (admin만 표시)
-```
+- 탭명: 동기화→데이터 동기화, 시술사전 관리→시술정보 관리
+- 카페 동기화 UI: 시트 링크 + 지점 선택만 유지
 
-- 트리 메뉴: CSS transition으로 접기/펼치기
-- 마케팅 하위 페이지 접속시 자동 펼침
-- 현재 활성 라우트 파란색 하이라이트
+### 2.6 Streamlit → FastAPI 전환 (2026-03-22)
 
-### 4-2. 카페 마케팅 (CafeView.vue)
-
-**서브탭 구성**: `대시보드` | `원고 목록` | `원고 작성` | `발행 결과`
-
-**필터 바**: 지점 선택(전체 기본), 연도, 월
-
-#### 대시보드 (CafeDashboard.vue)
-- KPI 카드 5개: 전체원고, 발행완료, 미착수, 발행률, 지점수
-- 지점별 테이블: 지점, 담당자, 작가, 총건수, 진행상황(프로그레스바)
-- **토글**: 유형별 상세 (정보성/후기성/슈퍼세트) 접기/펼치기
-- **지점 클릭**: 해당 지점 원고 목록으로 이동 (`emit('go-branch')`)
-
-#### 원고 목록 — V1 (ArticleListV1.vue)
-```
-레이아웃: 3컬럼 그리드
-┌──52px──┬────── minmax(0,480px) ──┬────── 1fr ──────────────┐
-│  순번   │ [장비태그] 제목          │ 댓1 내용...              │
-│ 상태배지 │ 본문 내용...            │   ↩ 대댓글...            │
-│         │                        │ 댓2 내용...              │
-│         │                        │   ↩ 대댓글...            │
-└─────────┴────────────────────────┴─────────────────────────┘
-```
-- 상태 필터 칩 (전체/작성대기/작성완료/...)
-- 검색 (제목/본문/장비/키워드)
-- 교대 배경색, hover 효과
-- 편집 버튼 → 원고 작성 탭으로 이동
-
-#### 원고 목록 — V2 (ArticleListV2.vue)
-```
-레이아웃: 4컬럼 그리드
-┌─180px──┬───── 1fr ─────┬───── 1fr ─────┬──150px──┐
-│ 순번    │ 본문           │ 댓1 ...       │ 키워드   │
-│ 상태    │               │  ↩ 대댓글     │ 카테고리  │
-│ 제목    │               │ 댓2 ...       │ 작성03.05│
-│ [장비]  │               │  ↩ 대댓글     │ 수정03.18│
-│ 🔗 ✏️  │               │               │[상태변경▼]│
-│         │               │               │ 🔗 ✏️   │
-└─────────┴───────────────┴───────────────┴─────────┘
-```
-- 사이드 패널: 키워드, 카테고리, 작성일/수정일, 빠른 상태 변경 드롭다운
-- `quickStatusChange()`: 목록에서 바로 상태 변경 가능
-
-#### V1/V2 전환 토글
-- 우측 상단 "레이아웃: [V1 2단] [V2 3컬럼]" 버튼
-- 담당자와 함께 피드백 후 하나 확정 예정
-
-#### 원고 작성 (ArticleEditor.vue)
-- `◀ #N < 현재글 > #N ▶` 네비게이션
-- 키워드/카테고리/장비/제목/본문 편집
-- 댓글/대댓글 슬롯별 편집
-- 피드백 영역 (→ 여백 최대 활용 예정)
-- 상태 변경 + 발행 URL 입력
-
-#### 발행 결과 (신규)
-- 테이블 컬럼: 지점명 | # | 발행일 | 카페명 | 발행링크 | 유형 | 제목 | 발행여부
-- `발행여부`: URL 유무로 "발행"/"미발행" 배지
-
-### 4-3. 보유장비 (EquipmentView.vue)
-
-```
-레이아웃: 상시 2컬럼 (35% : 65%)
-┌─── 35% 테이블 ──────┬─── 65% 상세 패널 ─────────────────┐
-│ 지점 카테고리 장비명  │ 장비명                            │
-│ w-14 w-16    w-28    │ 지점 · 카테고리 · 수량 · 비고      │
-│                      │ ────────────────────────           │
-│ [클릭 → 상세]        │ [T] 시술 정보 (별칭 태그)          │
-│                      │ [E] 현재 이벤트 (% OFF 배지)       │
-│                      │ [P] 관련 논문 (준비 중)            │
-└──────────────────────┴────────────────────────────────────┘
-```
-- 필터: 지점, 카테고리
-- 클릭 시 `GET /cafe/equipment-context` 호출
-- 비고가 있으면 헤더에 한 줄로 표시
-
-### 4-4. 이벤트 (EventsView.vue)
-- 필터 바: 지점 선택, 이벤트명 검색, 테이블 내 검색, 가격대 검색 (만원 단위)
-- 컬럼: 이벤트명(320px), 비고(100px) + hover 툴팁
-- 가격 필터: `min * 10000`, `max * 10000` 비교
-
-### 4-5. 관리자 모드 (AdminView.vue)
-- 탭: `데이터 동기화` | `시술정보 관리`
-- 카페 동기화: 링크 + 지점 선택만 (연도/월 자동)
-- 동기화 실패 시 상세 에러 표시 (타임아웃/연결오류/상태코드)
-
----
-
-## 5. API 엔드포인트 맵
-
-### 인증 (auth.py)
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| POST | `/auth/login` | 로그인 → JWT 발급 |
-| GET | `/auth/me` | 현재 사용자 정보 |
-
-### 사용자 (users.py)
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| GET | `/users` | 전체 목록 |
-| POST | `/users` | 생성 |
-| DELETE | `/users/{id}` | 삭제 |
-
-### 카페 (cafe.py) — 17개
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| GET | `/cafe/periods` | 기간 목록 |
-| GET | `/cafe/branches` | 지점 목록 |
-| POST | `/cafe/branch-periods` | 지점-기간 생성/조회 |
-| GET | `/cafe/branch-periods/{id}/meta` | 메타 정보 |
-| GET | `/cafe/branch-periods/{id}/articles` | 원고 목록 (body + comments_json 포함) |
-| GET | `/cafe/articles/{id}` | 원고 상세 |
-| PATCH | `/cafe/articles/{id}` | 원고 수정 |
-| POST | `/cafe/articles/{id}/status` | 상태 변경 |
-| POST | `/cafe/articles/{id}/publish` | 발행 |
-| PUT | `/cafe/articles/{id}/comments/{slot}` | 댓글 저장 |
-| POST | `/cafe/articles/{id}/feedbacks` | 피드백 추가 |
-| GET | `/cafe/articles/{id}/history` | 상태 이력 |
-| GET | `/cafe/summary/{period_id}` | 대시보드 요약 |
-| POST | `/cafe/sync` | 구글 시트 동기화 |
-| GET | `/cafe/equipment-context` | 장비 연계 시술+이벤트 |
-
-### 장비 (equipment.py) — 13개
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| GET | `/equipment` | 전체 목록 (지점명→지점, 사진 O→있음 정규화) |
-| GET | `/equipment/branches` | 지점 목록 |
-| GET | `/equipment/categories` | 카테고리 목록 |
-| GET | `/equipment/{id}` | 상세 |
-| ... | ... | (총 13개) |
-
-### 이벤트 (events.py) — 12개
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| GET | `/events` | 전체 목록 |
-| GET | `/events/branches` | 지점 목록 (ㄱㄴㄷ순) |
-| GET | `/events/search` | 검색 |
-| ... | ... | (총 12개) |
-
----
-
-## 6. DB 스키마 핵심
-
-### 컬럼명 정규화 패턴 (중요!)
-
-DB와 API 사이 컬럼명 불일치가 있으며 API에서 정규화:
-
-| DB 컬럼 | API 응답 | 처리 위치 |
-|---------|---------|----------|
-| `지점명` | `지점` | `equipment.py` rename_map |
-| `순번` | `id` | `equipment.py` rename_map |
-| `사진` = `O` | `사진` = `있음` | `equipment.py` lambda |
-
-### 카페 원고 쿼리 (cafe/db.py)
-```sql
-SELECT a.id, a.article_order, a.keyword, a.category, a.equipment_name,
-       a.title, a.body, a.status, a.published_url, a.created_at, a.updated_at,
-       COALESCE(cmt.comment_count, 0) AS comment_count,
-       COALESCE(cmt.comments_json, '[]') AS comments_json
-FROM cafe_articles a
-LEFT JOIN (
-    SELECT article_id, COUNT(*) AS comment_count,
-           '[' || GROUP_CONCAT(
-               '{"slot":' || slot_number ||
-               ',"comment":' || json_quote(COALESCE(comment_text, '')) ||
-               ',"reply":' || json_quote(COALESCE(reply_text, '')) || '}'
-           ) || ']' AS comments_json
-    FROM cafe_comments
-    WHERE comment_text != '' OR reply_text != ''
-    GROUP BY article_id
-) cmt ON cmt.article_id = a.id
-WHERE a.branch_period_id = ?
-ORDER BY a.article_order
-```
-
-### 이벤트 지점 정렬 (events/db.py)
-```sql
--- 변경 전: ORDER BY er.sort_order, eb.name
--- 변경 후: ORDER BY eb.name   ← ㄱㄴㄷ순
-```
-
----
-
-## 7. 작업 이력 (상세)
-
-### 세션 1 — 초기 구축 & 기본 기능
-
-| # | 작업 | 파일 | 설명 |
-|---|------|------|------|
-| 1 | FastAPI 백엔드 구축 | `api/` 전체 | JWT 인증, 47개 API 엔드포인트 |
-| 2 | Vue SPA 프론트엔드 | `frontend/` 전체 | Vite + Vue3 + Pinia + Tailwind |
-| 3 | 포털 페이지 | `portal/index.html` | Stream/Fast 버전 선택 |
-| 4 | Docker 구성 | `docker-compose.yml` 등 | 3-서비스 (api, frontend, streamlit) |
-
-### 세션 2 — 기능 고도화
-
-| # | 작업 | 관련 파일 | 상세 |
-|---|------|----------|------|
-| 5 | 카페 동기화 오류 진단 | `api/routers/cafe.py` | try/except + traceback 로깅 추가 |
-| 6 | 관리자 탭 텍스트 변경 | `AdminView.vue` | 동기화→데이터동기화, 시술사전→시술정보 |
-| 7 | 카페 동기화 UI 간소화 | `AdminView.vue` | 연도/월 제거, 링크+지점만 유지 |
-| 8 | 카페 기본 지점 변경 | `CafeView.vue` | "지점 선택" → "전체 지점" 기본값 |
-| 9 | 장비 필터 버그 수정 | `api/routers/equipment.py` | 지점명→지점, O→있음 정규화 |
-| 10 | 장비 상세 패널 추가 | `EquipmentView.vue` | 클릭→시술정보+이벤트 연계, 35:65 비율 |
-| 11 | 장비 비고 한줄 표시 | `EquipmentView.vue` | 지점·카테고리·수량·비고 inline |
-| 12 | 이벤트 검색 이동 | `EventsView.vue` | 필터바로 이동, 가격대 검색 추가 |
-| 13 | 이벤트 비고 hover | `EventsView.vue` | truncate + title tooltip |
-| 14 | 사이드바 트리 메뉴 | `AppSidebar.vue` | 마케팅 하위 트리, 자동 펼침 |
-| 15 | 플레이스홀더 뷰 추가 | `BlogView.vue` 등 | 블로그/플레이스/웹페이지/보고서 |
-| 16 | 라우터 확장 | `router/index.ts` | /blog, /place, /webpage, /reports |
-| 17 | 지점 ㄱㄴㄷ순 정렬 | `events/db.py` | ORDER BY eb.name |
-| 18 | 원고 에디터 네비 수정 | `ArticleEditor.vue` | currentId ref 추가, prev/next 수정 |
-| 19 | 원고 목록 리디자인 | `cafe/db.py` + `ArticleList.vue` | body+comments_json SQL, 카드형 |
-
-### 세션 3 — 원고 목록 고도화 & 대시보드
-
-| # | 작업 | 관련 파일 | 상세 |
-|---|------|----------|------|
-| 20 | 원고 목록 V1 2단 구조 | `ArticleListV1.vue` | 상하 2단: 제목+본문 / 댓글쌍 |
-| 21 | 원고 목록 V2 3컬럼 | `ArticleListV2.vue` | 메타\|본문\|댓글 3컬럼 블록 |
-| 22 | V1/V2 전환 토글 | `CafeView.vue` | 레이아웃 버튼 추가 |
-| 23 | V1 3컬럼 재구성 | `ArticleListV1.vue` | 52px\|제목+본문\|댓글 구조 |
-| 24 | V1 본문폭 제한 | `ArticleListV1.vue` | minmax(0, 480px) |
-| 25 | V2 사이드 패널 추가 | `ArticleListV2.vue` | 키워드/카테고리/날짜/상태변경/액션 |
-| 26 | 대시보드 구글시트 분석 | — | CSV 데이터 구조 분석 (42지점) |
-| 27 | 대시보드 고도화 | `CafeDashboard.vue` | 담당자/작가/진행상황/유형토글/비고 |
-| 28 | 지점 클릭→원고 이동 | `CafeView.vue` + `CafeDashboard.vue` | goToBranch() emit |
-| 29 | 동기화 타임아웃 수정 | `api/cafe.ts` (client) | 30s → 180s (동기화만) |
-| 30 | 발행결과 탭 신규 | `CafeView.vue` | 지점명/발행일/카페명/링크/유형/제목/발행여부 |
-| 31 | 탭 재구성 | `CafeView.vue` | 대시보드-원고목록-원고작성-발행결과 |
-
----
-
-## 8. 버그 수정 이력
-
-| # | 증상 | 원인 | 해결 | 파일 |
-|---|------|------|------|------|
-| B1 | 장비 필터 작동 안 함 | DB `지점명` vs API `지점` 불일치 | rename_map 정규화 | `equipment.py` |
-| B2 | 장비 사진 "O" 표시 | DB `O` vs UI `있음` 불일치 | lambda 정규화 | `equipment.py` |
-| B3 | 동기화 실패 에러 없음 | try/except 미적용 | traceback 로깅 추가 | `cafe.py` |
-| B4 | 원고 ◀▶ 네비 오류 | props.articleId 미갱신 | currentId ref 분리 | `ArticleEditor.vue` |
-| B5 | 지점 순서 불일치 | sort_order 우선 정렬 | ORDER BY eb.name | `events/db.py` |
-| B6 | 동기화 프론트 타임아웃 | Axios 30초 < 실제 소요시간 | 동기화만 180초 | `api/cafe.ts` |
-
----
-
-## 9. 알려진 이슈 & 미완성
-
-### 미완성 기능
-
-| 항목 | 현황 | 우선도 |
-|------|------|--------|
-| 카페 동기화 실제 테스트 | 로깅 추가됨, 실환경 검증 필요 | 🔴 높음 |
-| 대시보드 담당자/작가 매칭 | 동기화 후 데이터 확인 필요 | 🔴 높음 |
-| 원고 작성 피드백 영역 확대 | 레이아웃 여백 최대 활용 예정 | 🟡 중간 |
-| ArticleList V1/V2 확정 | 담당자 피드백 후 하나 제거 | 🟡 중간 |
-| 시술논문 연동 | DB 스키마 설계됨, UI 플레이스홀더 | 🟢 낮음 |
-| 블로그/플레이스/웹페이지 | 플레이스홀더만 존재 | 🟢 낮음 |
-| 보고서 탭 | 플레이스홀더 | 🟢 낮음 |
-| NAS Docker 배포 | docker-compose 준비됨, 포트포워딩 미설정 | 🟢 낮음 |
-
-### 알려진 기술 이슈
-
-| 이슈 | 설명 |
+| 작업 | 상세 |
 |------|------|
-| Streamlit/FastAPI DB 동시접근 | WAL 모드로 대응 중, 동시 쓰기 시 lock 가능 |
-| 구글 시트 인증 | gspread 설치 + 서비스 계정 credentials 필요 |
-| 발행결과 데이터 부족 | published_at, published_by 등 미입력 원고 다수 |
+| **백업** | `_streamlit_backup/` — 13개 파일 + README |
+| **제거** | `app.py`, `ui_tabs.py`, `auth.py`, `cafe/ui.py`, `events/ui.py`, `.streamlit/`, `Dockerfile`, `entrypoint.sh` |
+| **정리** | `cafe/db.py`, `equipment/db.py`, `events/db.py` — `st.cache_data` 제거 |
+| **정리** | `users.py` — `st.secrets` 참조 제거, 환경변수만 사용 |
+| **Docker** | `docker-compose.yml` — Streamlit+portal 서비스 제거, api+frontend만 |
+| **Portal** | `index.html` — 버전 선택 → FastAPI 단일 접속 |
+| **의존성** | `requirements.txt` — streamlit/st-aggrid 제거, FastAPI 의존성 |
+
+### 2.7 논문 DB 구축 (2026-03-22)
+
+- `papers` 테이블 생성 (init_db.py + 실제 DB)
+- API 라우터: `api/routers/papers.py`
+  - CRUD: GET/POST/PATCH/DELETE `/papers`
+  - 장비별: `GET /papers/by-device/{device_info_id}`
+  - 시술별: `GET /papers/by-treatment/{treatment_id}`
+  - 일괄 등록: `POST /papers/bulk` (외부 프로그램 연동용)
+- Pydantic 모델: `PaperCreate`, `PaperUpdate`
 
 ---
 
-## 10. 다음 작업 계획
+## 3. DB 스키마 요약 (25개 테이블)
 
-### 즉시 (다음 세션)
-
-1. **Streamlit 스타일 → FastAPI 스타일 전환**
-   - 현재 `cafe/db.py`, `equipment/db.py`, `events/db.py`는 Streamlit과 공유
-   - FastAPI 전용으로 분리하거나, Streamlit 의존성 제거
-   - 목표: Streamlit 없이 FastAPI+Vue만으로 완전 독립 운영
-
-2. **카페 대시보드 데이터 정합성**
-   - 동기화 실행 → 담당자/작가 이름 정상 표시 확인
-   - 구글 시트 컬럼 매핑 검증
-
-3. **원고 작성 피드백 영역 확대**
-   - 현재 여백 → 피드백 칸 전체 활용
-
-### 중기
-
-4. **V1/V2 확정 후 레거시 제거**
-5. **블로그/플레이스/웹페이지 콘텐츠 구현**
-6. **보고서 탭 — 월간 리포트 자동 생성**
-7. **시술논문 DB 연동 + 장비 패널 연계**
-
-### 장기
-
-8. **Streamlit 완전 제거**
-9. **NAS Docker 배포 + 포트포워딩**
-10. **다중 사용자 동시 편집 처리**
+| 영역 | 테이블 | 역할 |
+|------|--------|------|
+| 장비 | `branches`, `categories`, `equipment` | 지점/카테고리/장비 목록 |
+| 장비 | `device_info` | 시술/장비 정보 사전 (aliases, summary, mechanism) |
+| 장비 | `sync_log` | 장비 동기화 로그 |
+| 이벤트 | `evt_regions`, `evt_branches` | 지역/지점 (43개) |
+| 이벤트 | `evt_periods` | 이벤트 기간 (격월) |
+| 이벤트 | `evt_categories`, `evt_category_aliases` | 시술 카테고리 + 별명 매핑 |
+| 이벤트 | `evt_treatments` | 시술 마스터 사전 (60+ 시드) |
+| 이벤트 | `evt_items`, `evt_item_components` | 이벤트 상품 + 패키지 구성 |
+| 이벤트 | `evt_ingestion_logs` | 이벤트 수집 로그 |
+| 카페 | `cafe_periods`, `cafe_branch_periods` | 월별 기간 + 지점 메타 (담당자/작가) |
+| 카페 | `cafe_articles` | 원고 (월 20건/지점) |
+| 카페 | `cafe_comments` | 댓글/대댓글 (3슬롯) |
+| 카페 | `cafe_feedbacks`, `cafe_status_log` | 피드백, 상태 이력 |
+| 카페 | `cafe_sync_log` | 카페 동기화 로그 |
+| 논문 | `papers` | 논문/연구자료 |
+| 공통 | `users` | 사용자 계정 |
 
 ---
 
-## 참고: 구글 시트 원본 데이터 구조
+## 4. API 엔드포인트 (50+개)
 
-```
-순번 | 지점명 | 스마트 담당자 | 원고작가 | 진행상황 | 정보성 | 피드백 | 후기성 | 피드백 | 슈퍼세트 | 피드백 | 시술사진 | 현장사진 | 나노사진 | 비고
+| 영역 | 엔드포인트 | 설명 |
+|------|-----------|------|
+| 인증 | `POST /auth/login`, `GET /auth/me` | JWT HS256 |
+| 사용자 | CRUD `/users` | 계정 관리 |
+| 카페 | `GET /cafe/periods`, `/branches` | 기간/지점 |
+| 카페 | `GET /cafe/branch-periods/{bpId}/articles` | 원고 목록 (body+comments JSON 포함) |
+| 카페 | `PATCH /cafe/articles/{id}` | 원고 수정 |
+| 카페 | `POST /cafe/articles/{id}/status` | 상태 변경 |
+| 카페 | `PUT /cafe/articles/{id}/comments/{slot}` | 댓글 저장 |
+| 카페 | `POST /cafe/sync` | 구글 시트 동기화 (timeout 180s) |
+| 카페 | `GET /cafe/summary/{periodId}` | 대시보드 요약 |
+| 카페 | `GET /cafe/equipment-context` | 장비→시술+이벤트 연동 |
+| 장비 | `GET /equipment` | 장비 목록 (컬럼명 정규화) |
+| 장비 | `GET /equipment/device-info` | 시술 사전 |
+| 이벤트 | `GET /events` | 이벤트 목록 |
+| 이벤트 | `GET /events/treatments` | 시술 사전 |
+| 이벤트 | `GET /events/search` | 시술명 검색 |
+| 논문 | `GET/POST /papers` | 논문 CRUD |
+| 논문 | `POST /papers/bulk` | 일괄 등록 |
+| 논문 | `GET /papers/by-device/{id}` | 장비별 논문 |
+| 논문 | `GET /papers/by-treatment/{id}` | 시술별 논문 |
+| 공통 | `GET /health`, `GET /dashboard` | 헬스체크, HOME 대시보드 |
+
+---
+
+## 5. 논문(papers) 테이블 상세
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `id` | PK | 자동 증가 |
+| `device_info_id` | FK → device_info | 관련 장비/시술 사전 연결 |
+| `treatment_id` | FK → evt_treatments | 관련 시술 마스터 연결 |
+| `doi` | TEXT | Digital Object Identifier |
+| `title` | TEXT | 논문 제목 (원문) |
+| `title_ko` | TEXT | 한국어 제목 |
+| `authors` | TEXT | 저자 |
+| `journal` | TEXT | 학술지명 |
+| `pub_year` | INT | 출판 연도 |
+| `abstract_summary` | TEXT | AI 요약 또는 직접 입력 |
+| `key_findings` | TEXT | 핵심 발견 사항 |
+| `keywords` | TEXT(JSON) | 키워드 배열 `["RF","리프팅"]` |
+| `evidence_level` | INT(0~5) | 근거 수준 (5=메타분석, 1=전문가의견) |
+| `study_type` | TEXT | RCT/코호트/메타분석 등 |
+| `sample_size` | TEXT | 표본 크기 |
+| `source_url` | TEXT | 원문 링크 |
+| `source_file` | TEXT | 로컬 파일 경로 |
+| `status` | TEXT | draft/reviewed/verified/deleted |
+
+### 외부 연동 예시
+
+```python
+import requests
+
+papers = [{
+    "device_info_id": 5,
+    "title": "HIFU for facial lifting: a meta-analysis",
+    "title_ko": "안면 리프팅을 위한 HIFU: 메타분석",
+    "authors": "Kim et al.",
+    "journal": "J Dermatol Surg",
+    "pub_year": 2024,
+    "abstract_summary": "AI가 생성한 논문 요약...",
+    "key_findings": "평균 30% 피부 탄력 개선",
+    "keywords": '["HIFU", "울쎄라"]',
+    "evidence_level": 5,
+    "study_type": "메타분석",
+    "status": "reviewed"
+}]
+requests.post("http://localhost:8000/papers/bulk", json=papers)
 ```
 
-- 42개 지점, 각 지점당 20건 원고
-- 담당자: 오현정, 강태우, 김보라, 배재준, 최은주
-- 작가: S오현정, S손현진, 자체 제작
-- 진행상황: "20 / 20" 형식
-- 사진: URL 또는 "없음(12/12)" 형식
+---
+
+## 6. 미완료/보류 항목
+
+| 항목 | 상태 | 비고 |
+|------|------|------|
+| 대시보드 지점 클릭 → 원고목록 이동 | 미구현 | CafeView subView + branch 연동 |
+| 원고 작성 피드백 영역 확장 | 미구현 | 여백 최대 활용 |
+| 논문 프론트엔드 UI | 미구현 | API+DB 준비 완료, EquipmentView 패널에 연동 예정 |
+| 블로그/플레이스/웹페이지 | placeholder | 콘텐츠 TBD |
+| 보고서 탭 | placeholder | 콘텐츠 TBD |
+| NAS Docker 배포 | 미완 | docker-compose 준비, 포트포워딩 미설정 |
+| 카페 동기화 실제 테스트 | 미확인 | gspread 크레덴셜 필요 |
+
+---
+
+## 7. 알려진 이슈 & 해결 이력
+
+| 이슈 | 원인 | 해결 |
+|------|------|------|
+| 카페 동기화 프론트 타임아웃 | Axios 기본 30s < 42지점 소요시간 | cafe.ts timeout 180000 |
+| 장비 필터 미작동 | DB `지점명` vs API `지점` 불일치 | equipment.py rename_map 정규화 |
+| 원고 ◀▶ 네비 오류 | props.articleId 내부 갱신 안 됨 | currentId ref 독립 관리 |
+| 담당자 "스마트 담당자" 표시 | 동기화 미실행 시 기본값 | 동기화 실행 필요 |
+| 사진값 O vs 있음 | DB원본 "O" vs 화면 "있음" | equipment.py apply 정규화 |
+
+---
+
+## 8. 개발 환경
+
+```bash
+# 백엔드
+cd uni-portal
+pip install -r requirements.txt
+uvicorn api.main:app --reload --port 8000
+
+# 프론트엔드
+cd frontend
+npm install
+npm run dev   # localhost:5173 → /api proxy → localhost:8000
+
+# Docker 배포
+docker-compose up --build
+# api: :8000, frontend: :8080
+```

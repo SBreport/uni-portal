@@ -368,6 +368,51 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_cafe_feedbacks_article ON cafe_feedbacks(article_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_cafe_status_log_article ON cafe_status_log(article_id)")
 
+    # ============================================================
+    # 논문/연구 자료 테이블 (papers)
+    # ============================================================
+
+    # 논문 메타 + AI 요약
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS papers (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_info_id  INTEGER REFERENCES device_info(id) ON DELETE SET NULL,
+        treatment_id    INTEGER REFERENCES evt_treatments(id) ON DELETE SET NULL,
+        doi             TEXT DEFAULT '',
+        title           TEXT NOT NULL,
+        title_ko        TEXT DEFAULT '',
+        authors         TEXT DEFAULT '',
+        journal         TEXT DEFAULT '',
+        pub_year        INTEGER,
+        pub_date        TEXT DEFAULT '',
+        abstract_summary TEXT DEFAULT '',
+        key_findings    TEXT DEFAULT '',
+        keywords        TEXT DEFAULT '[]',
+        evidence_level  INTEGER DEFAULT 0,
+        study_type      TEXT DEFAULT '',
+        sample_size     TEXT DEFAULT '',
+        source_url      TEXT DEFAULT '',
+        source_file     TEXT DEFAULT '',
+        status          TEXT DEFAULT 'draft',
+        one_line_summary    TEXT DEFAULT '',
+        research_purpose    TEXT DEFAULT '',
+        study_design_detail TEXT DEFAULT '',
+        key_results         TEXT DEFAULT '',
+        conclusion          TEXT DEFAULT '',
+        quotable_stats      TEXT DEFAULT '[]',
+        cautions            TEXT DEFAULT '',
+        follow_up_period    TEXT DEFAULT '',
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    c.execute("CREATE INDEX IF NOT EXISTS idx_papers_device ON papers(device_info_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_papers_treatment ON papers(treatment_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_papers_year ON papers(pub_year)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_papers_status ON papers(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_papers_doi ON papers(doi)")
+
     conn.commit()
 
     # ============================================================

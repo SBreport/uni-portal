@@ -433,7 +433,6 @@ async function runPaperAnalysis() {
           {{ syncing ? '가져오는 중...' : '카페 원고 가져오기' }}
         </button>
       </div>
-    </div>
 
       <!-- DB 파일 관리 -->
       <div class="bg-white border border-slate-200 rounded-lg p-4">

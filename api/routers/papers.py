@@ -16,7 +16,8 @@ from api.models import PaperCreate, PaperUpdate
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
-DB_PATH = "data/equipment.db"
+DB_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
+DB_PATH = os.path.join(DB_DIR, "equipment.db")
 
 
 def _conn():

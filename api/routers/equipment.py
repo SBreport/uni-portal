@@ -256,8 +256,22 @@ async def upload_db(
 
         # 7. 결과 집계
         di_count = dst.execute("SELECT COUNT(*) FROM device_info").fetchone()[0]
-        paper_count = dst.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
-        cafe_count = dst.execute("SELECT COUNT(*) FROM cafe_articles").fetchone()[0]
+        paper_count = 0
+        try:
+            paper_count = dst.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
+        except Exception:
+            pass
+
+        # cafe_articles는 cafe.db에 별도 저장 (equipment.db에 없음)
+        cafe_count = 0
+        try:
+            cafe_db_path = os.path.join(db_dir, "cafe.db")
+            if os.path.exists(cafe_db_path):
+                cafe_conn = sqlite3.connect(cafe_db_path)
+                cafe_count = cafe_conn.execute("SELECT COUNT(*) FROM cafe_articles").fetchone()[0]
+                cafe_conn.close()
+        except Exception:
+            pass
 
         src.close()
         dst.close()
@@ -265,7 +279,7 @@ async def upload_db(
         result["device_info_count"] = di_count
         result["papers_count"] = paper_count
         result["cafe_articles_count"] = cafe_count
-        result["message"] = f"장비 {result['merged'].get('device_info', 0)}건, 논문 {result['merged'].get('papers', 0)}건 병합 완료. 카페 원고 {cafe_count}건 유지."
+        result["message"] = f"장비 {result['merged'].get('device_info', 0)}건, 논문 {result['merged'].get('papers', 0)}건 병합 완료."
 
     except Exception as e:
         import traceback

@@ -13,7 +13,7 @@ import sys
 from datetime import datetime
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-DB_PATH = os.path.join(DB_DIR, "equipment.db")
+DB_PATH = os.path.join(DB_DIR, "cafe.db")
 
 # 지점명 별칭 매핑 (시트 탭 이름 → DB 이름)
 BRANCH_ALIAS = {

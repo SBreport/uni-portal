@@ -81,9 +81,7 @@ def load_data():
         return df
 
     except Exception as e:
-        if st:
-            st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
-            st.info("DB 파일을 확인해주세요.")
+        print(f"[EQUIPMENT DB ERROR] 데이터를 불러오는 중 오류: {e}")
         return pd.DataFrame(
             columns=["순번", "지점명", "카테고리", "기기명", "기기명_원본", "장비그룹", "수량", "비고", "사진"]
         )

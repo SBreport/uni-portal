@@ -18,10 +18,7 @@ def _get_conn():
 
 
 def load_users():
-    """사용자 목록을 로드한다. 캐시는 session_state에 저장."""
-    if st and "_users_cache" in st.session_state:
-        return st.session_state["_users_cache"]
-
+    """사용자 목록을 로드한다."""
     users = []
 
     try:
@@ -40,19 +37,12 @@ def load_users():
     except Exception:
         pass
 
-    # DB에 사용자가 없으면 bootstrap admin 사용
-    # secrets.toml → 환경변수 순으로 조회
+    # DB에 사용자가 없으면 bootstrap admin 사용 (환경변수)
     if not users:
         try:
-            admin_id = None
-            admin_pw_hash = None
-            admin_role = "admin"
-            try:
-                raise KeyError("use env vars")
-            except (KeyError, FileNotFoundError, AttributeError):
-                admin_id = os.environ.get("AUTH_BOOTSTRAP_ADMIN_ID")
-                admin_pw_hash = os.environ.get("AUTH_BOOTSTRAP_ADMIN_PW_HASH")
-                admin_role = os.environ.get("AUTH_BOOTSTRAP_ADMIN_ROLE", "admin")
+            admin_id = os.environ.get("AUTH_BOOTSTRAP_ADMIN_ID")
+            admin_pw_hash = os.environ.get("AUTH_BOOTSTRAP_ADMIN_PW_HASH")
+            admin_role = os.environ.get("AUTH_BOOTSTRAP_ADMIN_ROLE", "admin")
 
             if admin_id and admin_pw_hash:
                 users.append({
@@ -64,8 +54,6 @@ def load_users():
         except Exception:
             pass
 
-    if st:
-        st.session_state["_users_cache"] = users
     return users
 
 
@@ -91,7 +79,6 @@ def add_user(username, password_hash, role, branch_id=None, memo=""):
         )
         conn.commit()
         conn.close()
-        invalidate_users_cache()
         return True, f"'{username}' 사용자가 추가되었습니다."
     except Exception as e:
         return False, f"추가 실패: {e}"
@@ -114,7 +101,6 @@ def remove_user(username):
             return False, f"'{username}' 을(를) 찾을 수 없습니다."
         conn.commit()
         conn.close()
-        invalidate_users_cache()
         return True, f"'{username}' 사용자가 삭제되었습니다."
     except Exception as e:
         return False, f"삭제 실패: {e}"
@@ -131,7 +117,6 @@ def update_user_role(username, new_role):
             return False, f"'{username}' 을(를) 찾을 수 없습니다."
         conn.commit()
         conn.close()
-        invalidate_users_cache()
         return True, f"'{username}' 역할이 변경되었습니다."
     except Exception as e:
         return False, f"역할 변경 실패: {e}"
@@ -148,7 +133,6 @@ def update_user_password(username, new_password_hash):
             return False, f"'{username}' 을(를) 찾을 수 없습니다."
         conn.commit()
         conn.close()
-        invalidate_users_cache()
         return True, f"'{username}' 비밀번호가 변경되었습니다."
     except Exception as e:
         return False, f"비밀번호 변경 실패: {e}"
@@ -165,7 +149,6 @@ def update_user_memo(username, memo):
             return False, f"'{username}' 을(를) 찾을 수 없습니다."
         conn.commit()
         conn.close()
-        invalidate_users_cache()
         return True, f"'{username}' 비고가 변경되었습니다."
     except Exception as e:
         return False, f"비고 변경 실패: {e}"
@@ -184,8 +167,3 @@ def ensure_memo_column():
         conn.close()
     except Exception:
         pass
-
-
-def invalidate_users_cache():
-    if st:
-        st.session_state.pop("_users_cache", None)

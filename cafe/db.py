@@ -430,26 +430,46 @@ def get_equipment_context(branch_name: str, equipment_name: str) -> dict:
     if matched:
         result["device_info"] = matched[0]
 
-    # 2. 해당 지점의 현재 이벤트 가격
-    c.execute("""
-        SELECT ei.display_name, ei.event_price, ei.regular_price,
+    # 2. 이벤트 검색용 키워드 수집 (장비명 + 매칭된 모든 관련 장비명)
+    #    예: "써마지FLX" 클릭 → ["써마지FLX", "써마지"] 모두로 검색
+    search_names = {equipment_name.strip()}
+    for m in matched:
+        search_names.add(m["name"])
+        # aliases도 추가
+        for alias in (m.get("aliases") or "").split(","):
+            a = alias.strip()
+            if a and len(a) >= 2:
+                search_names.add(a)
+
+    # 2-1. 해당 지점의 현재 이벤트 가격 (모든 관련 키워드로 검색)
+    like_conditions = []
+    like_params = [branch_name]
+    for name in search_names:
+        like_conditions.append("(ei.raw_event_name LIKE ? OR ei.display_name LIKE ?)")
+        like_params.extend([f"%{name}%", f"%{name}%"])
+
+    where_like = " OR ".join(like_conditions) if like_conditions else "1=0"
+    c.execute(f"""
+        SELECT DISTINCT ei.display_name, ei.event_price, ei.regular_price,
                ei.session_count, ei.session_unit, ei.notes
         FROM evt_items ei
         JOIN evt_branches eb ON ei.branch_id = eb.id
         JOIN evt_periods ep ON ei.event_period_id = ep.id
         WHERE eb.name = ? AND ep.is_current = 1
-          AND (ei.raw_event_name LIKE ? OR ei.display_name LIKE ?)
+          AND ({where_like})
         ORDER BY ei.event_price
-    """, (branch_name, f"%{equipment_name}%", f"%{equipment_name}%"))
+    """, like_params)
     result["events"] = [dict(r) for r in c.fetchall()]
 
     # 3. 보유 여부 확인 (equipment 테이블)
-    c.execute("""
+    equip_like = " OR ".join(["e.name LIKE ?" for _ in search_names])
+    equip_params = [branch_name] + [f"%{n}%" for n in search_names]
+    c.execute(f"""
         SELECT e.quantity
         FROM equipment e
         JOIN branches b ON e.branch_id = b.id
-        WHERE b.name = ? AND e.name LIKE ?
-    """, (branch_name, f"%{equipment_name}%"))
+        WHERE b.name = ? AND ({equip_like})
+    """, equip_params)
     row = c.fetchone()
     if row:
         result["is_owned"] = True

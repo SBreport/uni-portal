@@ -252,9 +252,9 @@ def analyze_directory(req: AnalyzeDirRequest):
 
     # paper_analyzer.py 경로
     project_root = Path(__file__).resolve().parent.parent.parent
-    analyzer_path = project_root / "paper_analyzer.py"
+    analyzer_path = project_root / "papers" / "analyzer.py"
     if not analyzer_path.exists():
-        raise HTTPException(500, "paper_analyzer.py를 찾을 수 없습니다")
+        raise HTTPException(500, "papers/analyzer.py를 찾을 수 없습니다")
 
     # 환경변수에 API 키 설정
     env = os.environ.copy()

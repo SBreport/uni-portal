@@ -27,7 +27,7 @@
 | UI | Tailwind CSS 4.2 | 유틸리티 기반 |
 | 백엔드 | FastAPI (Python) | JWT 인증, 50+ API |
 | DB | SQLite (WAL 모드) | `data/equipment.db` 단일 파일 |
-| 논문 분석 | Claude API + PyMuPDF | `paper_analyzer.py` CLI |
+| 논문 분석 | Claude API + PyMuPDF | `papers/analyzer.py` CLI |
 | 배포 | Docker + Portainer | Synology NAS |
 
 ---
@@ -47,7 +47,7 @@
 | 7 | 시술정보 탭 (시술사전 + 시술논문) | 2026-03 | 시술사전 CRUD, 논문 열람 |
 | 8 | 카페 마케팅 탭 | 2026-03 | 대시보드, 원고목록(V1/V2), 원고작성, 발행결과 |
 | 9 | 마케팅 트리 메뉴 | 2026-03 | 카페/블로그/플레이스/웹페이지 구조 |
-| 10 | 논문 분석 CLI (paper_analyzer.py) | 2026-03 | Claude API, 자동매칭, Word/Excel 출력 |
+| 10 | 논문 분석 CLI (papers/analyzer.py) | 2026-03 | Claude API, 자동매칭, Word/Excel 출력 |
 | 11 | 논문 JSON 업로드 (웹) | 2026-03 | 중복 체크 포함 |
 | 12 | 논문 폴더 분석 (관리자 모드) | 2026-03 | 웹에서 로컬 폴더 지정 → 분석 |
 | 13 | Docker 배포 (NAS) | 2026-03 | Portainer Stack 관리 |
@@ -107,7 +107,7 @@ uni-portal/
 ├── equipment/db.py               # 장비 DB 모듈 (공유)
 ├── events/db.py                  # 이벤트 DB 모듈 (공유)
 ├── users.py                      # 사용자 관리 (공유)
-├── paper_analyzer.py             # 논문 분석 CLI
+├── papers/analyzer.py             # 논문 분석 CLI
 │
 ├── data/equipment.db             # SQLite 통합 DB
 ├── paper_results/                # 분석 결과 출력
@@ -168,23 +168,23 @@ uni-portal/
 | 문서 | 역할 | 갱신 시점 |
 |------|------|----------|
 | **PROJECT_ROADMAP.md** | 전체 로드맵 + 진행 상태 | 기능 추가/완료 시 |
-| **HANDOVER.md** | 인수인계용 (구조, API, DB, 운영 매뉴얼) | 신규 기능 배포 시 |
-| **PAPER_SYSTEM.md** | 논문 분석 시스템 상세 | 논문 관련 변경 시 |
+| **docs/HANDOVER.md** | 인수인계용 (구조, API, DB, 운영 매뉴얼) | 신규 기능 배포 시 |
+| **papers/SYSTEM.md** | 논문 분석 시스템 상세 | 논문 관련 변경 시 |
 | **WORK_LOG.md** | 작업 이력 (변경 사항 기록) | 매 작업 세션 종료 시 |
 
 ### 폐기/통합 대상
 
 | 문서 | 처리 |
 |------|------|
-| `DEVICE_DICTIONARY_GUIDE.md` | → HANDOVER.md에 통합 또는 삭제 검토 |
-| `PAPER_ANALYSIS_GUIDE.md` | → PAPER_SYSTEM.md + HANDOVER.md 11장에 통합됨 |
+| `equipment/GUIDE.md` | → docs/HANDOVER.md에 통합 또는 삭제 검토 |
+| `_temp/PAPER_ANALYSIS_GUIDE.md (deprecated)` | → papers/SYSTEM.md + docs/HANDOVER.md 11장에 통합됨 |
 
 ### 문서 갱신 규칙
 
 ```
 1. 새 기능 구현 완료 시:
    → PROJECT_ROADMAP.md: "미구현" → "완료"로 이동, 완료일 기입
-   → HANDOVER.md: 해당 섹션 업데이트
+   → docs/HANDOVER.md: 해당 섹션 업데이트
    → WORK_LOG.md: 작업 내용 기록
 
 2. 새 세션 시작 시:
@@ -192,13 +192,13 @@ uni-portal/
    → WORK_LOG.md 최근 항목 확인
 
 3. 인수인계 시:
-   → HANDOVER.md를 주 문서로 전달
+   → docs/HANDOVER.md를 주 문서로 전달
    → PROJECT_ROADMAP.md로 전체 진행 상태 파악
-   → PAPER_SYSTEM.md는 논문 관련 작업 시에만 참조
+   → papers/SYSTEM.md는 논문 관련 작업 시에만 참조
 
 4. 관리자 변경 시:
    → 이 문서(PROJECT_ROADMAP.md)의 "관리자" 항목 갱신
-   → HANDOVER.md의 접속 정보/인증 정보 확인
+   → docs/HANDOVER.md의 접속 정보/인증 정보 확인
 
 5. 분기별 프로젝트 점검 시 (아래 체크리스트 실행):
    → 죽은 코드, 불필요 파일, 보안 점검
@@ -230,7 +230,7 @@ uni-portal/
 
 [ 문서 ]
 □ PROJECT_ROADMAP.md 진행 상태 최신인지 확인
-□ HANDOVER.md 신규 기능 반영되었는지 확인
+□ docs/HANDOVER.md 신규 기능 반영되었는지 확인
 □ WORK_LOG.md 최근 작업 기록되었는지 확인
 □ 폐기 대상 문서 정리
 
@@ -284,5 +284,5 @@ uni-portal/
 | API 전체 목록 | `api/routers/*.py` 또는 `/api/docs` (Swagger) |
 | 프론트엔드 라우팅 | `frontend/src/router/index.ts` |
 | 사이드바 메뉴 | `frontend/src/components/common/AppSidebar.vue` |
-| 논문 분석 프롬프트 | `paper_analyzer.py` → `ANALYSIS_PROMPT` |
+| 논문 분석 프롬프트 | `papers/analyzer.py` → `ANALYSIS_PROMPT` |
 | Docker 구성 | `docker-compose.yml`, `Dockerfile.api`, `Dockerfile.frontend` |

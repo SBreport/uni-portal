@@ -428,6 +428,22 @@ def init_db():
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_blog_paper ON paper_blog_links(paper_id)")
 
+    # 논문-장비 다대다 연결 테이블
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS paper_devices (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        paper_id        INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+        device_info_id  INTEGER NOT NULL REFERENCES device_info(id) ON DELETE CASCADE,
+        match_type      TEXT NOT NULL DEFAULT 'direct',
+        match_keyword   TEXT DEFAULT '',
+        is_verified     INTEGER DEFAULT 0,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(paper_id, device_info_id)
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_paper_devices_paper ON paper_devices(paper_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_paper_devices_device ON paper_devices(device_info_id)")
+
     conn.commit()
 
     # ============================================================

@@ -19,8 +19,8 @@ docs/
 | `ARCHITECTURE.md` | 전체 데이터 구조 기획 | 구조 변경 시 |
 | `WORK_LOG.md` | 완료된 작업 기록 | 매 세션 종료 시 |
 | `PROJECT_ROADMAP.md` | 장기 로드맵 + 점검 체크리스트 | 분기별 |
-| `HANDOVER.md` | 인수인계 기획안 | 담당자 변경 시 |
-| `PAPER_SYSTEM.md` | 논문 분석 시스템 명세 | 기능 변경 시 |
+| `docs/HANDOVER.md` | 인수인계 기획안 | 담당자 변경 시 |
+| `papers/SYSTEM.md` | 논문 분석 시스템 명세 | 기능 변경 시 |
 
 ## 작업 기획서 (plans/) 사용법
 

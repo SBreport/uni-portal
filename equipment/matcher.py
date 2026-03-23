@@ -233,3 +233,144 @@ def match_treatment_from_names(name_list: list[str], treatment_list: list[dict] 
         if t_id is not None:
             return t_id, t_name
     return None, None
+
+
+# ── 기술 키워드 → 장비 매칭 (논문 분석용) ──
+
+import re
+
+# 부정/비교 문맥 패턴 — 이 패턴이 매칭되면 해당 장비의 주기술이 아님
+_NEGATIVE_PATTERNS_CACHE = {}
+
+
+def _get_negative_patterns(keyword: str) -> list:
+    """keyword에 대한 부정 문맥 패턴 리스트 (캐시)."""
+    if keyword not in _NEGATIVE_PATTERNS_CACHE:
+        kw = re.escape(keyword)
+        _NEGATIVE_PATTERNS_CACHE[keyword] = [
+            re.compile(p, re.IGNORECASE) for p in [
+                rf'{kw}[와과]\s*다른',       # "HIFU와 다른"
+                rf'{kw}[이가]\s*아닌',        # "HIFU가 아닌"
+                rf'(?:아닌|않은|없는).*{kw}',  # "~아닌 ... HIFU"
+                rf'기존\s*{kw}',              # "기존 HIFU"
+                rf'{kw}\s*(?:대비|대신|외)',    # "HIFU 대비"
+            ]
+        ]
+    return _NEGATIVE_PATTERNS_CACHE[keyword]
+
+
+def _is_primary_technology(mechanism: str, keyword: str) -> bool:
+    """mechanism 텍스트에서 keyword가 해당 장비의 주기술인지 판별.
+
+    규칙:
+      1. mechanism 첫 절(→ 또는 . 기준)에 keyword가 있으면 주기술
+      2. 부정/비교 문맥(~와 다른, ~가 아닌)이면 주기술 아님
+      3. 첫 절 이후에만 등장하면 주기술 아님
+
+    Returns:
+        True: 주기술로 확정 가능
+        False: 주기술이 아님 (비교 대상이거나 보조 언급)
+    """
+    if not mechanism or not keyword:
+        return False
+
+    mechanism_upper = mechanism.upper()
+    keyword_upper = keyword.upper()
+
+    # keyword 자체가 mechanism에 없으면 패스
+    if keyword_upper not in mechanism_upper:
+        return False
+
+    # 부정 문맥 체크
+    for pat in _get_negative_patterns(keyword):
+        if pat.search(mechanism):
+            return False
+
+    # 첫 절에 keyword가 있는지 확인 (→ 또는 . 으로 분할)
+    # → 는 유니코드 U+2192, 간혹 > 로 대체될 수 있음
+    first_clause = re.split(r'[.\u2192>]', mechanism)[0]
+    if keyword_upper in first_clause.upper():
+        return True
+
+    return False
+
+
+def match_by_technology(keyword: str, device_list: list[dict] | None = None) -> list[dict]:
+    """기술 키워드로 관련 장비 매칭 (mechanism 필드 기반).
+
+    논문에서 "HIFU", "RF", "KTP" 등 기술명이 나왔지만
+    직접적인 장비명 매칭이 안될 때 사용.
+
+    Args:
+        keyword: 기술 키워드 (예: "HIFU", "RF", "KTP", "IPL")
+        device_list: device_info 목록 (None이면 DB에서 로드)
+
+    Returns:
+        주기술로 확정된 장비 리스트 (자동 확정 가능)
+    """
+    if device_list is None:
+        device_list = _load_device_list()
+
+    if not keyword or not keyword.strip():
+        return []
+
+    results = []
+    for row in device_list:
+        mechanism = row.get("mechanism", "") or ""
+        if _is_primary_technology(mechanism, keyword):
+            results.append(row)
+
+    return results
+
+
+def match_devices_for_paper(
+    related_devices: list[str],
+    device_list: list[dict] | None = None
+) -> list[dict]:
+    """논문 분석용 통합 매칭 — 직접 매칭 + 기술 매칭.
+
+    Returns:
+        [
+            {"device_info_id": 2, "device_name": "써마지FLX", "match_type": "direct", "match_keyword": "써마지FLX"},
+            {"device_info_id": 54, "device_name": "울쎄라", "match_type": "technology", "match_keyword": "HIFU"},
+            ...
+        ]
+    """
+    if device_list is None:
+        device_list = _load_device_list()
+
+    results = []
+    seen_ids = set()
+
+    for name in related_devices:
+        if not name or not name.strip():
+            continue
+
+        # 1차: 직접 매칭 (이름/aliases)
+        direct_matches = match_devices(name, device_list)
+        for dev in direct_matches:
+            if dev["id"] not in seen_ids:
+                seen_ids.add(dev["id"])
+                results.append({
+                    "device_info_id": dev["id"],
+                    "device_name": dev["name"],
+                    "match_type": "direct",
+                    "match_keyword": name,
+                    "is_verified": 1,  # 직접 매칭은 자동 확정
+                })
+
+        # 2차: 기술 매칭 (직접 매칭 안된 경우)
+        if not direct_matches:
+            tech_matches = match_by_technology(name, device_list)
+            for dev in tech_matches:
+                if dev["id"] not in seen_ids:
+                    seen_ids.add(dev["id"])
+                    results.append({
+                        "device_info_id": dev["id"],
+                        "device_name": dev["name"],
+                        "match_type": "technology",
+                        "match_keyword": name,
+                        "is_verified": 1,  # mechanism 기반 = 자동 확정
+                    })
+
+    return results

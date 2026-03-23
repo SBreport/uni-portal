@@ -509,7 +509,7 @@ def get_equipment_context(branch_name: str, equipment_name: str) -> dict:
         SELECT DISTINCT ei.display_name, ei.event_price, ei.regular_price,
                ei.session_count, ei.session_unit, ei.notes
         FROM evt_items ei
-        JOIN equip.evt_branches eb ON ei.branch_id = eb.id
+        JOIN evt_branches eb ON ei.branch_id = eb.id
         JOIN evt_periods ep ON ei.event_period_id = ep.id
         WHERE eb.name = ? AND ep.is_current = 1
           AND ({where_like})

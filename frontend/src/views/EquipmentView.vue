@@ -142,9 +142,9 @@ function formatPrice(n: number | null) {
         <option v-for="c in store.categories" :key="c.id" :value="c.name">{{ c.name }}</option>
       </select>
 
-      <input v-model="store.filterSearch" placeholder="장비명 검색"
+      <input v-model="store.filterSearch" placeholder="장비명 검색 (Enter)"
         class="px-3 py-1.5 border border-slate-300 rounded-md text-sm w-48 focus:outline-none focus:ring-1 focus:ring-blue-400"
-        @input="handleSearch" />
+        @keyup.enter="handleSearch" />
 
       <span class="text-xs text-slate-400">{{ store.rows.length.toLocaleString() }}건</span>
     </div>

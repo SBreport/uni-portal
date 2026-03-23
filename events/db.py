@@ -62,12 +62,40 @@ def ensure_period(conn, year: int, start_month: int, end_month: int, label: str,
     return period_id
 
 
-def get_evt_branch_id(conn, short_name: str) -> int | None:
-    """지점 short_name으로 branch_id 조회."""
+def get_evt_branch_id(conn, query: str) -> int | None:
+    """지점명으로 branch_id 조회. short_name → name → 부분매칭 순서로 검색."""
+    import re
     c = conn.cursor()
-    c.execute("SELECT id FROM evt_branches WHERE short_name = ?", (short_name,))
+    q = query.strip()
+    q_no_suffix = re.sub(r"점$", "", q)  # "홍대점" → "홍대"
+
+    # 1. short_name 정확 매칭
+    c.execute("SELECT id FROM evt_branches WHERE short_name = ?", (q,))
     row = c.fetchone()
-    return row[0] if row else None
+    if row:
+        return row[0]
+
+    # 2. "점" 제거 후 short_name 매칭
+    if q != q_no_suffix:
+        c.execute("SELECT id FROM evt_branches WHERE short_name = ?", (q_no_suffix,))
+        row = c.fetchone()
+        if row:
+            return row[0]
+
+    # 3. name 정확 매칭
+    c.execute("SELECT id FROM evt_branches WHERE name = ?", (q,))
+    row = c.fetchone()
+    if row:
+        return row[0]
+
+    # 4. 부분매칭 (홍대 → 홍대신촌점)
+    c.execute("SELECT id FROM evt_branches WHERE name LIKE ? OR short_name LIKE ?",
+              (f"%{q_no_suffix}%", f"%{q_no_suffix}%"))
+    row = c.fetchone()
+    if row:
+        return row[0]
+
+    return None
 
 
 def get_evt_category_id(conn, standard_name: str) -> int:

@@ -63,15 +63,18 @@ STATUS_COLORS = {
 
 def _get_conn():
     """cafe.db 연결. equipment.db를 ATTACH하여 evt_branches 등 참조 가능."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.row_factory = sqlite3.Row
     # equipment.db를 ATTACH (evt_branches JOIN 등 크로스 DB 조회용)
-    if os.path.exists(EQUIPMENT_DB_PATH):
+    equip_path = os.path.abspath(EQUIPMENT_DB_PATH)
+    if os.path.exists(equip_path):
         try:
-            conn.execute("ATTACH DATABASE ? AS equip", (EQUIPMENT_DB_PATH,))
-        except Exception:
+            conn.execute(f"ATTACH DATABASE '{equip_path}' AS equip")
+        except sqlite3.OperationalError:
+            # 이미 ATTACH 된 경우
             pass
     return conn
 
@@ -169,7 +172,7 @@ def load_branch_period_meta(branch_period_id: int) -> dict | None:
         SELECT cbp.*, eb.name as branch_name, eb.short_name,
                cp.year, cp.month, cp.label as period_label
         FROM cafe_branch_periods cbp
-        JOIN evt_branches eb ON cbp.branch_id = eb.id
+        JOIN equip.evt_branches eb ON cbp.branch_id = eb.id
         JOIN cafe_periods cp ON cbp.cafe_period_id = cp.id
         WHERE cbp.id = ?
     """, (branch_period_id,))
@@ -433,7 +436,7 @@ def load_cafe_summary(period_id: int) -> list[dict]:
             SUM(CASE WHEN ca.category = '후기성' AND ca.status = '발행완료' THEN 1 ELSE 0 END) as cnt_review_done,
             SUM(CASE WHEN ca.category = '슈퍼세트' AND ca.status = '발행완료' THEN 1 ELSE 0 END) as cnt_superset_done
         FROM cafe_branch_periods cbp
-        JOIN evt_branches eb ON cbp.branch_id = eb.id
+        JOIN equip.evt_branches eb ON cbp.branch_id = eb.id
         LEFT JOIN cafe_articles ca ON ca.branch_period_id = cbp.id
         WHERE cbp.cafe_period_id = ?
         GROUP BY cbp.id
@@ -504,7 +507,7 @@ def get_equipment_context(branch_name: str, equipment_name: str) -> dict:
         SELECT DISTINCT ei.display_name, ei.event_price, ei.regular_price,
                ei.session_count, ei.session_unit, ei.notes
         FROM evt_items ei
-        JOIN evt_branches eb ON ei.branch_id = eb.id
+        JOIN equip.evt_branches eb ON ei.branch_id = eb.id
         JOIN evt_periods ep ON ei.event_period_id = ep.id
         WHERE eb.name = ? AND ep.is_current = 1
           AND ({where_like})

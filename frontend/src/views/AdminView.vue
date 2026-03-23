@@ -393,113 +393,113 @@ async function runPaperAnalysis() {
       <div v-if="syncMsg" class="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700">{{ syncMsg }}</div>
       <div v-if="syncError" class="px-4 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{{ syncError }}</div>
 
-      <!-- 장비 동기화 -->
+      <!-- ① 구글 시트 동기화 -->
       <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <h3 class="text-sm font-bold text-slate-700 mb-2">장비 데이터 동기화</h3>
-        <p class="text-xs text-slate-400 mb-3">Google Sheets에서 최신 장비 데이터를 가져옵니다.</p>
-        <button @click="syncEquipment" :disabled="syncing"
-          class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
-          {{ syncing ? '동기화 중...' : '장비 시트 동기화' }}
-        </button>
-      </div>
-
-      <!-- 이벤트 동기화 -->
-      <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <h3 class="text-sm font-bold text-slate-700 mb-2">이벤트 데이터 동기화</h3>
-        <p class="text-xs text-slate-400 mb-3">수집 기간: <strong>{{ evtYear }}년 {{ evtStartMonth }}-{{ evtEndMonth }}월</strong></p>
-
-        <div class="flex gap-3 mb-3">
-          <label class="flex items-center gap-1 text-sm">
-            <input type="radio" v-model="evtSyncMethod" value="url" /> 링크 입력
-          </label>
-          <label class="flex items-center gap-1 text-sm">
-            <input type="radio" v-model="evtSyncMethod" value="file" /> 파일 업로드
-          </label>
-        </div>
-
-        <div v-if="evtSyncMethod === 'url'" class="space-y-2">
-          <input v-model="evtSheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..."
-            class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" />
-          <p class="text-xs text-slate-400">시트가 '링크가 있는 모든 사용자에게 공개'로 설정되어야 합니다.</p>
-        </div>
-        <div v-else class="space-y-2">
-          <input type="file" accept=".xlsx,.xls" @change="onEvtFileChange"
-            class="text-sm text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-slate-100 file:text-sm file:text-slate-600" />
-          <p class="text-xs text-slate-400">각 시트 탭 이름이 지점명(예: 강남, 잠실)이어야 합니다.</p>
-        </div>
-
-        <button @click="syncEvents" :disabled="syncing"
-          class="mt-3 px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
-          {{ syncing ? '수집 중...' : '이벤트 수집 실행' }}
-        </button>
-      </div>
-
-      <!-- 카페 동기화 -->
-      <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <h3 class="text-sm font-bold text-slate-700 mb-2">카페 원고 가져오기</h3>
-        <div class="grid grid-cols-2 gap-3 mb-3">
+        <div class="flex items-center justify-between mb-3">
           <div>
-            <label class="text-xs text-slate-500">시트 링크</label>
-            <input v-model="cafeSheetUrl" placeholder="Google Sheets URL" class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" />
+            <h3 class="text-sm font-bold text-slate-700">구글 장비시트 데이터 동기화</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Google Sheets에서 보유장비 데이터를 가져옵니다.</p>
           </div>
-          <div>
-            <label class="text-xs text-slate-500">지점</label>
-            <select v-model="cafeBranch" class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm">
-              <option value="">전체 지점</option>
-              <option v-for="b in branches" :key="b.id" :value="b.name">{{ b.name }}</option>
-            </select>
-          </div>
+          <button @click="syncEquipment" :disabled="syncing"
+            class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+            {{ syncing ? '동기화 중...' : '장비 동기화' }}
+          </button>
         </div>
-        <button @click="syncCafe" :disabled="syncing"
-          class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
-          {{ syncing ? '가져오는 중...' : '카페 원고 가져오기' }}
-        </button>
       </div>
 
-      <!-- DB 파일 관리 -->
+      <!-- ② 이벤트 동기화 -->
       <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <h3 class="text-sm font-bold text-slate-700 mb-1">DB 파일 관리</h3>
-        <p class="text-xs text-slate-400 mb-3">로컬 DB에서 <strong>시술사전·논문</strong>만 서버에 병합합니다. 카페 원고·이벤트·사용자 데이터는 유지됩니다.</p>
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h3 class="text-sm font-bold text-slate-700">유앤아이 지점별 이벤트 데이터 동기화</h3>
+            <p class="text-xs text-slate-400 mt-0.5">마지막 갱신: <strong>{{ evtYear }}년 {{ evtStartMonth }}-{{ evtEndMonth }}월</strong></p>
+          </div>
+          <button @click="syncEvents" :disabled="syncing"
+            class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+            {{ syncing ? '수집 중...' : '이벤트 수집' }}
+          </button>
+        </div>
+        <div class="flex gap-3 items-center text-xs">
+          <label class="flex items-center gap-1">
+            <input type="radio" v-model="evtSyncMethod" value="url" /> 링크
+          </label>
+          <label class="flex items-center gap-1">
+            <input type="radio" v-model="evtSyncMethod" value="file" /> 파일
+          </label>
+          <input v-if="evtSyncMethod === 'url'" v-model="evtSheetUrl" placeholder="Google Sheets URL"
+            class="flex-1 px-2 py-1 border border-slate-300 rounded text-xs" />
+          <input v-else type="file" accept=".xlsx,.xls" @change="onEvtFileChange"
+            class="flex-1 text-xs text-slate-500 file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:bg-slate-100 file:text-xs" />
+        </div>
+      </div>
 
-        <div v-if="dbMsg" class="mb-3 px-3 py-2 rounded text-sm"
+      <!-- ③ 카페 원고 -->
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-bold text-slate-700">카페 원고 가져오기</h3>
+          <button @click="syncCafe" :disabled="syncing"
+            class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+            {{ syncing ? '가져오는 중...' : '원고 가져오기' }}
+          </button>
+        </div>
+        <div class="flex gap-3 items-center text-xs">
+          <input v-model="cafeSheetUrl" placeholder="Google Sheets URL" class="flex-1 px-2 py-1 border border-slate-300 rounded text-xs" />
+          <select v-model="cafeBranch" class="px-2 py-1 border border-slate-300 rounded text-xs">
+            <option value="">전체 지점</option>
+            <option v-for="b in branches" :key="b.id" :value="b.name">{{ b.name }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ④ 시술사전 & 논문 DB 관리 -->
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h3 class="text-sm font-bold text-slate-700">시술사전 & 논문 DB 파일 관리</h3>
+            <p class="text-xs text-slate-400 mt-0.5">로컬 DB에서 시술사전·논문만 서버에 병합합니다. 다른 데이터는 유지됩니다.</p>
+          </div>
+        </div>
+
+        <div v-if="dbMsg" class="mb-2 px-3 py-1.5 rounded text-xs"
           :class="dbMsg.startsWith('오류') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'">
           {{ dbMsg }}
         </div>
 
-        <div v-if="dbResult" class="mb-3 p-3 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600">
-          <p class="font-semibold text-slate-700 mb-1">{{ dbResult.message }}</p>
-          <p>시술사전: {{ dbResult.device_info_count }}건 / 논문: {{ dbResult.papers_count }}건</p>
-          <p>카페 원고: {{ dbResult.cafe_articles_count }}건 (기존 유지)</p>
+        <div v-if="dbResult" class="mb-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600">
+          <span class="font-semibold text-slate-700">{{ dbResult.message }}</span>
+          <span class="ml-2">시술사전 {{ dbResult.device_info_count }}건 · 논문 {{ dbResult.papers_count }}건</span>
         </div>
 
-        <div class="flex gap-3">
-          <label class="px-4 py-2 bg-blue-600 text-white text-sm rounded cursor-pointer hover:bg-blue-700"
+        <div class="flex gap-2">
+          <label class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded cursor-pointer hover:bg-blue-700"
             :class="{ 'opacity-50 pointer-events-none': dbUploading }">
             {{ dbUploading ? '업로드 중...' : 'DB 업로드' }}
             <input type="file" accept=".db" class="hidden" @change="uploadDb" :disabled="dbUploading" />
           </label>
           <button @click="downloadDb"
-            class="px-4 py-2 bg-slate-600 text-white text-sm rounded hover:bg-slate-700">
-            DB 다운로드 (백업)
+            class="px-3 py-1.5 bg-slate-500 text-white text-xs rounded hover:bg-slate-600">
+            DB 다운로드
           </button>
         </div>
       </div>
 
-      <!-- Google 인증 파일 관리 -->
-      <div class="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 class="text-sm font-semibold text-slate-700 mb-1">Google 인증 파일</h3>
-        <p class="text-xs text-slate-400 mb-3">카페/이벤트 시트 동기화에 필요한 Google 서비스 계정 파일입니다.</p>
-
-        <div v-if="credMsg" class="px-3 py-2 rounded text-xs mb-3"
+      <!-- ⑤ Google 인증 -->
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-slate-700">Google 인증 파일</h3>
+            <p class="text-xs text-slate-400 mt-0.5">장비·이벤트·카페 시트 동기화에 필요합니다. 최초 1회 업로드하면 이후 자동 적용됩니다.</p>
+          </div>
+          <label class="px-3 py-1.5 bg-amber-600 text-white text-xs rounded cursor-pointer hover:bg-amber-700 whitespace-nowrap"
+            :class="{ 'opacity-50 pointer-events-none': credUploading }">
+            {{ credUploading ? '업로드 중...' : 'credentials.json 업로드' }}
+            <input type="file" accept=".json" class="hidden" @change="uploadCred" :disabled="credUploading" />
+          </label>
+        </div>
+        <div v-if="credMsg" class="mt-2 px-3 py-1.5 rounded text-xs"
           :class="credMsg.startsWith('오류') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'">
           {{ credMsg }}
         </div>
-
-        <label class="px-4 py-2 bg-amber-600 text-white text-sm rounded cursor-pointer hover:bg-amber-700"
-          :class="{ 'opacity-50 pointer-events-none': credUploading }">
-          {{ credUploading ? '업로드 중...' : 'credentials.json 업로드' }}
-          <input type="file" accept=".json" class="hidden" @change="uploadCred" :disabled="credUploading" />
-        </label>
       </div>
     </div>
 

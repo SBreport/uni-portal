@@ -101,9 +101,16 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
 
     # 3. 각 지점 처리
     import sqlite3
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.row_factory = sqlite3.Row
+
+    # evt_branches는 equipment.db에 있으므로 별도 연결
+    equip_db = os.path.join(DB_DIR, "equipment.db")
+    equip_conn = sqlite3.connect(equip_db, timeout=30)
+    equip_conn.execute("PRAGMA journal_mode=WAL")
+    equip_conn.row_factory = sqlite3.Row
 
     total_articles = 0
     processed = 0
@@ -112,10 +119,10 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
     for tab_name, rows in branch_data.items():
         resolved = BRANCH_ALIAS.get(tab_name, tab_name)
 
-        # evt_branches에서 지점 ID 찾기
-        branch_id = get_evt_branch_id(conn, resolved)
+        # evt_branches에서 지점 ID 찾기 (equipment.db)
+        branch_id = get_evt_branch_id(equip_conn, resolved)
         if branch_id is None:
-            branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", resolved))
+            branch_id = get_evt_branch_id(equip_conn, re.sub(r"점$", "", resolved))
         if branch_id is None:
             errors.append(f"{tab_name}: DB에 지점 없음")
             continue
@@ -181,6 +188,7 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
             print(f"  {tab_name}: 오류 - {e}")
 
     conn.close()
+    equip_conn.close()
 
     # 4. 로그 업데이트
     status = "completed" if not errors else "completed_with_errors"

@@ -218,11 +218,21 @@ async def upload_db(
             "SELECT name FROM sqlite_master WHERE type='table'"
         ).fetchall()]
 
-        # 4. 서버 DB 열기 (WAL 모드 + 타임아웃)
-        dst = sqlite3.connect(server_db, timeout=30)
-        dst.row_factory = sqlite3.Row
-        dst.execute("PRAGMA journal_mode=WAL")
-        dst.execute("PRAGMA busy_timeout=30000")
+        # 4. 서버 DB 열기 (WAL 모드 + 긴 타임아웃 + 재시도)
+        import time
+        for attempt in range(3):
+            try:
+                dst = sqlite3.connect(server_db, timeout=60)
+                dst.row_factory = sqlite3.Row
+                dst.execute("PRAGMA journal_mode=WAL")
+                dst.execute("PRAGMA busy_timeout=60000")
+                dst.execute("SELECT 1")  # 연결 테스트
+                break
+            except sqlite3.OperationalError:
+                if attempt < 2:
+                    time.sleep(2)
+                else:
+                    raise
 
         result = {"ok": True, "merged": {}}
 

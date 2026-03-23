@@ -18,9 +18,10 @@ DB_PATH = os.path.join(DB_DIR, "equipment.db")
 
 
 def _get_conn():
-    """SQLite 연결 반환 (WAL 모드)"""
-    conn = sqlite3.connect(DB_PATH)
+    """SQLite 연결 반환 (WAL 모드 + busy_timeout)"""
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     conn.row_factory = sqlite3.Row
     return conn
 

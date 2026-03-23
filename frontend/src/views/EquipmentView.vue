@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useEquipmentStore } from '@/stores/equipment'
 import { useAuthStore } from '@/stores/auth'
 import * as equipApi from '@/api/equipment'
@@ -7,6 +7,37 @@ import * as papersApi from '@/api/papers'
 
 const store = useEquipmentStore()
 const auth = useAuthStore()
+
+// 패널 리사이즈
+const leftWidth = ref(Math.round(window.innerWidth * 0.35))
+const isResizing = ref(false)
+
+function startResize(e: MouseEvent) {
+  isResizing.value = true
+  const startX = e.clientX
+  const startWidth = leftWidth.value
+
+  function onMouseMove(e: MouseEvent) {
+    const diff = e.clientX - startX
+    const newWidth = startWidth + diff
+    const minW = 250
+    const maxW = window.innerWidth * 0.65
+    leftWidth.value = Math.max(minW, Math.min(maxW, newWidth))
+  }
+
+  function onMouseUp() {
+    isResizing.value = false
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }
+
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+}
 
 // 수정 추적
 const pendingChanges = ref<Map<number, Record<string, any>>>(new Map())
@@ -150,10 +181,10 @@ function formatPrice(n: number | null) {
     </div>
 
     <!-- 2컬럼: 테이블(좌) + 상세 정보(우, 상시 존재) -->
-    <div class="flex gap-4" style="height: calc(100vh - 160px)">
+    <div class="flex" style="height: calc(100vh - 160px)">
 
       <!-- ===== 좌측: 장비 테이블 ===== -->
-      <div class="w-[35%] shrink-0 bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col">
+      <div :style="{ width: leftWidth + 'px' }" class="shrink-0 bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col">
         <div class="overflow-auto flex-1">
           <table class="w-full text-[13px] table-fixed">
             <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
@@ -218,6 +249,12 @@ function formatPrice(n: number | null) {
           </table>
         </div>
       </div>
+
+      <!-- ===== 드래그 리사이저 ===== -->
+      <div
+        class="resizer"
+        @mousedown="startResize"
+      ></div>
 
       <!-- ===== 우측: 장비 상세 정보 (상시 표시) ===== -->
       <div class="flex-1 min-w-0 overflow-auto">
@@ -382,3 +419,32 @@ function formatPrice(n: number | null) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 32px;
+  background: #cbd5e1;
+  border-radius: 1px;
+}
+.resizer:hover {
+  background: #e2e8f0;
+}
+.resizer:hover::after {
+  background: #3b82f6;
+  height: 48px;
+}
+</style>

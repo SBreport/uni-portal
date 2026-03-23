@@ -3,14 +3,16 @@
 
 미용의료 논문 PDF를 Claude API로 분석하여:
 1. 의학 비전문가도 이해할 수 있는 서술형 요약 생성
-2. uni-portal papers DB에 저장
-3. Word(.docx) / Excel(.xlsx) 문서로 출력
+2. uni-portal papers DB에 저장 (기본)
+3. Word(.docx) / Excel(.xlsx) 문서로 출력 (선택)
 
 사용법:
-  python paper_analyzer.py papers/sample.pdf
-  python paper_analyzer.py --dir papers/
-  python paper_analyzer.py --dry-run papers/sample.pdf
-  python paper_analyzer.py --export-only results.json
+  python paper_analyzer.py papers/sample.pdf          # 분석 → DB 저장
+  python paper_analyzer.py --dir papers/              # 폴더 내 전체 분석
+  python paper_analyzer.py --dry-run papers/sample.pdf  # 분석만 (DB 저장 안 함)
+  python paper_analyzer.py --export-docx papers/sample.pdf  # 분석 + DB + Word 출력
+  python paper_analyzer.py --export-xlsx papers/sample.pdf  # 분석 + DB + Excel 출력
+  python paper_analyzer.py --export-only results.json       # 기존 JSON → 문서 출력
 """
 
 import os
@@ -842,11 +844,17 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="분석만 수행 (DB 저장 안 함)")
     parser.add_argument("--export-only", help="이미 분석된 JSON에서 문서만 출력")
     parser.add_argument("--api-url", default=API_BASE, help="uni-portal API 서버 URL")
-    parser.add_argument("--no-docx", action="store_true", help="Word 문서 출력 생략")
-    parser.add_argument("--no-xlsx", action="store_true", help="Excel 문서 출력 생략")
+    parser.add_argument("--export-docx", action="store_true", help="Word 문서도 출력")
+    parser.add_argument("--export-xlsx", action="store_true", help="Excel 문서도 출력")
+    parser.add_argument("--export-all", action="store_true", help="JSON + Word + Excel 모두 출력")
     args = parser.parse_args()
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
+
+    # export-all 플래그 처리
+    want_docx = args.export_docx or args.export_all
+    want_xlsx = args.export_xlsx or args.export_all
+    want_json = args.export_all
 
     # export-only 모드
     if args.export_only:
@@ -854,10 +862,8 @@ def main():
             results = json.load(f)
         print(f"JSON에서 {len(results)}건 로드")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        if not args.no_docx:
-            export_to_docx(results, os.path.join(RESULTS_DIR, f"papers_{timestamp}.docx"))
-        if not args.no_xlsx:
-            export_to_xlsx(results, os.path.join(RESULTS_DIR, f"papers_{timestamp}.xlsx"))
+        export_to_docx(results, os.path.join(RESULTS_DIR, f"papers_{timestamp}.docx"))
+        export_to_xlsx(results, os.path.join(RESULTS_DIR, f"papers_{timestamp}.xlsx"))
         return
 
     # PDF 파일 목록 수집
@@ -933,17 +939,16 @@ def main():
             print("\n분석 성공한 논문이 없습니다.")
         sys.exit(0 if skipped else 1)
 
-    # JSON 저장 (항상)
+    # 문서 출력 (요청 시에만)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    json_path = os.path.join(RESULTS_DIR, f"papers_{timestamp}.json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
-    print(f"\n[JSON 저장] {json_path}")
-
-    # 문서 출력
-    if not args.no_docx:
+    if want_json:
+        json_path = os.path.join(RESULTS_DIR, f"papers_{timestamp}.json")
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+        print(f"\n[JSON 저장] {json_path}")
+    if want_docx:
         export_to_docx(results, os.path.join(RESULTS_DIR, f"papers_{timestamp}.docx"))
-    if not args.no_xlsx:
+    if want_xlsx:
         export_to_xlsx(results, os.path.join(RESULTS_DIR, f"papers_{timestamp}.xlsx"))
 
     # DB 저장

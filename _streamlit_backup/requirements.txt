@@ -1,7 +1,0 @@
-streamlit>=1.45.0
-pandas
-plotly
-streamlit-aggrid
-gspread
-google-auth
-openpyxl

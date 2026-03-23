@@ -17,6 +17,9 @@ credentials.json
 # Claude Code 로컬 설정 (API 키 포함)
 .claude/settings.local.json
 
+# 임시 보관 (삭제 대기)
+_temp/
+
 # JSON — 데이터/설정 파일은 허용, 민감 파일만 차단
 !normalization/*.json
 !data/device_master.json

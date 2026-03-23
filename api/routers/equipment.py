@@ -218,9 +218,11 @@ async def upload_db(
             "SELECT name FROM sqlite_master WHERE type='table'"
         ).fetchall()]
 
-        # 4. 서버 DB 열기
-        dst = sqlite3.connect(server_db)
+        # 4. 서버 DB 열기 (WAL 모드 + 타임아웃)
+        dst = sqlite3.connect(server_db, timeout=30)
         dst.row_factory = sqlite3.Row
+        dst.execute("PRAGMA journal_mode=WAL")
+        dst.execute("PRAGMA busy_timeout=30000")
 
         result = {"ok": True, "merged": {}}
 

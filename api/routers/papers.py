@@ -330,6 +330,33 @@ def scan_folder(data: dict):
     }
 
 
+@router.post("/list-dirs")
+def list_dirs(data: dict):
+    """폴더 경로의 하위 디렉토리 목록 반환. 폴더 탐색기용."""
+    folder = Path(data.get("folder_path", ""))
+    if not folder.exists() or not folder.is_dir():
+        raise HTTPException(400, f"폴더가 존재하지 않습니다: {folder}")
+
+    dirs = []
+    try:
+        for item in sorted(folder.iterdir()):
+            if item.is_dir() and not item.name.startswith("."):
+                pdf_count = len(list(item.glob("*.pdf")))
+                dirs.append({
+                    "name": item.name,
+                    "path": str(item),
+                    "pdf_count": pdf_count,
+                })
+    except PermissionError:
+        raise HTTPException(403, "폴더 접근 권한이 없습니다.")
+
+    return {
+        "parent": str(folder),
+        "dirs": dirs,
+        "pdf_count": len(list(folder.glob("*.pdf"))),
+    }
+
+
 # ── JSON 파일 업로드 (로컬 분석 결과 일괄 등록) ──
 # PaperCreate에 없는 키 목록 (paper_analyzer.py 출력에 포함되는 메타 키)
 _EXTRA_KEYS = {

@@ -32,6 +32,10 @@ export const uploadPapersJson = (file: File) => {
 export const scanFolder = (folderPath: string) =>
   api.post('/papers/scan-folder', { folder_path: folderPath })
 
+// 하위 폴더 탐색 (폴더 탐색기용)
+export const listDirs = (folderPath: string) =>
+  api.post('/papers/list-dirs', { folder_path: folderPath })
+
 // 폴더 분석 실행 (paper_analyzer.py 호출)
 export const analyzeDir = (folderPath: string, apiKey: string, dryRun = false) =>
   api.post('/papers/analyze-dir', {

@@ -253,6 +253,67 @@ const paperAnalyzing = ref(false)
 const paperAnalyzeResult = ref<any>(null)
 const paperError = ref('')
 
+// 폴더 탐색기
+const showFolderBrowser = ref(false)
+const folderBrowsing = ref(false)
+const folderDirs = ref<{ name: string; path: string; pdf_count: number }[]>([])
+const folderParent = ref('')
+const folderBrowserError = ref('')
+
+// 자주 쓰는 논문 폴더 경로 (사전 등록)
+const presetFolders = [
+  { label: '전체 논문', path: 'Z:\\NAS\\논문' },
+  { label: '리프팅', path: 'Z:\\NAS\\논문\\00_리프팅시술' },
+  { label: '필러', path: 'Z:\\NAS\\논문\\01_필러' },
+  { label: '보톡스', path: 'Z:\\NAS\\논문\\02_보톡스' },
+  { label: '레이저', path: 'Z:\\NAS\\논문\\03_레이저' },
+  { label: '스킨부스터', path: 'Z:\\NAS\\논문\\04_스킨부스터' },
+]
+
+function selectPresetFolder(path: string) {
+  paperFolderPath.value = path
+  paperScanResult.value = null
+  paperAnalyzeResult.value = null
+  paperError.value = ''
+}
+
+async function browseFolders(path?: string) {
+  const target = path || paperFolderPath.value.trim()
+  if (!target) return
+  folderBrowsing.value = true
+  folderBrowserError.value = ''
+  try {
+    const { data } = await papersApi.listDirs(target)
+    folderDirs.value = data.dirs
+    folderParent.value = data.parent
+    showFolderBrowser.value = true
+    if (data.pdf_count > 0 && !path) {
+      // 현재 폴더에 PDF가 있으면 스캔도 실행
+      paperFolderPath.value = target
+    }
+  } catch (e: any) {
+    folderBrowserError.value = e.response?.data?.detail || '폴더 탐색 실패'
+  } finally {
+    folderBrowsing.value = false
+  }
+}
+
+function selectBrowserFolder(dir: { name: string; path: string; pdf_count: number }) {
+  paperFolderPath.value = dir.path
+  paperScanResult.value = null
+  paperAnalyzeResult.value = null
+  showFolderBrowser.value = false
+  scanPaperFolder()
+}
+
+function navigateUp() {
+  const parent = folderParent.value
+  const upPath = parent.substring(0, parent.lastIndexOf('\\')) || parent.substring(0, parent.lastIndexOf('/'))
+  if (upPath && upPath !== parent) {
+    browseFolders(upPath)
+  }
+}
+
 async function scanPaperFolder() {
   if (!paperFolderPath.value.trim()) return
   paperScanning.value = true
@@ -533,15 +594,55 @@ async function runPaperAnalysis() {
         <h3 class="text-sm font-bold text-slate-700 mb-1">🔬 논문 폴더 분석</h3>
         <p class="text-xs text-slate-400 mb-3">로컬 폴더의 논문 PDF를 Claude API로 일괄 분석하여 DB에 저장합니다.</p>
 
-        <!-- 폴더 경로 -->
+        <!-- 자주 쓰는 경로 바로가기 -->
+        <div class="flex flex-wrap gap-1.5 mb-2">
+          <button v-for="f in presetFolders" :key="f.path"
+            @click="selectPresetFolder(f.path)"
+            :class="[
+              'px-2 py-1 rounded text-[11px] font-medium border transition',
+              paperFolderPath === f.path
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                : 'bg-white border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600'
+            ]">
+            📁 {{ f.label }}
+          </button>
+        </div>
+
+        <!-- 폴더 경로 입력 + 탐색 -->
         <div class="flex gap-2 mb-3">
           <input v-model="paperFolderPath" placeholder="논문 PDF 폴더 경로 (예: Z:\...\00_리프팅시술)"
             class="flex-1 px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400"
             @keyup.enter="scanPaperFolder" />
+          <button @click="browseFolders()" :disabled="!paperFolderPath.trim() || folderBrowsing"
+            class="px-3 py-2 bg-slate-100 text-slate-600 text-xs font-medium rounded-md hover:bg-slate-200 disabled:opacity-50 shrink-0 border border-slate-300"
+            title="하위 폴더 탐색">
+            {{ folderBrowsing ? '...' : '📂' }}
+          </button>
           <button @click="scanPaperFolder" :disabled="!paperFolderPath.trim() || paperScanning"
             class="px-4 py-2 bg-slate-600 text-white text-xs font-medium rounded-md hover:bg-slate-700 disabled:opacity-50 shrink-0">
             {{ paperScanning ? '확인 중...' : '폴더 확인' }}
           </button>
+        </div>
+
+        <!-- 폴더 탐색기 -->
+        <div v-if="showFolderBrowser" class="mb-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <button @click="navigateUp" class="text-xs text-blue-500 hover:text-blue-700">⬆ 상위</button>
+              <span class="text-xs text-slate-400 truncate max-w-md">{{ folderParent }}</span>
+            </div>
+            <button @click="showFolderBrowser = false" class="text-xs text-slate-400 hover:text-slate-600">✕ 닫기</button>
+          </div>
+          <div v-if="folderBrowserError" class="text-xs text-red-500 mb-2">{{ folderBrowserError }}</div>
+          <div v-if="folderDirs.length" class="max-h-40 overflow-auto space-y-1">
+            <div v-for="d in folderDirs" :key="d.path"
+              class="flex items-center justify-between px-2 py-1.5 rounded cursor-pointer hover:bg-white border border-transparent hover:border-slate-200 transition"
+              @click="selectBrowserFolder(d)">
+              <span class="text-sm text-slate-700">📁 {{ d.name }}</span>
+              <span v-if="d.pdf_count > 0" class="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">PDF {{ d.pdf_count }}건</span>
+            </div>
+          </div>
+          <p v-else class="text-xs text-slate-400">하위 폴더가 없습니다.</p>
         </div>
 
         <!-- 스캔 결과 -->

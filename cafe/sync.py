@@ -120,9 +120,13 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
         resolved = BRANCH_ALIAS.get(tab_name, tab_name)
 
         # evt_branches에서 지점 ID 찾기 (equipment.db)
-        branch_id = get_evt_branch_id(equip_conn, resolved)
-        if branch_id is None:
-            branch_id = get_evt_branch_id(equip_conn, re.sub(r"점$", "", resolved))
+        try:
+            branch_id = get_evt_branch_id(equip_conn, resolved)
+            if branch_id is None:
+                branch_id = get_evt_branch_id(equip_conn, re.sub(r"점$", "", resolved))
+        except Exception as e:
+            errors.append(f"{tab_name}: 지점 조회 오류 - {e}")
+            continue
         if branch_id is None:
             errors.append(f"{tab_name}: DB에 지점 없음")
             continue

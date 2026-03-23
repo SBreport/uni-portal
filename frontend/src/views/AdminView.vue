@@ -221,6 +221,28 @@ async function downloadDb() {
   }
 }
 
+// ── Google 인증 파일 ──
+const credUploading = ref(false)
+const credMsg = ref('')
+
+async function uploadCred(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (!input.files?.length) return
+  credUploading.value = true
+  credMsg.value = ''
+  try {
+    const formData = new FormData()
+    formData.append('file', input.files[0])
+    const res = await equipApi.uploadCredentials(formData)
+    credMsg.value = `업로드 완료: ${res.data.client_email} (${res.data.project_id})`
+  } catch (e: any) {
+    credMsg.value = '오류: ' + (e.response?.data?.detail || e.message)
+  } finally {
+    credUploading.value = false
+    input.value = ''
+  }
+}
+
 // ── 논문 폴더 분석 ──
 const paperFolderPath = ref('')
 const paperApiKey = ref('')
@@ -461,6 +483,23 @@ async function runPaperAnalysis() {
             DB 다운로드 (백업)
           </button>
         </div>
+      </div>
+
+      <!-- Google 인증 파일 관리 -->
+      <div class="bg-white border border-slate-200 rounded-lg p-5">
+        <h3 class="text-sm font-semibold text-slate-700 mb-1">Google 인증 파일</h3>
+        <p class="text-xs text-slate-400 mb-3">카페/이벤트 시트 동기화에 필요한 Google 서비스 계정 파일입니다.</p>
+
+        <div v-if="credMsg" class="px-3 py-2 rounded text-xs mb-3"
+          :class="credMsg.startsWith('오류') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'">
+          {{ credMsg }}
+        </div>
+
+        <label class="px-4 py-2 bg-amber-600 text-white text-sm rounded cursor-pointer hover:bg-amber-700"
+          :class="{ 'opacity-50 pointer-events-none': credUploading }">
+          {{ credUploading ? '업로드 중...' : 'credentials.json 업로드' }}
+          <input type="file" accept=".json" class="hidden" @change="uploadCred" :disabled="credUploading" />
+        </label>
       </div>
     </div>
 

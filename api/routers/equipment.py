@@ -290,3 +290,37 @@ async def upload_db(
         os.unlink(tmp.name)
 
     return result
+
+
+@router.post("/credentials-upload")
+async def upload_credentials(
+    file: UploadFile = File(...),
+    user: Annotated[dict, Depends(require_role("admin"))] = None,
+):
+    """Google 서비스 계정 credentials.json 업로드 (admin 전용)."""
+    import os, json
+
+    content = await file.read()
+
+    # JSON 유효성 검증
+    try:
+        data = json.loads(content)
+        if data.get("type") != "service_account":
+            raise HTTPException(400, "유효한 Google 서비스 계정 JSON이 아닙니다.")
+    except json.JSONDecodeError:
+        raise HTTPException(400, "JSON 파일 형식이 아닙니다.")
+
+    # data 폴더에 저장
+    db_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data")
+    db_dir = os.path.abspath(db_dir)
+    cred_path = os.path.join(db_dir, "credentials.json")
+
+    with open(cred_path, "wb") as f:
+        f.write(content)
+
+    return {
+        "ok": True,
+        "message": "credentials.json 업로드 완료",
+        "client_email": data.get("client_email", ""),
+        "project_id": data.get("project_id", ""),
+    }

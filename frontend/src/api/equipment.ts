@@ -37,3 +37,7 @@ export const uploadDb = (formData: FormData) =>
   api.post('/equipment/db-upload', formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 })
 export const downloadDb = () =>
   api.get('/equipment/db-download', { responseType: 'blob' })
+
+// Google 인증 파일
+export const uploadCredentials = (formData: FormData) =>
+  api.post('/equipment/credentials-upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })

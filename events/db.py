@@ -217,7 +217,7 @@ def update_ingestion_log(conn, log_id: int, status: str, total_branches: int, to
 
 
 # ============================================================
-# 읽기 함수 (Streamlit UI용)
+# 읽기 함수
 # ============================================================
 
 def _event_query():

@@ -236,31 +236,41 @@ async def upload_db(
 
         result = {"ok": True, "merged": {}}
 
-        # 5. device_info 병합 (REPLACE — name 기준)
+        # 5. device_info 병합 (REPLACE — 컬럼 자동 동기화)
         if "device_info" in src_tables:
             rows = [dict(r) for r in src.execute("SELECT * FROM device_info").fetchall()]
-            for r in rows:
-                dst.execute("""
-                    INSERT OR REPLACE INTO device_info
-                    (id, name, category, summary, target, mechanism, note, aliases,
-                     usage_count, is_verified, created_at, updated_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                """, (r["id"], r["name"], r.get("category"), r.get("summary"),
-                      r.get("target"), r.get("mechanism"), r.get("note"),
-                      r.get("aliases"), r.get("usage_count", 0),
-                      r.get("is_verified", 0), r.get("created_at"), r.get("updated_at")))
+            if rows:
+                src_cols = list(rows[0].keys())
+                dst_cols = [r[1] for r in dst.execute("PRAGMA table_info(device_info)").fetchall()]
+                for col in src_cols:
+                    if col not in dst_cols:
+                        dst.execute(f"ALTER TABLE device_info ADD COLUMN {col} TEXT")
+                        print(f"  device_info 컬럼 추가: {col}")
+
+                placeholders = ",".join(["?"] * len(src_cols))
+                col_names = ",".join(src_cols)
+                for r in rows:
+                    vals = [r.get(c) for c in src_cols]
+                    dst.execute(f"INSERT OR REPLACE INTO device_info ({col_names}) VALUES ({placeholders})", vals)
             result["merged"]["device_info"] = len(rows)
 
-        # 6. papers 병합 (REPLACE — id 기준)
+        # 6. papers 병합 (REPLACE — id 기준, 컬럼 자동 추가)
         if "papers" in src_tables:
             rows = [dict(r) for r in src.execute("SELECT * FROM papers").fetchall()]
-            # papers 컬럼 동적 처리
             if rows:
-                cols = list(rows[0].keys())
-                placeholders = ",".join(["?"] * len(cols))
-                col_names = ",".join(cols)
+                src_cols = list(rows[0].keys())
+                # 서버 papers 테이블의 기존 컬럼 확인
+                dst_cols = [r[1] for r in dst.execute("PRAGMA table_info(papers)").fetchall()]
+                # 서버에 없는 컬럼 자동 추가
+                for col in src_cols:
+                    if col not in dst_cols:
+                        dst.execute(f"ALTER TABLE papers ADD COLUMN {col} TEXT")
+                        print(f"  papers 컬럼 추가: {col}")
+
+                placeholders = ",".join(["?"] * len(src_cols))
+                col_names = ",".join(src_cols)
                 for r in rows:
-                    vals = [r.get(c) for c in cols]
+                    vals = [r.get(c) for c in src_cols]
                     dst.execute(f"INSERT OR REPLACE INTO papers ({col_names}) VALUES ({placeholders})", vals)
             result["merged"]["papers"] = len(rows)
 

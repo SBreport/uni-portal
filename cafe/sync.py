@@ -1,8 +1,8 @@
-"""카페 마케팅 원고 데이터 — 구글 시트 1회성 가져오기.
+"""카페 마케팅 원고 데이터 — 구글 시트 가져오기.
 
 사용법:
   CLI: python -m cafe.sync --year 2026 --month 3 --branch 동탄점
-  Streamlit: from cafe.sync import run_cafe_import
+  API: POST /api/cafe/sync
 """
 
 import argparse
@@ -180,8 +180,7 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
             processed += 1
             print(f"  {tab_name}: {count}건 저장")
 
-            # 캐시 초기화
-            load_cafe_articles.clear()
+            # 캐시 없음
 
         except Exception as e:
             errors.append(f"{tab_name}: {e}")

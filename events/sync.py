@@ -2,7 +2,7 @@
 
 사용법:
   CLI: python -m events.sync --year 2026 --start-month 3 --end-month 4
-  Streamlit: from events.sync import run_event_sync
+  API: POST /api/events/sync
 """
 
 import argparse

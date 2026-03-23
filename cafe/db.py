@@ -66,7 +66,9 @@ def _get_conn():
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=30000")
-    conn.execute("PRAGMA foreign_keys=ON")
+    # foreign_keys OFF: cafe_branch_periods.branch_id가 equipment.db의 evt_branches를 참조하므로
+    # 크로스 DB FK 체크 불가. 대신 애플리케이션 로직으로 무결성 보장.
+    conn.execute("PRAGMA foreign_keys=OFF")
     conn.row_factory = sqlite3.Row
     # equipment.db를 ATTACH (evt_branches JOIN 등 크로스 DB 조회용)
     equip_path = os.path.abspath(EQUIPMENT_DB_PATH)

@@ -1,0 +1,30 @@
+[
+  {
+    "title": "Comparison between Laser-Cutting or Molded Polyoxanone Thread in Facial Lifting",
+    "title_ko": "안면 리프팅에서 레이저 절단 vs 성형 폴리디옥사논(PDO) 실의 비교",
+    "authors": "Celia Marisa Rizzatti Barbosa, Jose Ricardo de Albergaria-Barbosa",
+    "journal": "Open Science Journal",
+    "pub_year": 2022,
+    "doi": "",
+    "evidence_level": 3,
+    "study_type": "전향적 비교 연구",
+    "sample_size": "기재 없음",
+    "follow_up_period": "90일",
+    "one_line_summary": "Barbosa 등은 안면 리프팅에서 레이저 절단 PDO 실과 성형(molded) PDO 실의 효과를 비교한 전향적 연구에서, 100mm 캐뉼라를 이용한 피하 단일천공 선형 벡터 삽입법으로 시술하고 90일간 추적하여 두 가공 방식 간의 임상적 차이를 평가하였다.",
+    "key_findings": "PDO 실: 생분해성 합성 폴리머, 비효소적 가수분해로 분해, 흡수 약 180일. 파열 저항 42일에 53%. 신생혈관 형성 및 콜라겐(Colα1, Colα3) 재생 촉진. 레이저 절단 vs 성형(molded) 바브 실의 인장강도/고정력 비교. 100mm 캐뉼라, 피하 삽입, 단일 천공, 국소마취(아티카인 4%/에피네프린).",
+    "research_purpose": "PDO 실의 가공 방법(레이저 절단 vs 성형)에 따른 안면 리프팅 효과 차이 비교",
+    "study_design_detail": "전향적 비교 연구. 윤리위원회 승인. 8개월 연구기간(스크리닝 3개월 포함). 90일 최종 평가",
+    "key_results": "레이저 절단과 성형 PDO 실 간 통계적 차이를 보이지 않음. 두 방법 모두 안면 리프팅에 유효",
+    "conclusion": "레이저 절단과 성형 가공 방식의 PDO 실 모두 안면 리프팅에 사용 가능하나, 대규모 비교 연구가 필요",
+    "cautions": "Open Science Journal 게재. 통계적 차이 분석 제한적. 표본 크기 미기재",
+    "quotable_stats": ["PDO 흡수 약 180일", "파열 저항 42일에 53%"],
+    "keywords": ["PDO thread", "polydioxanone", "facial lifting", "laser-cutting", "molded thread", "barbed thread"],
+    "source_file": "osjournal,+#3096-celia+Marisa+Rizzatti+-Comparison+Between+lase+cutting-+Provisional1.pdf",
+    "source_url": "",
+    "status": "draft",
+    "file_hash": "",
+    "device_info_id": null,
+    "treatment_id": null,
+    "device_matches": []
+  }
+]

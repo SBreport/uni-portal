@@ -249,6 +249,15 @@ function handleSearch() {
               <a v-if="selectedPaper.source_url" :href="selectedPaper.source_url" target="_blank"
                 class="text-blue-500 hover:underline ml-auto">DOI</a>
             </div>
+            <!-- 📄 원본 파일명 -->
+            <div v-if="selectedPaper.source_file" class="mt-2 flex items-center gap-2 bg-slate-100 rounded px-3 py-1.5">
+              <span class="text-slate-400 shrink-0">📄</span>
+              <span class="text-xs text-slate-600 font-mono truncate" :title="selectedPaper.source_file">
+                {{ selectedPaper.source_file.split('/').pop().split('\\\\').pop() }}
+              </span>
+              <span v-if="selectedPaper.photo_restriction"
+                    class="ml-auto shrink-0 text-red-500 text-sm" title="사진 사용 제한">🚫</span>
+            </div>
           </div>
 
           <!-- 로딩 -->

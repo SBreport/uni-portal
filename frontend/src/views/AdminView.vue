@@ -356,7 +356,6 @@ async function runPaperAnalysis() {
       <button v-for="tab in [
         { key: 'users', label: '사용자' },
         { key: 'sync', label: '데이터 동기화' },
-        { key: 'device', label: '시술정보 관리' },
       ]" :key="tab.key"
         @click="activeTab = tab.key as any"
         :class="['pb-2 text-sm font-medium border-b-2 transition',
@@ -516,8 +515,8 @@ async function runPaperAnalysis() {
       <div class="bg-white border border-slate-200 rounded-lg p-4">
         <div class="flex items-center justify-between mb-2">
           <div>
-            <h3 class="text-sm font-bold text-slate-700">시술사전 & 논문 DB 파일 관리</h3>
-            <p class="text-xs text-slate-400 mt-0.5">로컬 DB에서 시술사전·논문만 서버에 병합합니다. 다른 데이터는 유지됩니다.</p>
+            <h3 class="text-sm font-bold text-slate-700">시술사전 · 논문 DB 관리</h3>
+            <p class="text-xs text-slate-400 mt-0.5">로컬에서 작업한 시술사전(device_info)과 논문(papers) 데이터를 서버 DB에 병합합니다. 장비·이벤트·카페 등 기존 데이터는 유지됩니다.</p>
           </div>
         </div>
 
@@ -564,133 +563,7 @@ async function runPaperAnalysis() {
       </div>
     </div>
 
-    <!-- ========== 시술사전 관리 탭 ========== -->
-    <div v-if="activeTab === 'device'" class="space-y-6">
-      <div v-if="deviceMsg" class="px-4 py-2 rounded text-sm"
-        :class="deviceMsg.startsWith('오류') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'">
-        {{ deviceMsg }}
-      </div>
-
-      <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <h3 class="text-sm font-bold text-slate-700 mb-2">보유수 업데이트</h3>
-        <p class="text-xs text-slate-400 mb-3">장비 테이블 기준으로 각 시술의 보유 지점 수를 재계산합니다.</p>
-        <button @click="updateDeviceCounts" :disabled="deviceSyncing"
-          class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
-          {{ deviceSyncing ? '처리 중...' : '보유수 업데이트' }}
-        </button>
-      </div>
-
-      <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <h3 class="text-sm font-bold text-slate-700 mb-2">JSON → DB 동기화</h3>
-        <p class="text-xs text-slate-400 mb-3">device_info.json 파일의 시술 정보를 DB에 반영합니다.</p>
-        <button @click="syncDeviceJson" :disabled="deviceSyncing"
-          class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
-          {{ deviceSyncing ? '동기화 중...' : 'JSON → DB 동기화' }}
-        </button>
-      </div>
-
-      <!-- 논문 폴더 분석 -->
-      <div class="bg-white border border-slate-200 rounded-lg p-4">
-        <h3 class="text-sm font-bold text-slate-700 mb-1">🔬 논문 폴더 분석</h3>
-        <p class="text-xs text-slate-400 mb-3">로컬 폴더의 논문 PDF를 Claude API로 일괄 분석하여 DB에 저장합니다.</p>
-
-        <!-- 자주 쓰는 경로 바로가기 -->
-        <div class="flex flex-wrap gap-1.5 mb-2">
-          <button v-for="f in presetFolders" :key="f.path"
-            @click="selectPresetFolder(f.path)"
-            :class="[
-              'px-2 py-1 rounded text-[11px] font-medium border transition',
-              paperFolderPath === f.path
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                : 'bg-white border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600'
-            ]">
-            📁 {{ f.label }}
-          </button>
-        </div>
-
-        <!-- 폴더 경로 입력 + 탐색 -->
-        <div class="flex gap-2 mb-3">
-          <input v-model="paperFolderPath" placeholder="논문 PDF 폴더 경로 (예: Z:\...\00_리프팅시술)"
-            class="flex-1 px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400"
-            @keyup.enter="scanPaperFolder" />
-          <button @click="browseFolders()" :disabled="!paperFolderPath.trim() || folderBrowsing"
-            class="px-3 py-2 bg-slate-100 text-slate-600 text-xs font-medium rounded-md hover:bg-slate-200 disabled:opacity-50 shrink-0 border border-slate-300"
-            title="하위 폴더 탐색">
-            {{ folderBrowsing ? '...' : '📂' }}
-          </button>
-          <button @click="scanPaperFolder" :disabled="!paperFolderPath.trim() || paperScanning"
-            class="px-4 py-2 bg-slate-600 text-white text-xs font-medium rounded-md hover:bg-slate-700 disabled:opacity-50 shrink-0">
-            {{ paperScanning ? '확인 중...' : '폴더 확인' }}
-          </button>
-        </div>
-
-        <!-- 폴더 탐색기 -->
-        <div v-if="showFolderBrowser" class="mb-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-          <div class="flex items-center justify-between mb-2">
-            <div class="flex items-center gap-2">
-              <button @click="navigateUp" class="text-xs text-blue-500 hover:text-blue-700">⬆ 상위</button>
-              <span class="text-xs text-slate-400 truncate max-w-md">{{ folderParent }}</span>
-            </div>
-            <button @click="showFolderBrowser = false" class="text-xs text-slate-400 hover:text-slate-600">✕ 닫기</button>
-          </div>
-          <div v-if="folderBrowserError" class="text-xs text-red-500 mb-2">{{ folderBrowserError }}</div>
-          <div v-if="folderDirs.length" class="max-h-40 overflow-auto space-y-1">
-            <div v-for="d in folderDirs" :key="d.path"
-              class="flex items-center justify-between px-2 py-1.5 rounded cursor-pointer hover:bg-white border border-transparent hover:border-slate-200 transition"
-              @click="selectBrowserFolder(d)">
-              <span class="text-sm text-slate-700">📁 {{ d.name }}</span>
-              <span v-if="d.pdf_count > 0" class="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">PDF {{ d.pdf_count }}건</span>
-            </div>
-          </div>
-          <p v-else class="text-xs text-slate-400">하위 폴더가 없습니다.</p>
-        </div>
-
-        <!-- 스캔 결과 -->
-        <div v-if="paperScanResult" class="mb-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-          <p class="text-sm font-medium text-slate-700 mb-1">📁 PDF {{ paperScanResult.pdf_count }}건 발견</p>
-          <div class="max-h-24 overflow-auto text-xs text-slate-500 space-y-0.5">
-            <p v-for="f in paperScanResult.files" :key="f" class="truncate">· {{ f }}</p>
-            <p v-if="paperScanResult.has_more" class="text-slate-400 italic">...외 {{ paperScanResult.pdf_count - 50 }}건</p>
-          </div>
-        </div>
-
-        <!-- API 키 + 실행 -->
-        <div v-if="paperScanResult && paperScanResult.pdf_count > 0">
-          <input v-model="paperApiKey" type="password" placeholder="Anthropic API Key (sk-ant-api03-...)"
-            class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm mb-2 focus:outline-none focus:ring-1 focus:ring-emerald-400" />
-          <div class="flex items-center gap-3 mb-3">
-            <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
-              <input type="checkbox" v-model="paperDryRun" class="rounded" />
-              테스트 모드 (DB 저장 안 함)
-            </label>
-            <span class="text-xs text-slate-400">
-              예상: {{ Math.ceil(paperScanResult.pdf_count * 0.7) }}~{{ paperScanResult.pdf_count }}분
-            </span>
-          </div>
-          <button @click="runPaperAnalysis" :disabled="!paperApiKey.trim() || paperAnalyzing"
-            class="px-4 py-2 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700 disabled:opacity-50">
-            <template v-if="paperAnalyzing">
-              <span class="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5 align-middle"></span>
-              분석 중... (창을 닫지 마세요)
-            </template>
-            <template v-else>🔬 {{ paperScanResult.pdf_count }}건 분석 시작</template>
-          </button>
-        </div>
-
-        <!-- 에러/결과 -->
-        <div v-if="paperError" class="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{{ paperError }}</div>
-        <div v-if="paperAnalyzeResult" class="mt-3 p-3 rounded border"
-          :class="paperAnalyzeResult.success ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'">
-          <p class="text-sm font-bold mb-1" :class="paperAnalyzeResult.success ? 'text-emerald-700' : 'text-amber-700'">
-            {{ paperAnalyzeResult.success ? '✅ 분석 완료' : '⚠️ 일부 오류' }}
-          </p>
-          <p class="text-xs text-slate-600">대상: {{ paperAnalyzeResult.pdf_count }}건 / 성공: {{ paperAnalyzeResult.analyzed }}건</p>
-          <div v-if="paperAnalyzeResult.summary.length" class="mt-2 p-2 bg-white/50 rounded text-xs font-mono">
-            <p v-for="(line, i) in paperAnalyzeResult.summary" :key="i">{{ line }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- 시술사전 관리 탭 제거됨 — DB 업로드/다운로드는 동기화 탭에서 처리 -->
 
   </div>
 </template>

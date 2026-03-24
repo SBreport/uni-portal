@@ -100,13 +100,7 @@ function handleSearch() {
   <div class="p-5 h-[calc(100vh-1rem)]">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-xl font-bold text-slate-800">시술논문</h2>
-      <div class="flex items-center gap-2">
-        <span class="text-xs text-slate-400">{{ store.papers.length }}건</span>
-        <button @click="showUploadModal = true"
-          class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition">
-          📄 JSON 업로드
-        </button>
-      </div>
+      <span class="text-xs text-slate-400">{{ store.papers.length }}건</span>
     </div>
 
     <!-- 필터 바 -->

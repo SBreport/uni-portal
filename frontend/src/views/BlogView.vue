@@ -195,11 +195,6 @@ onMounted(() => {
           <span class="px-2 py-1 bg-purple-50 text-purple-700 rounded">최적 {{ stats.by_channel?.opt?.toLocaleString() || 0 }}</span>
           <span class="px-2 py-1 bg-emerald-50 text-emerald-700 rounded">논문글 {{ stats.paper_posts || 0 }}</span>
         </div>
-        <!-- CSV 업로드 버튼 -->
-        <button @click="showUploadModal = true"
-                class="px-3 py-1.5 bg-slate-800 text-white text-xs rounded hover:bg-slate-700">
-          CSV 업로드
-        </button>
       </div>
     </div>
 
@@ -387,31 +382,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- CSV 업로드 모달 -->
-    <div v-if="showUploadModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg p-5 w-96 shadow-xl">
-        <h3 class="font-bold text-slate-800 mb-3">CSV 업로드 (관리자 전용)</h3>
-        <p class="text-xs text-slate-500 mb-3">
-          노션에서 내보낸 CSV 파일을 업로드하면 블로그 데이터가 갱신됩니다.<br/>
-          기존 데이터와 중복되는 항목은 자동으로 건너뜁니다.
-        </p>
-        <input type="file" accept=".csv" @change="onCsvSelect"
-               class="block w-full text-sm text-slate-500 mb-3
-                      file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0
-                      file:text-sm file:font-medium file:bg-slate-100 file:text-slate-700
-                      hover:file:bg-slate-200" />
-        <div v-if="uploadResult" class="p-2 bg-slate-50 rounded text-xs text-slate-600 mb-3 whitespace-pre-line">
-          {{ uploadResult }}
-        </div>
-        <div class="flex justify-end gap-2">
-          <button @click="showUploadModal = false; uploadFile = null; uploadResult = null"
-                  class="px-3 py-1.5 text-xs border rounded hover:bg-slate-50">닫기</button>
-          <button @click="doUpload" :disabled="!uploadFile || uploading"
-                  class="px-3 py-1.5 text-xs bg-slate-800 text-white rounded hover:bg-slate-700 disabled:opacity-40">
-            {{ uploading ? '업로드 중...' : '업로드' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- CSV 업로드는 관리자 모드 → 데이터 동기화 탭에서 처리 -->
   </div>
 </template>

@@ -5,6 +5,7 @@ import * as equipApi from '@/api/equipment'
 import * as eventsApi from '@/api/events'
 import * as cafeApi from '@/api/cafe'
 import * as papersApi from '@/api/papers'
+import * as blogApi from '@/api/blog'
 // equipApi는 동기화 탭(장비시트 동기화)에서 사용
 import { useAuthStore } from '@/stores/auth'
 
@@ -152,6 +153,27 @@ async function syncCafe() {
     }
   }
   finally { syncing.value = false }
+}
+
+// ── 블로그 CSV 업로드 ──
+const blogCsvMsg = ref('')
+const blogCsvUploading = ref(false)
+
+async function uploadBlogCsv(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  blogCsvUploading.value = true
+  blogCsvMsg.value = ''
+  try {
+    const { data } = await blogApi.uploadBlogCsv(file)
+    blogCsvMsg.value = data.output || data.message || '업로드 완료'
+  } catch (err: any) {
+    blogCsvMsg.value = '오류: ' + (err.response?.data?.detail || err.message)
+  } finally {
+    blogCsvUploading.value = false
+    target.value = ''
+  }
 }
 
 // ── 시술사전 관리 ──
@@ -543,7 +565,28 @@ async function runPaperAnalysis() {
         </div>
       </div>
 
-      <!-- ⑤ Google 인증 -->
+      <!-- ⑤ 블로그 CSV 업로드 -->
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h3 class="text-sm font-bold text-slate-700">블로그 게시글 CSV 업로드</h3>
+            <p class="text-xs text-slate-400 mt-0.5">노션에서 내보낸 블로그 게시글 CSV를 업로드합니다. 기존 데이터와 중복되는 항목은 자동으로 건너뜁니다.</p>
+          </div>
+        </div>
+
+        <div v-if="blogCsvMsg" class="mb-2 px-3 py-1.5 rounded text-xs whitespace-pre-line"
+          :class="blogCsvMsg.startsWith('오류') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'">
+          {{ blogCsvMsg }}
+        </div>
+
+        <label class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded cursor-pointer hover:bg-blue-700"
+          :class="{ 'opacity-50 pointer-events-none': blogCsvUploading }">
+          {{ blogCsvUploading ? '업로드 중...' : 'CSV 업로드' }}
+          <input type="file" accept=".csv" class="hidden" @change="uploadBlogCsv" :disabled="blogCsvUploading" />
+        </label>
+      </div>
+
+      <!-- ⑥ Google 인증 -->
       <div class="bg-white border border-slate-200 rounded-lg p-4">
         <div class="flex items-center justify-between">
           <div>

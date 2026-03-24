@@ -513,6 +513,7 @@ def init_db():
         ("papers", "follow_up_period", "TEXT DEFAULT ''"),
         ("papers", "photo_restriction", "TEXT DEFAULT ''"),
         ("papers", "file_hash", "TEXT DEFAULT ''"),
+        ("papers", "easy_summary", "TEXT DEFAULT ''"),
     ]
     for table, col, col_type in migrations:
         try:

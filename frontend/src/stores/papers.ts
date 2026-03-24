@@ -26,6 +26,7 @@ export interface Paper {
   quotable_stats: string
   follow_up_period: string
   photo_restriction: string
+  easy_summary: string
   keywords: string
   source_url: string
   device_name?: string

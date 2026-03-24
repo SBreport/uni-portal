@@ -137,9 +137,9 @@ def list_papers(
     if q:
         sql += """ AND (p.title LIKE ? OR p.title_ko LIKE ? OR p.authors LIKE ?
                         OR p.key_findings LIKE ? OR p.one_line_summary LIKE ?
-                        OR p.keywords LIKE ?)"""
+                        OR p.keywords LIKE ? OR d.name LIKE ? OR d.aliases LIKE ?)"""
         like = f"%{q}%"
-        params.extend([like, like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like, like])
 
     sql += " ORDER BY p.pub_year DESC, p.created_at DESC"
 

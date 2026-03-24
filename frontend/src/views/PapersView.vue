@@ -280,6 +280,17 @@ function handleSearch() {
               </div>
             </div>
 
+            <!-- 쉬운 요약 (최상단) -->
+            <section v-if="detailData.easy_summary">
+              <h4 class="text-sm font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                <span class="w-5 h-5 bg-amber-100 text-amber-600 rounded flex items-center justify-center text-xs font-bold">E</span>
+                쉬운 요약
+              </h4>
+              <div class="bg-amber-50/70 border border-amber-200 rounded-lg p-4">
+                <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{{ detailData.easy_summary }}</p>
+              </div>
+            </section>
+
             <section v-if="detailData.one_line_summary">
               <h4 class="text-sm font-bold text-slate-700 mb-2 flex items-center gap-1.5">
                 <span class="w-5 h-5 bg-blue-100 text-blue-600 rounded flex items-center justify-center text-xs font-bold">S</span>

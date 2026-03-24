@@ -26,12 +26,74 @@ def _conn():
     return conn
 
 
+# ── 논문에 연결된 장비 목록 (필터 드롭다운용) ──
+@router.get("/devices-summary")
+def papers_devices_summary():
+    """논문이 1건 이상 연결된 장비 목록과 논문 수를 반환."""
+    conn = _conn()
+    rows = conn.execute("""
+        SELECT d.id, d.name, COUNT(p.id) AS paper_count
+        FROM device_info d
+        INNER JOIN papers p ON p.device_info_id = d.id
+        GROUP BY d.id, d.name
+        ORDER BY paper_count DESC, d.name
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ── 연구유형 대분류 매핑 ──
+STUDY_TYPE_MAP = {
+    "RCT": ["RCT", "Randomized", "무작위", "이중맹검", "단맹검", "split-face", "split-body", "intraindividual"],
+    "코호트/관찰연구": ["코호트", "cohort", "관찰", "observ", "전향적", "후향적", "prospective", "retrospective", "pilot"],
+    "증례보고/시리즈": ["증례", "case", "Case"],
+    "체계적문헌고찰": ["체계적", "systematic", "메타분석", "meta-analy"],
+    "기초연구": ["기초", "basic", "in vitro", "ex vivo", "동물", "animal", "전임상", "체외", "실험"],
+    "리뷰/가이드라인": ["리뷰", "review", "Review", "종설", "guideline", "해설", "commentary", "narrative"],
+    "설문/기타": ["설문", "survey", "quasi", "비교실험", "기술 비교"],
+}
+
+
+def _classify_study_type(raw: str) -> str:
+    if not raw:
+        return "기타"
+    for category, keywords in STUDY_TYPE_MAP.items():
+        for kw in keywords:
+            if kw.lower() in raw.lower():
+                return category
+    return "기타"
+
+
+# ── 연구유형 목록 (필터 드롭다운용) ──
+@router.get("/study-types")
+def papers_study_types():
+    """DB의 연구유형을 대분류로 그루핑하여 반환."""
+    conn = _conn()
+    rows = conn.execute("""
+        SELECT study_type FROM papers
+        WHERE study_type IS NOT NULL AND study_type != ''
+    """).fetchall()
+    conn.close()
+
+    counts: dict[str, int] = {}
+    for r in rows:
+        cat = _classify_study_type(r[0])
+        counts[cat] = counts.get(cat, 0) + 1
+
+    result = [{"study_type": k, "cnt": v} for k, v in counts.items()]
+    result.sort(key=lambda x: -x["cnt"])
+    return result
+
+
 # ── 목록 조회 ──
 @router.get("")
 def list_papers(
     device_info_id: Optional[int] = None,
     treatment_id: Optional[int] = None,
     status: Optional[str] = None,
+    evidence_level: Optional[int] = None,
+    evidence_min: Optional[int] = None,
+    study_type: Optional[str] = None,
     q: Optional[str] = None,
 ):
     conn = _conn()
@@ -56,10 +118,28 @@ def list_papers(
     if status:
         sql += " AND p.status = ?"
         params.append(status)
+    if evidence_level is not None:
+        sql += " AND p.evidence_level = ?"
+        params.append(evidence_level)
+    if evidence_min is not None:
+        sql += " AND p.evidence_level >= ?"
+        params.append(evidence_min)
+    if study_type:
+        # 대분류 카테고리로 필터링
+        keywords = STUDY_TYPE_MAP.get(study_type, [])
+        if keywords:
+            like_clauses = " OR ".join("p.study_type LIKE ?" for _ in keywords)
+            sql += f" AND ({like_clauses})"
+            params.extend(f"%{kw}%" for kw in keywords)
+        else:
+            sql += " AND p.study_type = ?"
+            params.append(study_type)
     if q:
-        sql += " AND (p.title LIKE ? OR p.title_ko LIKE ? OR p.authors LIKE ? OR p.key_findings LIKE ?)"
+        sql += """ AND (p.title LIKE ? OR p.title_ko LIKE ? OR p.authors LIKE ?
+                        OR p.key_findings LIKE ? OR p.one_line_summary LIKE ?
+                        OR p.keywords LIKE ?)"""
         like = f"%{q}%"
-        params.extend([like, like, like, like])
+        params.extend([like, like, like, like, like, like])
 
     sql += " ORDER BY p.pub_year DESC, p.created_at DESC"
 

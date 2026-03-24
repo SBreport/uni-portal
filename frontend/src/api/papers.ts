@@ -4,8 +4,15 @@ export const getPapers = (params?: {
   device_info_id?: number
   treatment_id?: number
   status?: string
+  evidence_level?: number
+  evidence_min?: number
+  study_type?: string
   q?: string
 }) => api.get('/papers', { params })
+
+export const getDevicesSummary = () => api.get('/papers/devices-summary')
+
+export const getStudyTypes = () => api.get('/papers/study-types')
 
 export const getPaper = (id: number) => api.get(`/papers/${id}`)
 

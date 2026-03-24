@@ -49,6 +49,7 @@ function closeUploadModal() {
 
 onMounted(() => {
   store.loadPapers()
+  store.loadFilterOptions()
 })
 
 function evidenceStars(level: number) {
@@ -109,18 +110,46 @@ function handleSearch() {
     </div>
 
     <!-- 필터 바 -->
-    <div class="flex items-center gap-3 mb-3 flex-wrap">
-      <select v-model="store.filterStatus" @change="handleSearch"
-        class="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white">
-        <option value="">전체 상태</option>
-        <option value="draft">초안</option>
-        <option value="reviewed">검토됨</option>
-        <option value="verified">검증됨</option>
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
+      <!-- 장비 필터 -->
+      <select v-model="store.filterDeviceId" @change="handleSearch"
+        class="px-2.5 py-1.5 border border-slate-300 rounded-md text-xs bg-white min-w-[140px]">
+        <option :value="null">전체 장비 ({{ store.deviceOptions.length }})</option>
+        <option v-for="d in store.deviceOptions" :key="d.id" :value="d.id">
+          {{ d.name }} ({{ d.paper_count }})
+        </option>
       </select>
 
-      <input v-model="store.filterSearch" placeholder="제목, 저자, 키워드 검색"
-        class="px-3 py-1.5 border border-slate-300 rounded-md text-sm w-64 focus:outline-none focus:ring-1 focus:ring-blue-400"
+      <!-- 근거수준 필터 -->
+      <select v-model="store.filterEvidenceMin" @change="handleSearch"
+        class="px-2.5 py-1.5 border border-slate-300 rounded-md text-xs bg-white">
+        <option :value="null">근거수준 전체</option>
+        <option :value="4">★★★★ 이상 (RCT+)</option>
+        <option :value="3">★★★ 이상 (코호트+)</option>
+        <option :value="2">★★ 이상 (증례+)</option>
+        <option :value="1">★ 이상</option>
+      </select>
+
+      <!-- 연구유형 필터 -->
+      <select v-model="store.filterStudyType" @change="handleSearch"
+        class="px-2.5 py-1.5 border border-slate-300 rounded-md text-xs bg-white">
+        <option value="">연구유형 전체</option>
+        <option v-for="st in store.studyTypeOptions" :key="st.study_type" :value="st.study_type">
+          {{ st.study_type }} ({{ st.cnt }})
+        </option>
+      </select>
+
+      <!-- 텍스트 검색 -->
+      <input v-model="store.filterSearch" placeholder="제목, 저자, 키워드, 요약 검색..."
+        class="px-3 py-1.5 border border-slate-300 rounded-md text-xs flex-1 min-w-[200px] focus:outline-none focus:ring-1 focus:ring-blue-400"
         @input="handleSearch" />
+
+      <!-- 필터 초기화 -->
+      <button v-if="store.filterSearch || store.filterStatus || store.filterDeviceId || store.filterEvidenceMin || store.filterStudyType"
+        @click="store.resetFilters()"
+        class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-md hover:bg-slate-50">
+        초기화
+      </button>
     </div>
 
     <!-- 2컬럼: 목록(좌) + 상세(우) -->

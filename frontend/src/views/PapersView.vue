@@ -114,7 +114,7 @@ function handleSearch() {
       <!-- 장비 필터 -->
       <select v-model="store.filterDeviceId" @change="handleSearch"
         class="px-2.5 py-1.5 border border-slate-300 rounded-md text-xs bg-white min-w-[140px]">
-        <option :value="null">전체 장비 ({{ store.deviceOptions.length }})</option>
+        <option :value="null">전체 ({{ store.papers.length }}건)</option>
         <option v-for="d in store.deviceOptions" :key="d.id" :value="d.id">
           {{ d.name }} ({{ d.paper_count }})
         </option>
@@ -188,6 +188,7 @@ function handleSearch() {
               </div>
 
               <p class="text-sm font-medium text-slate-800 leading-snug line-clamp-2">
+                <span v-if="paper.photo_restriction" class="inline-block mr-1 text-red-500" title="사진 사용 제한">🚫</span>
                 {{ paper.title_ko || paper.title }}
               </p>
 
@@ -257,6 +258,18 @@ function handleSearch() {
 
           <!-- 콘텐츠 -->
           <div v-else-if="detailData" class="flex-1 overflow-auto p-5 space-y-5">
+
+            <!-- 🚫 사진 사용 제한 경고 -->
+            <div v-if="detailData.photo_restriction"
+                 class="bg-red-600 text-white rounded-lg p-4 shadow-md border-2 border-red-700">
+              <div class="flex items-start gap-3">
+                <span class="text-2xl shrink-0">🚫</span>
+                <div>
+                  <p class="font-bold text-sm mb-1">사진 사용 제한</p>
+                  <p class="text-sm opacity-95 leading-relaxed">{{ detailData.photo_restriction }}</p>
+                </div>
+              </div>
+            </div>
 
             <section v-if="detailData.one_line_summary">
               <h4 class="text-sm font-bold text-slate-700 mb-2 flex items-center gap-1.5">

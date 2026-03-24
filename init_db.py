@@ -402,6 +402,7 @@ def init_db():
         quotable_stats      TEXT DEFAULT '[]',
         cautions            TEXT DEFAULT '',
         follow_up_period    TEXT DEFAULT '',
+        photo_restriction   TEXT DEFAULT '',
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -413,20 +414,69 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_papers_status ON papers(status)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_papers_doi ON papers(doi)")
 
-    # 논문-블로그 연동 테이블 (추후 블로그 탭에서 사용)
+    # ── 블로그 게시글 테이블 ──
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS blog_posts (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        content_number  TEXT DEFAULT '',
+        title           TEXT DEFAULT '',
+        keyword         TEXT DEFAULT '',
+        tags            TEXT DEFAULT '',
+        post_type       TEXT DEFAULT '',
+        blog_channel    TEXT DEFAULT 'br',
+        blog_id         TEXT DEFAULT '',
+        post_number     TEXT DEFAULT '',
+        platform        TEXT DEFAULT 'blog',
+        published_url   TEXT DEFAULT '',
+        backup_url      TEXT DEFAULT '',
+        author          TEXT DEFAULT '',
+        published_at    TEXT DEFAULT '',
+        deadline_at     TEXT DEFAULT '',
+        status          TEXT DEFAULT '',
+        project         TEXT DEFAULT '',
+        exposure_rank   TEXT DEFAULT '',
+        note            TEXT DEFAULT '',
+        created_at      TEXT DEFAULT (datetime('now','localtime')),
+        updated_at      TEXT DEFAULT (datetime('now','localtime')),
+        UNIQUE(platform, blog_id, post_number)
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_channel ON blog_posts(blog_channel)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_type ON blog_posts(post_type)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_blog_id ON blog_posts(blog_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_published ON blog_posts(published_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_keyword ON blog_posts(keyword)")
+
+    # ── 블로그 CSV 동기화 로그 ──
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS blog_sync_log (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        filename        TEXT NOT NULL,
+        csv_modified_at TEXT NOT NULL,
+        total_rows      INTEGER DEFAULT 0,
+        imported_rows   INTEGER DEFAULT 0,
+        skipped_rows    INTEGER DEFAULT 0,
+        blog_channel    TEXT DEFAULT '',
+        imported_at     TEXT DEFAULT (datetime('now','localtime'))
+    )
+    """)
+
+    # ── 논문-블로그 연동 테이블 ──
     c.execute("""
     CREATE TABLE IF NOT EXISTS paper_blog_links (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        paper_id   INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
-        blog_url   TEXT NOT NULL DEFAULT '',
-        blog_title TEXT NOT NULL DEFAULT '',
-        link_type  TEXT NOT NULL DEFAULT 'reference',
-        note       TEXT DEFAULT '',
-        created_at TEXT DEFAULT (datetime('now','localtime')),
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        paper_id     INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+        blog_post_id INTEGER REFERENCES blog_posts(id) ON DELETE SET NULL,
+        blog_url     TEXT NOT NULL DEFAULT '',
+        blog_title   TEXT NOT NULL DEFAULT '',
+        link_type    TEXT NOT NULL DEFAULT 'reference',
+        note         TEXT DEFAULT '',
+        created_at   TEXT DEFAULT (datetime('now','localtime')),
         UNIQUE(paper_id, blog_url)
     )
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_blog_paper ON paper_blog_links(paper_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_paper_blog_post ON paper_blog_links(blog_post_id)")
 
     # 논문-장비 다대다 연결 테이블
     c.execute("""

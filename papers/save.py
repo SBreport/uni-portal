@@ -134,8 +134,8 @@ def save_paper(json_path: str):
                 source_url, source_file, status,
                 one_line_summary, research_purpose, study_design_detail,
                 key_results, conclusion, quotable_stats, cautions, follow_up_period,
-                file_hash, created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                file_hash, easy_summary, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 p.get("device_info_id"),
                 p.get("treatment_id"),
@@ -164,6 +164,7 @@ def save_paper(json_path: str):
                 p.get("cautions", ""),
                 p.get("follow_up_period", ""),
                 p.get("file_hash", ""),
+                p.get("easy_summary", ""),
                 now,
                 now,
             ),

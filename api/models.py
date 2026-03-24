@@ -155,6 +155,7 @@ class PaperCreate(BaseModel):
     quotable_stats: str = "[]"
     cautions: str = ""
     follow_up_period: str = ""
+    photo_restriction: str = ""
 
 
 class PaperUpdate(BaseModel):
@@ -184,3 +185,4 @@ class PaperUpdate(BaseModel):
     quotable_stats: Optional[str] = None
     cautions: Optional[str] = None
     follow_up_period: Optional[str] = None
+    photo_restriction: Optional[str] = None

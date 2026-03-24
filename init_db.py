@@ -476,6 +476,11 @@ def init_db():
     )
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_blog_paper ON paper_blog_links(paper_id)")
+    # blog_post_id 컬럼 마이그레이션 (기존 테이블에 없을 수 있음)
+    try:
+        c.execute("ALTER TABLE paper_blog_links ADD COLUMN blog_post_id INTEGER REFERENCES blog_posts(id) ON DELETE SET NULL")
+    except Exception:
+        pass  # 이미 존재
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_blog_post ON paper_blog_links(blog_post_id)")
 
     # 논문-장비 다대다 연결 테이블
@@ -493,6 +498,27 @@ def init_db():
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_devices_paper ON paper_devices(paper_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_devices_device ON paper_devices(device_info_id)")
+
+    # ============================================================
+    # 마이그레이션: 기존 DB에 새 컬럼 추가 (이미 있으면 무시)
+    # ============================================================
+    migrations = [
+        ("papers", "one_line_summary", "TEXT DEFAULT ''"),
+        ("papers", "research_purpose", "TEXT DEFAULT ''"),
+        ("papers", "study_design_detail", "TEXT DEFAULT ''"),
+        ("papers", "key_results", "TEXT DEFAULT ''"),
+        ("papers", "conclusion", "TEXT DEFAULT ''"),
+        ("papers", "quotable_stats", "TEXT DEFAULT '[]'"),
+        ("papers", "cautions", "TEXT DEFAULT ''"),
+        ("papers", "follow_up_period", "TEXT DEFAULT ''"),
+        ("papers", "photo_restriction", "TEXT DEFAULT ''"),
+        ("papers", "file_hash", "TEXT DEFAULT ''"),
+    ]
+    for table, col, col_type in migrations:
+        try:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass  # 이미 존재
 
     conn.commit()
 

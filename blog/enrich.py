@@ -158,18 +158,18 @@ def clean_title(title: str, keyword: str = "") -> dict:
     if idx >= 0:
         cleaned = cleaned[:idx].strip()
 
-    # 줄바꿈 + URL 패턴 제거
+    # 줄바꿈 + URL 패턴 제거 (줄바꿈 이후 전체 삭제)
     cleaned = re.sub(r"\n\s*https?://\S+.*$", "", cleaned, flags=re.DOTALL).strip()
 
     # [공지]\n 접두사 정리
     cleaned = re.sub(r"^\[공지\]\s*\n?\s*", "", cleaned).strip()
 
-    # URL만 남은 경우
-    if re.match(r"^https?://\S+$", cleaned):
-        cleaned = ""
+    # 텍스트에 직접 붙은 URL 제거 (예: "광명 셀르디엠https://blog.naver.com/...")
+    # 한글/영문/숫자/공백 뒤에 바로 https:// 가 오는 패턴
+    cleaned = re.sub(r"https?://\S+", "", cleaned).strip()
 
     # |작성자 ... 패턴 제거
-    cleaned = re.sub(r"\|작성자\s+https?://\S+", "", cleaned).strip()
+    cleaned = re.sub(r"\|작성자\s*\S*", "", cleaned).strip()
 
     needs_review = 0
     if not cleaned:
@@ -195,7 +195,8 @@ def enrich_row(row: dict) -> dict:
     """
     원본 행 dict를 받아 가공 컬럼 dict를 반환.
 
-    입력 키: content_number, post_type, project, status, title, keyword, author
+    입력 키: content_number, post_type, project, status, title, keyword, author,
+             blog_channel (optional)
     출력 키: branch_name, slot_number, post_type_main, post_type_sub,
              project_month, project_branch, status_clean, clean_title,
              author_main, author_sub, needs_review
@@ -206,6 +207,12 @@ def enrich_row(row: dict) -> dict:
     sc = clean_status(row.get("status", ""))
     ct = clean_title(row.get("title", ""), row.get("keyword", ""))
     au = split_author(row.get("author", ""))
+
+    needs_review = ct["needs_review"]
+    # 비최적(br) 채널인데 제목이 비어있으면 추가 검토 필요
+    channel = row.get("blog_channel", "")
+    if channel != "opt" and not ct["clean_title"]:
+        needs_review = 1
 
     return {
         "branch_name": cn["branch_name"],
@@ -218,5 +225,5 @@ def enrich_row(row: dict) -> dict:
         "clean_title": ct["clean_title"],
         "author_main": au["main"],
         "author_sub": au["sub"],
-        "needs_review": ct["needs_review"],
+        "needs_review": needs_review,
     }

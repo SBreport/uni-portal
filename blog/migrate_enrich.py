@@ -41,7 +41,8 @@ def migrate(dry_run: bool = False):
 
     # 전체 행 조회 (가공에 필요한 컬럼만)
     rows = conn.execute("""
-        SELECT id, content_number, post_type, project, status, title, keyword, author
+        SELECT id, content_number, post_type, project, status, title, keyword, author,
+               blog_channel, platform
         FROM blog_posts
     """).fetchall()
 
@@ -58,6 +59,11 @@ def migrate(dry_run: bool = False):
         if enriched["needs_review"]:
             review_count += 1
 
+        # 카페 게시글 채널 재분류: platform=cafe → blog_channel='cafe'
+        new_channel = row_dict.get("blog_channel", "")
+        if row_dict.get("platform") == "cafe":
+            new_channel = "cafe"
+
         if not dry_run:
             conn.execute("""
                 UPDATE blog_posts SET
@@ -71,7 +77,8 @@ def migrate(dry_run: bool = False):
                     clean_title = ?,
                     author_main = ?,
                     author_sub = ?,
-                    needs_review = ?
+                    needs_review = ?,
+                    blog_channel = ?
                 WHERE id = ?
             """, (
                 enriched["branch_name"],
@@ -85,6 +92,7 @@ def migrate(dry_run: bool = False):
                 enriched["author_main"],
                 enriched["author_sub"],
                 enriched["needs_review"],
+                new_channel,
                 row_dict["id"],
             ))
 

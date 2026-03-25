@@ -20,6 +20,11 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+# 프로젝트 루트를 sys.path에 추가
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from blog.enrich import enrich_row
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "equipment.db")
 
 # 최적블로그 키워드 → blog_channel='opt'
@@ -175,19 +180,40 @@ def import_csv(csv_path: str, default_channel: str = "", dry_run: bool = False):
                 imported += 1
                 continue
 
+            # 가공 컬럼 생성
+            enriched = enrich_row({
+                "content_number": content_number,
+                "post_type": post_type,
+                "project": project,
+                "status": status,
+                "title": title,
+                "keyword": keyword,
+                "author": author,
+            })
+
             try:
                 conn.execute("""
                     INSERT INTO blog_posts (
                         content_number, title, keyword, tags, post_type,
                         blog_channel, blog_id, post_number, platform,
                         published_url, backup_url, author, published_at,
-                        deadline_at, status, project, exposure_rank, note
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        deadline_at, status, project, exposure_rank, note,
+                        branch_name, slot_number, post_type_main, post_type_sub,
+                        project_month, project_branch, status_clean, clean_title,
+                        author_main, author_sub, needs_review
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     content_number, title, keyword, tags, post_type,
                     channel, blog_id, post_number, platform,
                     published_url, backup_url, author, published_at,
-                    deadline_at, status, project, exposure_rank, note
+                    deadline_at, status, project, exposure_rank, note,
+                    enriched["branch_name"], enriched["slot_number"],
+                    enriched["post_type_main"], enriched["post_type_sub"],
+                    enriched["project_month"], enriched["project_branch"],
+                    enriched["status_clean"], enriched["clean_title"],
+                    enriched["author_main"], enriched["author_sub"],
+                    enriched["needs_review"],
                 ))
                 imported += 1
             except sqlite3.IntegrityError:

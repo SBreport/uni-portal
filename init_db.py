@@ -447,6 +447,45 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_published ON blog_posts(published_at)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_keyword ON blog_posts(keyword)")
 
+    # ── blog_posts 가공 컬럼 마이그레이션 ──
+    _blog_enrich_cols = [
+        ("branch_name", "TEXT DEFAULT ''"),
+        ("slot_number", "TEXT DEFAULT ''"),
+        ("post_type_main", "TEXT DEFAULT ''"),
+        ("post_type_sub", "TEXT DEFAULT ''"),
+        ("project_month", "TEXT DEFAULT ''"),
+        ("project_branch", "TEXT DEFAULT ''"),
+        ("status_clean", "TEXT DEFAULT ''"),
+        ("clean_title", "TEXT DEFAULT ''"),
+        ("author_main", "TEXT DEFAULT ''"),
+        ("author_sub", "TEXT DEFAULT ''"),
+        ("needs_review", "INTEGER DEFAULT 0"),
+    ]
+    for col_name, col_def in _blog_enrich_cols:
+        try:
+            c.execute(f"ALTER TABLE blog_posts ADD COLUMN {col_name} {col_def}")
+        except Exception:
+            pass  # 이미 존재
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_branch ON blog_posts(branch_name)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_type_main ON blog_posts(post_type_main)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_project_month ON blog_posts(project_month)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_author_main ON blog_posts(author_main)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_needs_review ON blog_posts(needs_review)")
+
+    # ── 블로그 계정 매핑 테이블 ──
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS blog_accounts (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        blog_id         TEXT UNIQUE NOT NULL,
+        account_name    TEXT DEFAULT '',
+        account_group   TEXT DEFAULT '',
+        channel         TEXT DEFAULT '',
+        note            TEXT DEFAULT '',
+        created_at      TEXT DEFAULT (datetime('now','localtime'))
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_blog_accounts_channel ON blog_accounts(channel)")
+
     # ── 블로그 CSV 동기화 로그 ──
     c.execute("""
     CREATE TABLE IF NOT EXISTS blog_sync_log (

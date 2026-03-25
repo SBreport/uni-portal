@@ -1,6 +1,7 @@
 """블로그 게시글 API 라우터."""
 
 import os
+import sys
 import sqlite3
 import subprocess
 import shutil
@@ -8,6 +9,7 @@ from typing import Optional
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from pydantic import BaseModel
 
 from api.deps import require_role, get_current_user
 from fastapi import Depends
@@ -33,12 +35,16 @@ def list_posts(
     channel: Optional[str] = None,
     platform: Optional[str] = None,
     post_type: Optional[str] = None,
+    post_type_main: Optional[str] = None,
     blog_id: Optional[str] = None,
     keyword: Optional[str] = None,
     search: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     author: Optional[str] = None,
+    branch_name: Optional[str] = None,
+    project_month: Optional[str] = None,
+    needs_review: Optional[int] = None,
 ):
     conn = _conn()
     conditions = []
@@ -53,6 +59,9 @@ def list_posts(
     if post_type:
         conditions.append("post_type LIKE ?")
         params.append(f"%{post_type}%")
+    if post_type_main:
+        conditions.append("post_type_main = ?")
+        params.append(post_type_main)
     if blog_id:
         conditions.append("blog_id = ?")
         params.append(blog_id)
@@ -60,8 +69,8 @@ def list_posts(
         conditions.append("keyword LIKE ?")
         params.append(f"%{keyword}%")
     if search:
-        conditions.append("(title LIKE ? OR keyword LIKE ? OR tags LIKE ?)")
-        params.extend([f"%{search}%"] * 3)
+        conditions.append("(title LIKE ? OR keyword LIKE ? OR tags LIKE ? OR clean_title LIKE ?)")
+        params.extend([f"%{search}%"] * 4)
     if date_from:
         conditions.append("published_at >= ?")
         params.append(date_from)
@@ -69,20 +78,30 @@ def list_posts(
         conditions.append("published_at <= ?")
         params.append(date_to)
     if author:
-        conditions.append("author = ?")
-        params.append(author)
+        conditions.append("(author_main = ? OR author LIKE ?)")
+        params.extend([author, f"%{author}%"])
+    if branch_name:
+        conditions.append("branch_name = ?")
+        params.append(branch_name)
+    if project_month:
+        conditions.append("project_month = ?")
+        params.append(project_month)
+    if needs_review is not None:
+        conditions.append("needs_review = ?")
+        params.append(needs_review)
 
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
-    # 총 건수
     total = conn.execute(f"SELECT COUNT(*) FROM blog_posts {where}", params).fetchone()[0]
 
-    # 페이지네이션
     offset = (page - 1) * per_page
     rows = conn.execute(
         f"""SELECT id, content_number, title, keyword, tags, post_type,
                    blog_channel, blog_id, post_number, platform,
-                   published_url, author, published_at, status, project, exposure_rank
+                   published_url, author, published_at, status, project, exposure_rank,
+                   branch_name, slot_number, post_type_main, post_type_sub,
+                   project_month, project_branch, status_clean, clean_title,
+                   author_main, author_sub, needs_review
             FROM blog_posts {where}
             ORDER BY published_at DESC, id DESC
             LIMIT ? OFFSET ?""",
@@ -128,27 +147,30 @@ def get_post(post_id: int):
 def filter_options():
     conn = _conn()
 
-    # 채널별 건수
     channels = conn.execute(
         "SELECT blog_channel, COUNT(*) as cnt FROM blog_posts GROUP BY blog_channel ORDER BY cnt DESC"
     ).fetchall()
 
-    # 종류별 건수 (상위 20)
-    types = conn.execute(
-        "SELECT post_type, COUNT(*) as cnt FROM blog_posts WHERE post_type != '' GROUP BY post_type ORDER BY cnt DESC LIMIT 20"
+    types_main = conn.execute(
+        "SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != '' GROUP BY post_type_main ORDER BY cnt DESC"
     ).fetchall()
 
-    # 작성자별 건수
     authors = conn.execute(
-        "SELECT author, COUNT(*) as cnt FROM blog_posts WHERE author != '' GROUP BY author ORDER BY cnt DESC"
+        "SELECT author_main as author, COUNT(*) as cnt FROM blog_posts WHERE author_main != '' GROUP BY author_main ORDER BY cnt DESC"
     ).fetchall()
 
-    # 블로그 계정별 건수 (상위 30)
     accounts = conn.execute(
         "SELECT blog_id, blog_channel, COUNT(*) as cnt FROM blog_posts WHERE blog_id != '' GROUP BY blog_id ORDER BY cnt DESC LIMIT 30"
     ).fetchall()
 
-    # 동기화 정보
+    branches = conn.execute(
+        "SELECT branch_name, COUNT(*) as cnt FROM blog_posts WHERE branch_name != '' GROUP BY branch_name ORDER BY cnt DESC"
+    ).fetchall()
+
+    project_months = conn.execute(
+        "SELECT project_month, COUNT(*) as cnt FROM blog_posts WHERE project_month != '' GROUP BY project_month ORDER BY project_month DESC"
+    ).fetchall()
+
     sync = conn.execute(
         "SELECT csv_modified_at, imported_at, imported_rows, skipped_rows FROM blog_sync_log ORDER BY id DESC LIMIT 1"
     ).fetchone()
@@ -156,10 +178,59 @@ def filter_options():
     conn.close()
     return {
         "channels": [dict(c) for c in channels],
-        "post_types": [dict(t) for t in types],
+        "post_types_main": [dict(t) for t in types_main],
         "authors": [dict(a) for a in authors],
         "accounts": [dict(a) for a in accounts],
+        "branches": [dict(b) for b in branches],
+        "project_months": [dict(m) for m in project_months],
         "last_sync": dict(sync) if sync else None,
+    }
+
+
+# ── 대시보드 ──
+@router.get("/dashboard")
+def blog_dashboard():
+    conn = _conn()
+
+    total = conn.execute("SELECT COUNT(*) FROM blog_posts").fetchone()[0]
+    by_channel = conn.execute(
+        "SELECT blog_channel, COUNT(*) as cnt FROM blog_posts GROUP BY blog_channel"
+    ).fetchall()
+    review_count = conn.execute(
+        "SELECT COUNT(*) FROM blog_posts WHERE needs_review = 1"
+    ).fetchone()[0]
+
+    by_type = conn.execute(
+        "SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != '' GROUP BY post_type_main ORDER BY cnt DESC"
+    ).fetchall()
+
+    by_branch = conn.execute(
+        "SELECT branch_name, COUNT(*) as cnt FROM blog_posts WHERE branch_name != '' GROUP BY branch_name ORDER BY cnt DESC LIMIT 15"
+    ).fetchall()
+
+    monthly = conn.execute("""
+        SELECT project_month as month, COUNT(*) as cnt
+        FROM blog_posts
+        WHERE project_month != ''
+        GROUP BY project_month ORDER BY project_month DESC LIMIT 12
+    """).fetchall()
+
+    recent = conn.execute("""
+        SELECT id, clean_title, keyword, blog_channel, post_type_main, author_main, published_at, status_clean
+        FROM blog_posts
+        WHERE published_at != ''
+        ORDER BY published_at DESC LIMIT 10
+    """).fetchall()
+
+    conn.close()
+    return {
+        "total": total,
+        "by_channel": {r["blog_channel"]: r["cnt"] for r in by_channel},
+        "review_count": review_count,
+        "by_type": [dict(r) for r in by_type],
+        "by_branch": [dict(r) for r in by_branch],
+        "monthly": [dict(m) for m in monthly],
+        "recent": [dict(r) for r in recent],
     }
 
 
@@ -173,21 +244,19 @@ def blog_stats():
         "SELECT blog_channel, COUNT(*) as cnt FROM blog_posts GROUP BY blog_channel"
     ).fetchall()
     by_type = conn.execute(
-        "SELECT post_type, COUNT(*) as cnt FROM blog_posts WHERE post_type != '' GROUP BY post_type ORDER BY cnt DESC LIMIT 10"
+        "SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != '' GROUP BY post_type_main ORDER BY cnt DESC LIMIT 10"
     ).fetchall()
     paper_posts = conn.execute(
-        "SELECT COUNT(*) FROM blog_posts WHERE post_type LIKE '%논문글%'"
+        "SELECT COUNT(*) FROM blog_posts WHERE post_type_main = '논문글'"
     ).fetchone()[0]
 
-    # 월별 발행 추이 (최근 6개월)
     monthly = conn.execute("""
-        SELECT substr(published_at, 1, 7) as month, COUNT(*) as cnt
+        SELECT project_month as month, COUNT(*) as cnt
         FROM blog_posts
-        WHERE published_at != '' AND published_at >= date('now', '-6 months')
-        GROUP BY month ORDER BY month DESC
+        WHERE project_month != ''
+        GROUP BY project_month ORDER BY project_month DESC LIMIT 6
     """).fetchall()
 
-    # 동기화 로그
     sync_log = conn.execute(
         "SELECT * FROM blog_sync_log ORDER BY id DESC LIMIT 5"
     ).fetchall()
@@ -203,6 +272,74 @@ def blog_stats():
     }
 
 
+# ── 계정 관리 ──
+@router.get("/accounts")
+def list_accounts(
+    channel: Optional[str] = None,
+    search: Optional[str] = None,
+):
+    conn = _conn()
+    conditions = []
+    params = []
+
+    if channel:
+        conditions.append("ba.channel = ?")
+        params.append(channel)
+    if search:
+        conditions.append("(ba.blog_id LIKE ? OR ba.account_name LIKE ? OR ba.account_group LIKE ?)")
+        params.extend([f"%{search}%"] * 3)
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    rows = conn.execute(f"""
+        SELECT ba.*,
+               COUNT(bp.id) as post_count,
+               MAX(bp.published_at) as last_published
+        FROM blog_accounts ba
+        LEFT JOIN blog_posts bp ON bp.blog_id = ba.blog_id
+        {where}
+        GROUP BY ba.id
+        ORDER BY post_count DESC
+    """, params).fetchall()
+
+    conn.close()
+    return {"items": [dict(r) for r in rows]}
+
+
+class AccountUpdate(BaseModel):
+    account_name: Optional[str] = None
+    account_group: Optional[str] = None
+    channel: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.patch("/accounts/{blog_id}")
+def update_account(blog_id: str, body: AccountUpdate, user: dict = Depends(require_role("editor"))):
+    conn = _conn()
+    existing = conn.execute("SELECT id FROM blog_accounts WHERE blog_id = ?", (blog_id,)).fetchone()
+    if not existing:
+        conn.close()
+        raise HTTPException(404, "계정을 찾을 수 없습니다")
+
+    updates = []
+    params = []
+    for field in ["account_name", "account_group", "channel", "note"]:
+        val = getattr(body, field)
+        if val is not None:
+            updates.append(f"{field} = ?")
+            params.append(val)
+
+    if not updates:
+        conn.close()
+        return {"message": "변경 없음"}
+
+    params.append(blog_id)
+    conn.execute(f"UPDATE blog_accounts SET {', '.join(updates)} WHERE blog_id = ?", params)
+    conn.commit()
+    conn.close()
+    return {"message": "수정 완료"}
+
+
 # ── CSV 업로드 (관리자 전용) ──
 @router.post("/upload-csv")
 def upload_csv(file: UploadFile = File(...), user: dict = Depends(require_role("admin"))):
@@ -212,12 +349,10 @@ def upload_csv(file: UploadFile = File(...), user: dict = Depends(require_role("
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-    # 파일 저장
     save_path = os.path.join(UPLOAD_DIR, file.filename)
     with open(save_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # import_csv.py 실행
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     script = os.path.join(project_root, "blog", "import_csv.py")
 
@@ -233,6 +368,3 @@ def upload_csv(file: UploadFile = File(...), user: dict = Depends(require_role("
         raise HTTPException(500, f"임포트 실패: {result.stderr}")
 
     return {"message": "임포트 완료", "output": result.stdout}
-
-
-import sys

@@ -1,25 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import * as blogApi from '@/api/blog'
+import { useColumnResize } from '@/composables/useResizePanel'
+import { channelLabel, channelColor, typeColor, statusColor } from '@/utils/blogFormatters'
+import BlogDashboard from '@/components/blog/BlogDashboard.vue'
+import BlogAccounts from '@/components/blog/BlogAccounts.vue'
 
 // ── 탭 ──
 const activeTab = ref<'dashboard' | 'list' | 'accounts'>('dashboard')
-
-// ── 대시보드 ──
-const dashboard = ref<any>(null)
-const dashLoading = ref(false)
-
-async function loadDashboard() {
-  dashLoading.value = true
-  try {
-    const { data } = await blogApi.getBlogDashboard()
-    dashboard.value = data
-  } catch (e) {
-    console.error('대시보드 로드 실패:', e)
-  } finally {
-    dashLoading.value = false
-  }
-}
 
 // ── 목록 ──
 const posts = ref<any[]>([])
@@ -68,28 +56,7 @@ const columns = ref([
   { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
 ])
 
-const resizing = ref<{ idx: number; startX: number; startW: number } | null>(null)
-
-function startResize(idx: number, e: MouseEvent) {
-  e.preventDefault()
-  const col = columns.value[idx]
-  if (col.width === 0) return // flex column
-  resizing.value = { idx, startX: e.clientX, startW: col.width }
-
-  const onMove = (ev: MouseEvent) => {
-    if (!resizing.value) return
-    const diff = ev.clientX - resizing.value.startX
-    const newW = Math.max(columns.value[resizing.value.idx].minWidth, resizing.value.startW + diff)
-    columns.value[resizing.value.idx].width = newW
-  }
-  const onUp = () => {
-    resizing.value = null
-    document.removeEventListener('mousemove', onMove)
-    document.removeEventListener('mouseup', onUp)
-  }
-  document.addEventListener('mousemove', onMove)
-  document.addEventListener('mouseup', onUp)
-}
+const { startResize } = useColumnResize(columns)
 
 async function loadPosts() {
   loading.value = true
@@ -173,139 +140,19 @@ function resetFilter() {
   loadPosts()
 }
 
-// ── 계정관리 ──
-const accounts = ref<any[]>([])
-const accountsLoading = ref(false)
-const accountSearch = ref('')
-const accountChannelFilter = ref('')
-const editingAccount = ref<string | null>(null)
-const editForm = ref({ account_name: '', account_group: '' })
-const selectedAccounts = ref<Set<string>>(new Set())
-
-async function loadAccounts() {
-  accountsLoading.value = true
-  try {
-    const params: any = {}
-    if (accountChannelFilter.value) params.channel = accountChannelFilter.value
-    if (accountSearch.value) params.search = accountSearch.value
-    const { data } = await blogApi.getBlogAccounts(params)
-    accounts.value = data.items
-  } catch (e) {
-    console.error(e)
-  } finally {
-    accountsLoading.value = false
-  }
-}
-
-function startEdit(acc: any) {
-  editingAccount.value = acc.blog_id
-  editForm.value = {
-    account_name: acc.account_name || '',
-    account_group: acc.account_group || '',
-  }
-}
-
-async function saveAccount(blogId: string) {
-  try {
-    await blogApi.updateBlogAccount(blogId, editForm.value)
-    editingAccount.value = null
-    loadAccounts()
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-function cancelEdit() {
-  editingAccount.value = null
-}
-
-function toggleAccount(blogId: string) {
-  if (selectedAccounts.value.has(blogId)) {
-    selectedAccounts.value.delete(blogId)
-  } else {
-    selectedAccounts.value.add(blogId)
-  }
-}
-
-function toggleAllAccounts() {
-  if (selectedAccounts.value.size === accounts.value.length) {
-    selectedAccounts.value.clear()
-  } else {
-    selectedAccounts.value = new Set(accounts.value.map((a: any) => a.blog_id))
-  }
-}
-
-const allAccountsSelected = computed(() =>
-  accounts.value.length > 0 && selectedAccounts.value.size === accounts.value.length
-)
-
-// ── 유틸 ──
-function channelLabel(ch: string) {
-  if (ch === 'br') return '브랜드'
-  if (ch === 'opt') return '최적'
-  if (ch === 'cafe') return '카페'
-  return ch || '-'
-}
-function channelColor(ch: string) {
-  if (ch === 'br') return 'bg-blue-100 text-blue-700'
-  if (ch === 'opt') return 'bg-purple-100 text-purple-700'
-  if (ch === 'cafe') return 'bg-orange-100 text-orange-700'
-  return 'bg-slate-100 text-slate-500'
-}
-function typeColor(t: string) {
-  if (t === '논문글') return 'bg-emerald-100 text-emerald-700'
-  if (t === '정보성글') return 'bg-sky-100 text-sky-700'
-  if (t === '홍보성글') return 'bg-amber-100 text-amber-700'
-  if (t === '임상글') return 'bg-rose-100 text-rose-700'
-  if (t === '키컨텐츠') return 'bg-indigo-100 text-indigo-700'
-  if (t === '최적') return 'bg-purple-100 text-purple-700'
-  if (t === '소개글') return 'bg-teal-100 text-teal-700'
-  return 'bg-slate-100 text-slate-600'
-}
-function statusColor(s: string) {
-  if (s === '보고 완료') return 'text-green-600'
-  if (s === '발행 완료') return 'text-blue-600'
-  if (s === '예약 발행') return 'text-amber-600'
-  if (s === '진행 취소') return 'text-red-500'
-  if (s === '밀림') return 'text-slate-400'
-  return 'text-slate-500'
-}
-
 const lastSyncInfo = computed(() => {
   return filterOptions.value?.last_sync || null
-})
-
-// ── 대시보드 차트 ──
-const maxBranchCount = computed(() => {
-  if (!dashboard.value?.by_branch?.length) return 1
-  return Math.max(...dashboard.value.by_branch.map((b: any) => b.cnt))
-})
-
-const maxMonthlyCount = computed(() => {
-  if (!dashboard.value?.monthly?.length) return 1
-  return Math.max(...dashboard.value.monthly.map((m: any) => m.cnt))
-})
-
-const sortedMonthly = computed(() => {
-  if (!dashboard.value?.monthly) return []
-  return [...dashboard.value.monthly].sort((a: any, b: any) => a.month.localeCompare(b.month))
 })
 
 // ── 초기 로드 ──
 watch(page, () => loadPosts())
 
 watch(activeTab, (tab) => {
-  if (tab === 'dashboard' && !dashboard.value) loadDashboard()
   if (tab === 'list' && !listInitialized.value) {
     listInitialized.value = true
     loadPosts()
     loadFilterOptions()
   }
-  if (tab === 'accounts' && !accounts.value.length) loadAccounts()
-})
-
-onMounted(() => {
-  loadDashboard()
 })
 </script>
 
@@ -337,102 +184,11 @@ onMounted(() => {
       </button>
     </div>
 
-    <!-- ═══════ 대시보드 탭 ═══════ -->
-    <div v-if="activeTab === 'dashboard'" class="flex-1 overflow-auto space-y-4">
-      <div v-if="dashLoading" class="text-center py-12 text-slate-400">로딩 중...</div>
-      <template v-else-if="dashboard">
-        <!-- 요약 카드 -->
-        <div class="grid grid-cols-5 gap-3">
-          <div class="bg-white border border-slate-200 rounded-lg p-4">
-            <p class="text-xs text-slate-400">전체 게시글</p>
-            <p class="text-2xl font-bold text-slate-800 mt-1">{{ dashboard.total?.toLocaleString() }}</p>
-          </div>
-          <div class="bg-white border border-blue-200 rounded-lg p-4">
-            <p class="text-xs text-blue-500">브랜드</p>
-            <p class="text-2xl font-bold text-blue-700 mt-1">{{ (dashboard.by_channel?.br || 0).toLocaleString() }}</p>
-          </div>
-          <div class="bg-white border border-purple-200 rounded-lg p-4">
-            <p class="text-xs text-purple-500">최적</p>
-            <p class="text-2xl font-bold text-purple-700 mt-1">{{ (dashboard.by_channel?.opt || 0).toLocaleString() }}</p>
-          </div>
-          <div class="bg-white border border-orange-200 rounded-lg p-4">
-            <p class="text-xs text-orange-500">카페</p>
-            <p class="text-2xl font-bold text-orange-700 mt-1">{{ (dashboard.by_channel?.cafe || 0).toLocaleString() }}</p>
-          </div>
-          <div class="bg-white border border-amber-200 rounded-lg p-4">
-            <p class="text-xs text-amber-500">검토 필요</p>
-            <p class="text-2xl font-bold text-amber-700 mt-1">{{ (dashboard.review_count || 0).toLocaleString() }}</p>
-          </div>
-        </div>
+    <!-- 대시보드 탭 -->
+    <BlogDashboard v-if="activeTab === 'dashboard'" />
 
-        <div class="grid grid-cols-2 gap-4">
-          <!-- 지점별 게시글 수 -->
-          <div class="bg-white border border-slate-200 rounded-lg p-4">
-            <h3 class="text-sm font-semibold text-slate-700 mb-3">지점별 게시글 수</h3>
-            <div class="space-y-1.5">
-              <div v-for="b in dashboard.by_branch" :key="b.branch_name" class="flex items-center gap-2 text-xs">
-                <span class="w-20 text-right text-slate-600 truncate shrink-0">{{ b.branch_name }}</span>
-                <div class="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden">
-                  <div class="bg-blue-400 h-full rounded-full transition-all"
-                       :style="{ width: (b.cnt / maxBranchCount * 100) + '%' }"></div>
-                </div>
-                <span class="w-10 text-right text-slate-500 shrink-0">{{ b.cnt }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 월별 발행 추이 -->
-          <div class="bg-white border border-slate-200 rounded-lg p-4">
-            <h3 class="text-sm font-semibold text-slate-700 mb-3">월별 발행 추이</h3>
-            <div class="flex items-end gap-1 h-40">
-              <div v-for="m in sortedMonthly" :key="m.month"
-                   class="flex-1 flex flex-col items-center justify-end">
-                <span class="text-[9px] text-slate-500 mb-1">{{ m.cnt }}</span>
-                <div class="w-full bg-purple-400 rounded-t transition-all min-h-[2px]"
-                     :style="{ height: (m.cnt / maxMonthlyCount * 120) + 'px' }"></div>
-                <span class="text-[9px] text-slate-400 mt-1 rotate-[-45deg] origin-center whitespace-nowrap">
-                  {{ m.month.slice(2) }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 종류별 분포 -->
-          <div class="bg-white border border-slate-200 rounded-lg p-4">
-            <h3 class="text-sm font-semibold text-slate-700 mb-3">종류별 분포</h3>
-            <div class="space-y-2">
-              <div v-for="t in dashboard.by_type" :key="t.post_type_main" class="flex items-center gap-2">
-                <span class="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
-                      :class="typeColor(t.post_type_main)">
-                  {{ t.post_type_main }}
-                </span>
-                <div class="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
-                  <div class="bg-emerald-300 h-full rounded-full"
-                       :style="{ width: (t.cnt / dashboard.total * 100) + '%' }"></div>
-                </div>
-                <span class="text-xs text-slate-500 w-14 text-right">{{ t.cnt.toLocaleString() }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 최근 발행 -->
-          <div class="bg-white border border-slate-200 rounded-lg p-4">
-            <h3 class="text-sm font-semibold text-slate-700 mb-3">최근 발행</h3>
-            <div class="space-y-1.5">
-              <div v-for="r in dashboard.recent" :key="r.id"
-                   class="flex items-center gap-2 text-xs border-b border-slate-50 pb-1.5">
-                <span class="text-[10px] px-1 py-0.5 rounded-full shrink-0"
-                      :class="channelColor(r.blog_channel)">
-                  {{ channelLabel(r.blog_channel) }}
-                </span>
-                <span class="text-slate-600 truncate flex-1">{{ r.clean_title || r.keyword || '-' }}</span>
-                <span class="text-slate-400 shrink-0">{{ r.published_at?.slice(5) }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </template>
-    </div>
+    <!-- 계정관리 탭 -->
+    <BlogAccounts v-if="activeTab === 'accounts'" />
 
     <!-- ═══════ 목록 탭 ═══════ -->
     <template v-if="activeTab === 'list'">
@@ -692,104 +448,5 @@ onMounted(() => {
         </div>
       </div>
     </template>
-
-    <!-- ═══════ 계정관리 탭 ═══════ -->
-    <div v-if="activeTab === 'accounts'" class="flex-1 flex flex-col min-h-0">
-      <!-- 필터 -->
-      <div class="bg-white border border-slate-200 rounded-lg p-3 mb-3 flex items-center gap-2">
-        <input v-model="accountSearch" @keyup.enter="loadAccounts"
-               placeholder="계정 ID / 별명 검색"
-               class="border border-slate-300 rounded px-2 py-1 text-sm w-56 focus:border-blue-400 focus:outline-none" />
-        <button @click="loadAccounts" class="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">검색</button>
-        <select v-model="accountChannelFilter" @change="loadAccounts" class="border border-slate-300 rounded px-2 py-1 text-sm">
-          <option value="">전체 채널</option>
-          <option value="br">브랜드</option>
-          <option value="opt">최적</option>
-          <option value="cafe">카페</option>
-        </select>
-        <span class="ml-auto text-xs text-slate-400">
-          {{ accounts.length }}개 계정
-          <span v-if="selectedAccounts.size > 0" class="text-blue-500 ml-1">
-            ({{ selectedAccounts.size }}개 선택)
-          </span>
-        </span>
-      </div>
-
-      <!-- 테이블 -->
-      <div class="flex-1 bg-white border border-slate-200 rounded-lg overflow-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-slate-50 sticky top-0">
-            <tr class="text-left text-xs text-slate-500 border-b">
-              <th class="px-3 py-2 w-10">
-                <input type="checkbox"
-                       :checked="allAccountsSelected"
-                       @change="toggleAllAccounts"
-                       class="rounded border-slate-300" />
-              </th>
-              <th class="px-3 py-2 w-14">채널</th>
-              <th class="px-3 py-2 w-40">블로그 ID</th>
-              <th class="px-3 py-2 w-36">별명</th>
-              <th class="px-3 py-2 w-36">그룹</th>
-              <th class="px-3 py-2 w-20 text-right">게시글</th>
-              <th class="px-3 py-2 w-24">마지막 발행</th>
-              <th class="px-3 py-2 w-20"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="acc in accounts" :key="acc.blog_id"
-                class="border-b border-slate-100 hover:bg-slate-50/50"
-                :class="{ 'bg-blue-50/50': selectedAccounts.has(acc.blog_id) }">
-              <td class="px-3 py-2">
-                <input type="checkbox"
-                       :checked="selectedAccounts.has(acc.blog_id)"
-                       @change="toggleAccount(acc.blog_id)"
-                       class="rounded border-slate-300" />
-              </td>
-              <td class="px-3 py-2">
-                <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                      :class="channelColor(acc.channel)">
-                  {{ channelLabel(acc.channel) }}
-                </span>
-              </td>
-              <td class="px-3 py-2 font-mono text-[11px] text-slate-600">{{ acc.blog_id }}</td>
-              <td class="px-3 py-2">
-                <template v-if="editingAccount === acc.blog_id">
-                  <input v-model="editForm.account_name"
-                         class="border border-blue-300 rounded px-1.5 py-0.5 text-xs w-full"
-                         placeholder="별명 입력" />
-                </template>
-                <template v-else>
-                  <span class="text-xs text-slate-700">{{ acc.account_name || '-' }}</span>
-                </template>
-              </td>
-              <td class="px-3 py-2">
-                <template v-if="editingAccount === acc.blog_id">
-                  <input v-model="editForm.account_group"
-                         class="border border-blue-300 rounded px-1.5 py-0.5 text-xs w-full"
-                         placeholder="그룹 입력" />
-                </template>
-                <template v-else>
-                  <span class="text-xs text-slate-500">{{ acc.account_group || '-' }}</span>
-                </template>
-              </td>
-              <td class="px-3 py-2 text-right text-xs text-slate-600 font-medium">{{ acc.post_count }}</td>
-              <td class="px-3 py-2 text-xs text-slate-400">{{ acc.last_published || '-' }}</td>
-              <td class="px-3 py-2 text-right">
-                <template v-if="editingAccount === acc.blog_id">
-                  <button @click="saveAccount(acc.blog_id)" class="text-[10px] text-blue-600 hover:underline mr-1">저장</button>
-                  <button @click="cancelEdit" class="text-[10px] text-slate-400 hover:underline">취소</button>
-                </template>
-                <template v-else>
-                  <button @click="startEdit(acc)" class="text-[10px] text-slate-400 hover:text-blue-600">편집</button>
-                </template>
-              </td>
-            </tr>
-            <tr v-if="!accounts.length && !accountsLoading">
-              <td colspan="8" class="px-3 py-8 text-center text-slate-400 text-sm">계정이 없습니다</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
   </div>
 </template>

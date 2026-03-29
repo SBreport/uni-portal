@@ -20,6 +20,9 @@ credentials.json
 # 임시 보관 (삭제 대기)
 _temp/
 
+# 논문 분석 임시 결과
+papers/temp_*.json
+
 # JSON — 데이터/설정 파일은 허용, 민감 파일만 차단
 !normalization/*.json
 !data/device_master.json

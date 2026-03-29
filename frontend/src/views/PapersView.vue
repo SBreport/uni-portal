@@ -1,50 +1,43 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { usePapersStore, type Paper } from '@/stores/papers'
 import * as papersApi from '@/api/papers'
+import { useDetailPanel } from '@/composables/useDetailPanel'
+import { useFileUpload } from '@/composables/useFileUpload'
 
 const store = usePapersStore()
 
-const selectedPaper = ref<Paper | null>(null)
-const detailLoading = ref(false)
-const detailData = ref<Paper | null>(null)
+const {
+  selectedItem: selectedPaper,
+  detailLoading,
+  detailData,
+  openDetail: _openDetail,
+} = useDetailPanel<Paper>()
 
 // JSON 업로드
 const showUploadModal = ref(false)
-const uploadFile = ref<File | null>(null)
-const uploading = ref(false)
-const uploadResult = ref<{ inserted: number; duplicates: any[]; errors: any[]; message: string } | null>(null)
-
-function onFileSelect(e: Event) {
-  const target = e.target as HTMLInputElement
-  uploadFile.value = target.files?.[0] || null
-  uploadResult.value = null
-}
+type UploadResult = { inserted: number; duplicates: any[]; errors: any[]; message: string }
+const {
+  file: uploadFile,
+  uploading,
+  result: uploadResult,
+  error: uploadError,
+  onFileSelect,
+  doUpload: _doUpload,
+  reset: resetUpload,
+} = useFileUpload<UploadResult>(async (file) => {
+  const { data } = await papersApi.uploadPapersJson(file)
+  if (data.inserted > 0) store.loadPapers()
+  return data
+})
 
 async function doUpload() {
-  if (!uploadFile.value) return
-  uploading.value = true
-  uploadResult.value = null
-  try {
-    const { data } = await papersApi.uploadPapersJson(uploadFile.value)
-    uploadResult.value = data
-    if (data.inserted > 0) {
-      store.loadPapers()  // 목록 새로고침
-    }
-  } catch (err: any) {
-    uploadResult.value = {
-      inserted: 0, duplicates: [], errors: [],
-      message: err.response?.data?.detail || '업로드 실패',
-    }
-  } finally {
-    uploading.value = false
-  }
+  await _doUpload()
 }
 
 function closeUploadModal() {
   showUploadModal.value = false
-  uploadFile.value = null
-  uploadResult.value = null
+  resetUpload()
 }
 
 onMounted(() => {
@@ -77,23 +70,17 @@ function parseKeywords(raw: string): string[] {
 }
 
 async function openDetail(paper: Paper) {
-  if (selectedPaper.value?.id === paper.id) return
-  selectedPaper.value = paper
-  detailLoading.value = true
-  detailData.value = null
-  try {
-    const { data } = await papersApi.getPaper(paper.id)
-    detailData.value = data
-  } catch {
-    detailData.value = paper
-  } finally {
-    detailLoading.value = false
-  }
+  await _openDetail(paper, async (p) => {
+    const { data } = await papersApi.getPaper(p.id)
+    return data
+  })
 }
 
-function handleSearch() {
-  store.loadPapers()
-}
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(() => store.filterSearch, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => store.loadPapers(), 300)
+})
 </script>
 
 <template>
@@ -106,7 +93,7 @@ function handleSearch() {
     <!-- 필터 바 -->
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <!-- 장비 필터 -->
-      <select v-model="store.filterDeviceId" @change="handleSearch"
+      <select v-model="store.filterDeviceId" @change="store.loadPapers()"
         class="px-2.5 py-1.5 border border-slate-300 rounded-md text-xs bg-white min-w-[140px]">
         <option :value="null">전체 ({{ store.papers.length }}건)</option>
         <option v-for="d in store.deviceOptions" :key="d.id" :value="d.id">
@@ -115,7 +102,7 @@ function handleSearch() {
       </select>
 
       <!-- 근거수준 필터 -->
-      <select v-model="store.filterEvidenceMin" @change="handleSearch"
+      <select v-model="store.filterEvidenceMin" @change="store.loadPapers()"
         class="px-2.5 py-1.5 border border-slate-300 rounded-md text-xs bg-white">
         <option :value="null">근거수준 전체</option>
         <option :value="4">★★★★ 이상 (RCT+)</option>
@@ -125,7 +112,7 @@ function handleSearch() {
       </select>
 
       <!-- 연구유형 필터 -->
-      <select v-model="store.filterStudyType" @change="handleSearch"
+      <select v-model="store.filterStudyType" @change="store.loadPapers()"
         class="px-2.5 py-1.5 border border-slate-300 rounded-md text-xs bg-white">
         <option value="">연구유형 전체</option>
         <option v-for="st in store.studyTypeOptions" :key="st.study_type" :value="st.study_type">
@@ -136,7 +123,7 @@ function handleSearch() {
       <!-- 텍스트 검색 -->
       <input v-model="store.filterSearch" placeholder="제목, 저자, 키워드, 요약 검색..."
         class="px-3 py-1.5 border border-slate-300 rounded-md text-xs flex-1 min-w-[200px] focus:outline-none focus:ring-1 focus:ring-blue-400"
-        @input="handleSearch" />
+        />
 
       <!-- 필터 초기화 -->
       <button v-if="store.filterSearch || store.filterStatus || store.filterDeviceId || store.filterEvidenceMin || store.filterStudyType"
@@ -380,8 +367,13 @@ function handleSearch() {
             <template v-else>업로드</template>
           </button>
 
+          <!-- 에러 -->
+          <div v-if="uploadError" class="mt-4 p-4 rounded-lg border bg-red-50 border-red-200">
+            <p class="text-sm font-medium text-red-700">{{ uploadError }}</p>
+          </div>
+
           <!-- 결과 -->
-          <div v-if="uploadResult" class="mt-4 p-4 rounded-lg border" :class="uploadResult.inserted > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'">
+          <div v-else-if="uploadResult" class="mt-4 p-4 rounded-lg border" :class="uploadResult.inserted > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'">
             <p class="text-sm font-medium" :class="uploadResult.inserted > 0 ? 'text-emerald-700' : 'text-amber-700'">
               {{ uploadResult.message }}
             </p>

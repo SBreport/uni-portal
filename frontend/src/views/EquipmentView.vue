@@ -1,48 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useEquipmentStore } from '@/stores/equipment'
 import { useAuthStore } from '@/stores/auth'
 import * as equipApi from '@/api/equipment'
 import * as papersApi from '@/api/papers'
+import { usePanelResize } from '@/composables/useResizePanel'
+import { useAsyncAction } from '@/composables/useAsyncAction'
 
 const store = useEquipmentStore()
 const auth = useAuthStore()
 
 // 패널 리사이즈
-const leftWidth = ref(Math.round(window.innerWidth * 0.35))
-const isResizing = ref(false)
-
-function startResize(e: MouseEvent) {
-  isResizing.value = true
-  const startX = e.clientX
-  const startWidth = leftWidth.value
-
-  function onMouseMove(e: MouseEvent) {
-    const diff = e.clientX - startX
-    const newWidth = startWidth + diff
-    const minW = 250
-    const maxW = window.innerWidth * 0.65
-    leftWidth.value = Math.max(minW, Math.min(maxW, newWidth))
-  }
-
-  function onMouseUp() {
-    isResizing.value = false
-    document.removeEventListener('mousemove', onMouseMove)
-    document.removeEventListener('mouseup', onMouseUp)
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
-  }
-
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', onMouseUp)
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
-}
+const { leftWidth, startResize } = usePanelResize()
 
 // 수정 추적
 const pendingChanges = ref<Map<number, Record<string, any>>>(new Map())
-const saving = ref(false)
-const saveMsg = ref('')
+const { loading: saving, message: saveMsg, error: saveError, execute: executeSave } = useAsyncAction()
 
 // 상세 패널
 const selectedRow = ref<any>(null)
@@ -90,21 +63,15 @@ function updateNote(row: any, val: string) {
 // 일괄 저장
 async function saveAll() {
   if (pendingChanges.value.size === 0) return
-  saving.value = true
-  saveMsg.value = ''
-  try {
+  const count = pendingChanges.value.size
+  await executeSave(async () => {
     const promises = Array.from(pendingChanges.value.entries()).map(([id, changes]) =>
       equipApi.updateEquipment(id, changes)
     )
     await Promise.all(promises)
-    saveMsg.value = `${pendingChanges.value.size}건 저장 완료`
     pendingChanges.value.clear()
-    setTimeout(() => saveMsg.value = '', 3000)
-  } catch (e: any) {
-    saveMsg.value = '저장 실패: ' + (e.response?.data?.detail || e.message)
-  } finally {
-    saving.value = false
-  }
+    return `${count}건 저장 완료`
+  })
 }
 
 // 장비 클릭 → 상세 로드
@@ -148,7 +115,7 @@ function formatPrice(n: number | null) {
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-xl font-bold text-slate-800">보유장비</h2>
       <div v-if="canEdit" class="flex items-center gap-3">
-        <span v-if="saveMsg" class="text-sm" :class="saveMsg.includes('실패') ? 'text-red-500' : 'text-emerald-600'">{{ saveMsg }}</span>
+        <span v-if="saveMsg || saveError" class="text-sm" :class="saveError ? 'text-red-500' : 'text-emerald-600'">{{ saveError || saveMsg }}</span>
         <span v-if="pendingChanges.size > 0" class="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
           {{ pendingChanges.size }}건 변경됨
         </span>

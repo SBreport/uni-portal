@@ -8,6 +8,7 @@ export interface Article {
   id: number; article_order: number; keyword: string; category: string
   equipment_name: string; title: string; body: string; status: string
   published_url: string; published_at: string; published_by: string
+  created_at?: string; updated_at?: string
 }
 export interface ArticleDetail extends Article {
   comments: { slot_number: number; comment_text: string; reply_text: string }[]

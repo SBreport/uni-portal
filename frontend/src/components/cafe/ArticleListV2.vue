@@ -60,7 +60,7 @@ function parseComments(article: any): { slot: number; comment: string; reply: st
 }
 
 // 날짜 포맷
-function shortDate(dateStr: string | null): string {
+function shortDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr)
   const mm = String(d.getMonth() + 1).padStart(2, '0')

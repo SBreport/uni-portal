@@ -1,16 +1,8 @@
 """Equipment 라우터 — 보유장비 + 장비사전 (10개 엔드포인트)."""
 
 from typing import Annotated, Optional
-import math
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse
-
-
-def _clean_df(df):
-    if df is None:
-        return []
-    return [{k: (None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v)
-             for k, v in row.items()} for row in df.to_dict(orient="records")]
 
 from api.deps import get_current_user, require_role
 from api.models import EquipmentUpdate, PhotoChangeItem, DeviceInfoUpsert
@@ -35,32 +27,28 @@ async def get_equipment(
     category: Optional[str] = None,
     search: Optional[str] = None,
 ):
-    df = load_data()
-    if df.empty:
+    rows = load_data()
+    if not rows:
         return []
 
-    # 컬럼명 정규화 (DB 쿼리가 '지점명', '순번'을 반환하므로)
-    rename_map = {}
-    if "지점명" in df.columns and "지점" not in df.columns:
-        rename_map["지점명"] = "지점"
-    if "순번" in df.columns and "id" not in df.columns:
-        rename_map["순번"] = "id"
-    if rename_map:
-        df = df.rename(columns=rename_map)
-
-    # 사진 값 정규화 ('O' → '있음')
-    if "사진" in df.columns:
-        df["사진"] = df["사진"].apply(lambda x: "있음" if str(x).strip() in ("O", "o", "있음") else "")
+    # 컬럼명 정규화
+    for r in rows:
+        if "지점명" in r and "지점" not in r:
+            r["지점"] = r.pop("지점명")
+        if "순번" in r and "id" not in r:
+            r["id"] = r.pop("순번")
+        # 사진 값 정규화
+        r["사진"] = "있음" if str(r.get("사진", "")).strip() in ("O", "o", "있음") else ""
 
     # 필터 적용
     if branch:
-        df = df[df["지점"] == branch]
+        rows = [r for r in rows if r.get("지점") == branch]
     if category:
-        df = df[df["카테고리"] == category]
+        rows = [r for r in rows if r.get("카테고리") == category]
     if search:
-        mask = df.apply(lambda r: search.lower() in str(r).lower(), axis=1)
-        df = df[mask]
-    return _clean_df(df)
+        q = search.lower()
+        rows = [r for r in rows if q in str(r).lower()]
+    return rows
 
 
 @router.get("/branches")

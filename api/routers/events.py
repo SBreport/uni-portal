@@ -1,18 +1,9 @@
 """Events 라우터 — 이벤트 조회 + 시술사전 (12개 엔드포인트)."""
 
 from typing import Annotated, Optional
-import math
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 
 from api.deps import get_current_user, require_role
-
-
-def _clean_df(df):
-    """DataFrame의 NaN/Inf를 None으로 변환하여 JSON 직렬화 가능하게."""
-    if df is None:
-        return []
-    return [{k: (None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v)
-             for k, v in row.items()} for row in df.to_dict(orient="records")]
 from api.models import TreatmentUpdate, TreatmentCreate, EventSyncRequest
 
 from events.db import (
@@ -27,10 +18,8 @@ _editor = require_role("editor")
 
 @router.get("")
 async def get_events(user: Annotated[dict, Depends(get_current_user)]):
-    df, is_fallback = load_current_events()
-    if df is None or df.empty:
-        return {"data": [], "is_fallback": is_fallback}
-    return {"data": _clean_df(df), "is_fallback": is_fallback}
+    rows, is_fallback = load_current_events()
+    return {"data": rows or [], "is_fallback": is_fallback}
 
 
 @router.get("/branches")
@@ -54,10 +43,8 @@ async def get_price_history(
     event_name: str = Query(...),
     user: Annotated[dict, Depends(get_current_user)] = None,
 ):
-    df = load_price_history(branch_name, event_name)
-    if df is None or df.empty:
-        return []
-    return _clean_df(df)
+    rows = load_price_history(branch_name, event_name)
+    return rows or []
 
 
 @router.get("/search")
@@ -66,27 +53,21 @@ async def search_events(
     period_id: Optional[int] = None,
     user: Annotated[dict, Depends(get_current_user)] = None,
 ):
-    df = search_by_treatment(q, period_id)
-    if df is None or df.empty:
-        return []
-    return _clean_df(df)
+    rows = search_by_treatment(q, period_id)
+    return rows or []
 
 
 @router.get("/summary")
 async def get_summary(user: Annotated[dict, Depends(get_current_user)]):
-    df = load_event_summary()
-    if df is None or df.empty:
-        return []
-    return _clean_df(df)
+    rows = load_event_summary()
+    return rows or []
 
 
 # ── 시술 사전 ──
 @router.get("/treatments")
 async def get_treatments(user: Annotated[dict, Depends(get_current_user)]):
-    df = load_treatment_dictionary()
-    if df is None or df.empty:
-        return []
-    return _clean_df(df)
+    rows = load_treatment_dictionary()
+    return rows or []
 
 
 @router.patch("/treatments/{treatment_id}")

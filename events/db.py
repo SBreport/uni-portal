@@ -9,9 +9,6 @@ import sqlite3
 import os
 from datetime import datetime
 
-import pandas as pd
-
-
 from events.parser import ParsedEvent
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -275,12 +272,17 @@ def _event_query():
 
 
 
+def _query_rows(conn, sql, params=()):
+    """SQL 실행 → list[dict] 반환."""
+    rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
 def load_current_events() -> tuple:
     """현재 날짜 기준 격월 기간의 이벤트 데이터 로드.
 
     Returns:
-        (DataFrame, is_fallback: bool)
-        is_fallback=True이면 현재 기간 데이터가 없어 이전 기간 데이터를 반환한 것.
+        (list[dict], is_fallback: bool)
     """
     from datetime import datetime
     now = datetime.now()
@@ -291,41 +293,38 @@ def load_current_events() -> tuple:
 
     conn = _get_conn()
     base = _event_query()
+    order = " ORDER BY er.sort_order, eb.name, ec.sort_order, ei.row_order"
 
     # 1차: 현재 날짜 기준 격월 기간
-    df = pd.read_sql_query(
-        base + " WHERE ep.year = ? AND ep.start_month = ? AND ei.is_active = 1"
-        " ORDER BY er.sort_order, eb.name, ec.sort_order, ei.row_order",
-        conn, params=(current_year, current_start_month),
+    rows = _query_rows(conn,
+        base + " WHERE ep.year = ? AND ep.start_month = ? AND ei.is_active = 1" + order,
+        (current_year, current_start_month),
     )
-    if len(df) > 0:
+    if rows:
         conn.close()
-        return df, False
+        return rows, False
 
-    # 2차: 직전 격월 기간 (현재가 3-4월이면 → 1-2월)
+    # 2차: 직전 격월 기간
     prev_idx = _bm_idx - 1
     prev_year = current_year
     if prev_idx < 0:
         prev_idx = 5
         prev_year -= 1
     prev_start = _pm[prev_idx]
-    df = pd.read_sql_query(
-        base + " WHERE ep.year = ? AND ep.start_month = ? AND ei.is_active = 1"
-        " ORDER BY er.sort_order, eb.name, ec.sort_order, ei.row_order",
-        conn, params=(prev_year, prev_start),
+    rows = _query_rows(conn,
+        base + " WHERE ep.year = ? AND ep.start_month = ? AND ei.is_active = 1" + order,
+        (prev_year, prev_start),
     )
-    if len(df) > 0:
+    if rows:
         conn.close()
-        return df, True
+        return rows, True
 
     # 3차: is_current=1 최종 fallback
-    df = pd.read_sql_query(
-        base + " WHERE ep.is_current = 1 AND ei.is_active = 1"
-        " ORDER BY er.sort_order, eb.name, ec.sort_order, ei.row_order",
-        conn,
+    rows = _query_rows(conn,
+        base + " WHERE ep.is_current = 1 AND ei.is_active = 1" + order,
     )
     conn.close()
-    return df, True
+    return rows, True
 
 
 def load_evt_branches() -> list[dict]:
@@ -368,7 +367,7 @@ def load_evt_periods() -> list[dict]:
     return rows
 
 
-def load_price_history(branch_name: str = None, event_name: str = None) -> pd.DataFrame:
+def load_price_history(branch_name: str = None, event_name: str = None) -> list:
     """기간별 가격 이력 조회."""
     conn = _get_conn()
     query = """
@@ -396,82 +395,55 @@ def load_price_history(branch_name: str = None, event_name: str = None) -> pd.Da
         params.append(f"%{event_name}%")
     query += " ORDER BY ei.raw_event_name, ep.starts_at"
 
-    df = pd.read_sql_query(query, conn, params=params)
+    rows = _query_rows(conn, query, params)
     conn.close()
-    return df
+    return rows
 
 
-def search_by_treatment(query: str, period_id: int = None) -> pd.DataFrame:
-    """시술명 분해 검색 — 패키지 내 개별 시술(evt_treatments)까지 탐색.
-
-    예: "리쥬란" 검색 시
-      1) 이벤트명에 "리쥬란"이 포함된 항목
-      2) 패키지 구성요소(evt_item_components)의 시술명에 "리쥬란"이 포함된 항목
-    두 결과를 합쳐서 반환합니다.
-    """
+def search_by_treatment(query: str, period_id: int = None) -> list:
+    """시술명 분해 검색 — 패키지 내 개별 시술(evt_treatments)까지 탐색."""
     conn = _get_conn()
 
-    # 기본: 현재 기간
     period_filter = "ep.is_current = 1" if period_id is None else "ep.id = ?"
     params_base = [] if period_id is None else [period_id]
 
-    # 1) 이벤트명 직접 매칭
     q1 = f"""
         SELECT DISTINCT
-            ei.id,
-            eb.name       AS 지점명,
-            er.name       AS 지역,
+            ei.id, eb.name AS 지점명, er.name AS 지역,
             ec.display_name AS 카테고리,
-            ei.raw_event_name AS 이벤트명,
-            ei.display_name   AS 표시명,
-            ei.regular_price  AS 정상가,
-            ei.event_price    AS 이벤트가,
-            ei.discount_rate  AS 할인율,
-            ei.session_count  AS 회차,
-            ei.is_package     AS 패키지,
-            ei.notes          AS 비고,
-            ep.label          AS 기간,
-            '이벤트명'        AS 매칭유형
+            ei.raw_event_name AS 이벤트명, ei.display_name AS 표시명,
+            ei.regular_price AS 정상가, ei.event_price AS 이벤트가,
+            ei.discount_rate AS 할인율, ei.session_count AS 회차,
+            ei.is_package AS 패키지, ei.notes AS 비고,
+            ep.label AS 기간, '이벤트명' AS 매칭유형
         FROM evt_items ei
-        JOIN evt_branches eb  ON ei.branch_id = eb.id
-        JOIN evt_regions er   ON eb.region_id = er.id
+        JOIN evt_branches eb ON ei.branch_id = eb.id
+        JOIN evt_regions er ON eb.region_id = er.id
         JOIN evt_categories ec ON ei.category_id = ec.id
-        JOIN evt_periods ep   ON ei.event_period_id = ep.id
-        WHERE {period_filter}
-          AND ei.is_active = 1
-          AND ei.raw_event_name LIKE ?
+        JOIN evt_periods ep ON ei.event_period_id = ep.id
+        WHERE {period_filter} AND ei.is_active = 1 AND ei.raw_event_name LIKE ?
     """
 
-    # 2) 패키지 구성요소 시술명 매칭
     q2 = f"""
         SELECT DISTINCT
-            ei.id,
-            eb.name       AS 지점명,
-            er.name       AS 지역,
+            ei.id, eb.name AS 지점명, er.name AS 지역,
             ec.display_name AS 카테고리,
-            ei.raw_event_name AS 이벤트명,
-            ei.display_name   AS 표시명,
-            ei.regular_price  AS 정상가,
-            ei.event_price    AS 이벤트가,
-            ei.discount_rate  AS 할인율,
-            ei.session_count  AS 회차,
-            ei.is_package     AS 패키지,
-            ei.notes          AS 비고,
-            ep.label          AS 기간,
-            '시술구성'        AS 매칭유형
+            ei.raw_event_name AS 이벤트명, ei.display_name AS 표시명,
+            ei.regular_price AS 정상가, ei.event_price AS 이벤트가,
+            ei.discount_rate AS 할인율, ei.session_count AS 회차,
+            ei.is_package AS 패키지, ei.notes AS 비고,
+            ep.label AS 기간, '시술구성' AS 매칭유형
         FROM evt_items ei
-        JOIN evt_branches eb  ON ei.branch_id = eb.id
-        JOIN evt_regions er   ON eb.region_id = er.id
+        JOIN evt_branches eb ON ei.branch_id = eb.id
+        JOIN evt_regions er ON eb.region_id = er.id
         JOIN evt_categories ec ON ei.category_id = ec.id
-        JOIN evt_periods ep   ON ei.event_period_id = ep.id
+        JOIN evt_periods ep ON ei.event_period_id = ep.id
         JOIN evt_item_components eic ON eic.event_item_id = ei.id
-        JOIN evt_treatments et      ON eic.treatment_id = et.id
-        WHERE {period_filter}
-          AND ei.is_active = 1
+        JOIN evt_treatments et ON eic.treatment_id = et.id
+        WHERE {period_filter} AND ei.is_active = 1
           AND (et.name LIKE ? OR eic.raw_component LIKE ? OR et.brand LIKE ?)
     """
 
-    # 합치기 (UNION으로 중복 제거하되 매칭유형은 이벤트명 우선)
     combined = f"""
         SELECT * FROM ({q1} UNION {q2})
         ORDER BY 지역, 지점명, 카테고리, 이벤트명
@@ -480,59 +452,50 @@ def search_by_treatment(query: str, period_id: int = None) -> pd.DataFrame:
     like_q = f"%{query}%"
     params = params_base + [like_q] + params_base + [like_q, like_q, like_q]
 
-    df = pd.read_sql_query(combined, conn, params=params)
+    rows = _query_rows(conn, combined, params)
     conn.close()
-    return df
+    return rows
 
 
-def load_treatment_list() -> pd.DataFrame:
+def load_treatment_list() -> list:
     """등록된 시술 마스터 목록 (장비 연동 대비)."""
     conn = _get_conn()
-    query = """
+    rows = _query_rows(conn, """
         SELECT
-            et.id,
-            et.name   AS 시술명,
-            et.brand  AS 브랜드,
-            ec.display_name AS 카테고리,
-            COUNT(eic.id) AS 사용횟수
+            et.id, et.name AS 시술명, et.brand AS 브랜드,
+            ec.display_name AS 카테고리, COUNT(eic.id) AS 사용횟수
         FROM evt_treatments et
         LEFT JOIN evt_categories ec ON et.category_id = ec.id
         LEFT JOIN evt_item_components eic ON eic.treatment_id = et.id
         WHERE et.is_active = 1
         GROUP BY et.id, et.name, et.brand, ec.display_name
         ORDER BY COUNT(eic.id) DESC, et.name
-    """
-    df = pd.read_sql_query(query, conn)
+    """)
     conn.close()
-    return df
+    return rows
 
 
 # ============================================================
 # 시술 사전 함수 (설명 관리 + 장비 연동)
 # ============================================================
 
-def load_treatment_dictionary() -> pd.DataFrame:
+def load_treatment_dictionary() -> list:
     """시술 사전 전체 로드 (설명·검수 상태 포함)."""
     conn = _get_conn()
-    query = """
+    rows = _query_rows(conn, """
         SELECT
-            et.id,
-            et.name        AS 시술명,
-            et.brand       AS 브랜드,
-            ec.display_name AS 카테고리,
-            et.description AS 설명,
-            et.is_verified AS 검수완료,
-            COUNT(eic.id)  AS 이벤트사용수
+            et.id, et.name AS 시술명, et.brand AS 브랜드,
+            ec.display_name AS 카테고리, et.description AS 설명,
+            et.is_verified AS 검수완료, COUNT(eic.id) AS 이벤트사용수
         FROM evt_treatments et
         LEFT JOIN evt_categories ec ON et.category_id = ec.id
         LEFT JOIN evt_item_components eic ON eic.treatment_id = et.id
         WHERE et.is_active = 1
         GROUP BY et.id, et.name, et.brand, ec.display_name, et.description, et.is_verified
         ORDER BY ec.sort_order, et.name
-    """
-    df = pd.read_sql_query(query, conn)
+    """)
     conn.close()
-    return df
+    return rows
 
 
 def update_treatment_info(treatment_id: int, description: str, is_verified: int) -> bool:
@@ -589,17 +552,14 @@ def get_treatment_descriptions(names: list[str]) -> dict:
     return result
 
 
-def load_event_summary() -> pd.DataFrame:
+def load_event_summary() -> list:
     """지점×카테고리별 이벤트 요약 통계."""
     conn = _get_conn()
-    query = """
+    rows = _query_rows(conn, """
         SELECT
-            eb.name AS 지점명,
-            er.name AS 지역,
-            ec.display_name AS 카테고리,
-            COUNT(*) AS 이벤트수,
-            MIN(ei.event_price) AS 최저가,
-            MAX(ei.event_price) AS 최고가,
+            eb.name AS 지점명, er.name AS 지역,
+            ec.display_name AS 카테고리, COUNT(*) AS 이벤트수,
+            MIN(ei.event_price) AS 최저가, MAX(ei.event_price) AS 최고가,
             ROUND(AVG(ei.discount_rate), 1) AS 평균할인율
         FROM evt_items ei
         JOIN evt_branches eb ON ei.branch_id = eb.id
@@ -609,7 +569,6 @@ def load_event_summary() -> pd.DataFrame:
         WHERE ep.is_current = 1 AND ei.is_active = 1
         GROUP BY eb.name, er.name, ec.display_name
         ORDER BY er.sort_order, eb.name, ec.sort_order
-    """
-    df = pd.read_sql_query(query, conn)
+    """)
     conn.close()
-    return df
+    return rows

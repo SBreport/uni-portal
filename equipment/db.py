@@ -1,14 +1,12 @@
 """
 SQLite DB 읽기/쓰기 모듈
-- publish/data.py 와 동일한 인터페이스 제공
-- load_data(), apply_photo_status(), apply_filters()
-- save_photo_changes(), update_equipment() 등 쓰기 기능 추가
+- load_data(), get_branches(), get_categories() 등
+- save_photo_changes(), update_equipment() 등 쓰기 기능
 """
 
 import sqlite3
 import os
 import re
-import pandas as pd
 
 
 from config import PHOTO_YES, DEVICE_ALIASES
@@ -27,7 +25,7 @@ def _get_conn():
 
 
 def clean_device_name(name):
-    if pd.isna(name):
+    if not name:
         return ""
     name = str(name).strip()
     cleaned = re.sub(r"^\d+\.?\s+", "", name)
@@ -43,12 +41,11 @@ def get_device_group(clean_name):
     return clean_name
 
 
-
 def load_data():
-    """SQLite에서 장비 데이터 로드 → DataFrame 반환"""
+    """SQLite에서 장비 데이터 로드 → list[dict] 반환"""
     try:
         conn = _get_conn()
-        query = """
+        rows = conn.execute("""
             SELECT
                 e.id        AS 순번,
                 b.name      AS 지점명,
@@ -61,66 +58,31 @@ def load_data():
             JOIN branches b ON e.branch_id = b.id
             LEFT JOIN categories c ON e.category_id = c.id
             ORDER BY b.name, e.id
-        """
-        df = pd.read_sql_query(query, conn)
+        """).fetchall()
         conn.close()
 
-        # 빈 문자열 정리
-        for col in ["지점명", "카테고리", "기기명"]:
-            df[col] = df[col].astype(str).str.strip()
-        df["비고"] = df["비고"].fillna("").astype(str).str.strip().replace("nan", "")
-        df["사진"] = df["사진"].fillna("").astype(str).str.strip()
+        result = []
+        for r in rows:
+            d = dict(r)
+            # 문자열 정리
+            for col in ("지점명", "카테고리", "기기명"):
+                d[col] = str(d.get(col) or "").strip()
+            d["비고"] = str(d.get("비고") or "").strip()
+            if d["비고"] == "nan":
+                d["비고"] = ""
+            d["사진"] = str(d.get("사진") or "").strip()
+            d["수량"] = int(d["수량"]) if d.get("수량") else 0
+            # 기기명 정규화 + 그룹핑
+            d["기기명_원본"] = d["기기명"]
+            d["기기명"] = clean_device_name(d["기기명_원본"])
+            d["장비그룹"] = get_device_group(d["기기명"])
+            result.append(d)
 
-        if "수량" in df.columns:
-            df["수량"] = pd.to_numeric(df["수량"], errors="coerce").fillna(0).astype(int)
-
-        # 기기명 정규화 + 그룹핑
-        df["기기명_원본"] = df["기기명"]
-        df["기기명"] = df["기기명_원본"].apply(clean_device_name)
-        df["장비그룹"] = df["기기명"].apply(get_device_group)
-
-        return df
+        return result
 
     except Exception as e:
         print(f"[EQUIPMENT DB ERROR] 데이터를 불러오는 중 오류: {e}")
-        return pd.DataFrame(
-            columns=["순번", "지점명", "카테고리", "기기명", "기기명_원본", "장비그룹", "수량", "비고", "사진"]
-        )
-
-
-def apply_photo_status(df):
-    """사진유무 컬럼 추가"""
-    df = df.copy()
-    df["사진유무"] = df["사진"].apply(
-        lambda x: "있음" if str(x).strip() in PHOTO_YES else "없음"
-    )
-    return df
-
-
-def apply_filters(df, branches, categories, search, photo_filter):
-    """필터 적용"""
-    filtered = df.copy()
-
-    if branches:
-        filtered = filtered[filtered["지점명"].isin(branches)]
-
-    if categories:
-        filtered = filtered[filtered["카테고리"].isin(categories)]
-
-    if search:
-        mask = (
-            filtered["기기명"].str.contains(search, case=False, na=False)
-            | filtered["장비그룹"].str.contains(search, case=False, na=False)
-            | filtered["비고"].str.contains(search, case=False, na=False)
-        )
-        filtered = filtered[mask]
-
-    if photo_filter == "사진 없음만":
-        filtered = filtered[filtered["사진유무"] == "없음"]
-    elif photo_filter == "사진 있음만":
-        filtered = filtered[filtered["사진유무"] == "있음"]
-
-    return filtered
+        return []
 
 
 # ============================================================

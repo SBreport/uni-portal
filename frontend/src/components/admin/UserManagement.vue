@@ -69,13 +69,13 @@ async function handleUpdate() {
 
 <template>
   <div>
-    <div class="flex justify-end mb-3">
+    <div class="max-w-3xl flex justify-end mb-3">
       <button @click="showForm = !showForm" class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
         {{ showForm ? '취소' : '+ 사용자 추가' }}
       </button>
     </div>
 
-    <div v-if="showForm" class="bg-white border border-slate-200 rounded-lg p-4 mb-4">
+    <div v-if="showForm" class="bg-white border border-slate-200 rounded-lg p-4 mb-4 max-w-3xl">
       <div class="grid grid-cols-5 gap-3">
         <input v-model="newUsername" placeholder="사용자 ID" class="px-3 py-1.5 border border-slate-300 rounded text-sm" />
         <input v-model="newPassword" type="password" placeholder="비밀번호" class="px-3 py-1.5 border border-slate-300 rounded text-sm" />
@@ -91,15 +91,15 @@ async function handleUpdate() {
       <p v-if="formError" class="text-red-500 text-xs mt-2">{{ formError }}</p>
     </div>
 
-    <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+    <div class="bg-white border border-slate-200 rounded-lg overflow-hidden max-w-3xl">
       <table class="w-full text-sm">
         <thead class="bg-slate-50 border-b border-slate-200">
           <tr>
-            <th class="text-left px-4 py-2 font-medium text-slate-500">ID</th>
-            <th class="text-left px-4 py-2 font-medium text-slate-500">역할</th>
-            <th class="text-left px-4 py-2 font-medium text-slate-500">지점</th>
+            <th class="text-left px-4 py-2 font-medium text-slate-500 w-28">ID</th>
+            <th class="text-left px-4 py-2 font-medium text-slate-500 w-20">역할</th>
+            <th class="text-left px-4 py-2 font-medium text-slate-500 w-28">지점</th>
             <th class="text-left px-4 py-2 font-medium text-slate-500">메모</th>
-            <th class="text-right px-4 py-2 font-medium text-slate-500">작업</th>
+            <th class="text-right px-4 py-2 font-medium text-slate-500 w-24">작업</th>
           </tr>
         </thead>
         <tbody>
@@ -107,7 +107,7 @@ async function handleUpdate() {
             <template v-if="editingUser !== user.username">
               <td class="px-4 py-2 font-medium">{{ user.username }}</td>
               <td class="px-4 py-2">
-                <span class="px-2 py-0.5 rounded text-xs font-medium"
+                <span class="px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
                   :class="{ 'bg-slate-100 text-slate-600': user.role === 'viewer', 'bg-blue-100 text-blue-700': user.role === 'branch', 'bg-amber-100 text-amber-700': user.role === 'editor', 'bg-red-100 text-red-700': user.role === 'admin' }">
                   {{ roles.find(r => r.value === user.role)?.label || user.role }}
                 </span>

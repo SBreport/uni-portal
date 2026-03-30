@@ -13,6 +13,7 @@ const marketingOpen = ref(true)
 const isMarketingActive = computed(() =>
   ['/cafe', '/blog', '/place', '/webpage'].some(p => route.path.startsWith(p))
 )
+// blog-all은 /blog로 시작하므로 isActive 로직 수정 필요
 
 // 단일 메뉴 항목
 interface MenuItem {
@@ -23,12 +24,13 @@ interface MenuItem {
 }
 
 // 마케팅 하위 메뉴
-const marketingChildren: MenuItem[] = [
+const marketingChildren = computed<MenuItem[]>(() => [
   { path: '/cafe', label: '카페', icon: 'C' },
   { path: '/blog', label: '블로그', icon: 'B' },
+  ...(auth.role === 'admin' ? [{ path: '/blog-all', label: '블로그(all)', icon: 'B', adminOnly: true }] : []),
   { path: '/place', label: '플레이스', icon: 'P' },
   { path: '/webpage', label: '웹페이지', icon: 'W' },
-]
+])
 
 // 최상위 메뉴 (마케팅 제외)
 const topItems: MenuItem[] = [
@@ -45,6 +47,8 @@ const bottomItems: MenuItem[] = [
 
 function isActive(path: string) {
   if (path === '/') return route.path === '/'
+  // /blog vs /blog-all 구분
+  if (path === '/blog') return route.path === '/blog'
   return route.path.startsWith(path)
 }
 

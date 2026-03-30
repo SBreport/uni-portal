@@ -460,6 +460,7 @@ def init_db():
         ("author_main", "TEXT DEFAULT ''"),
         ("author_sub", "TEXT DEFAULT ''"),
         ("needs_review", "INTEGER DEFAULT 0"),
+        ("scraped_title", "TEXT DEFAULT ''"),
     ]
     for col_name, col_def in _blog_enrich_cols:
         try:
@@ -551,6 +552,15 @@ def init_db():
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_devices_paper ON paper_devices(paper_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_devices_device ON paper_devices(device_info_id)")
+
+    # ── 앱 설정 (key-value) ──
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS app_settings (
+        key         TEXT PRIMARY KEY,
+        value       TEXT NOT NULL DEFAULT '',
+        updated_at  TEXT DEFAULT (datetime('now','localtime'))
+    )
+    """)
 
     # ============================================================
     # 마이그레이션: 기존 DB에 새 컬럼 추가 (이미 있으면 무시)

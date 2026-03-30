@@ -45,6 +45,14 @@ const router = createRouter({
       path: '/blog',
       name: 'blog',
       component: () => import('@/views/BlogView.vue'),
+      props: { mode: 'uandi' },
+    },
+    {
+      path: '/blog-all',
+      name: 'blog-all',
+      component: () => import('@/views/BlogView.vue'),
+      props: { mode: 'all' },
+      meta: { adminOnly: true },
     },
     {
       path: '/place',
@@ -76,6 +84,11 @@ router.beforeEach((to) => {
   if (to.meta.public) return true
   const token = localStorage.getItem('token')
   if (!token) return { name: 'login' }
+  // admin 전용 페이지 체크
+  if (to.meta.adminOnly) {
+    const role = localStorage.getItem('role')
+    if (role !== 'admin') return { name: 'home' }
+  }
   return true
 })
 

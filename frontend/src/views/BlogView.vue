@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import * as blogApi from '@/api/blog'
-import { useAuthStore } from '@/stores/auth'
 import { useColumnResize } from '@/composables/useResizePanel'
 import { channelLabel, channelColor, typeColor, statusColor } from '@/utils/blogFormatters'
 import BlogDashboard from '@/components/blog/BlogDashboard.vue'
 import BlogAccounts from '@/components/blog/BlogAccounts.vue'
 
-const auth = useAuthStore()
+const props = defineProps<{
+  mode?: 'uandi' | 'all'
+}>()
+
+const isUandi = computed(() => props.mode !== 'all')
+const pageTitle = computed(() => isUandi.value ? '블로그 관리' : '블로그 관리 (전체)')
 
 // ── 탭 ──
-const activeTab = ref<'dashboard' | 'list' | 'accounts' | 'admin'>('dashboard')
+const activeTab = ref<'dashboard' | 'list' | 'accounts'>('dashboard')
 
 // ── 목록 ──
 const posts = ref<any[]>([])
@@ -29,8 +33,12 @@ const filterAuthor = ref('')
 const filterBranch = ref('')
 const filterProjectMonth = ref('')
 const filterNeedsReview = ref<number | null>(null)
-const dateFrom = ref('')
-const dateTo = ref('')
+// 기본 날짜: 이번 달 1일 ~ 오늘
+const now = new Date()
+const defaultDateFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+const defaultDateTo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+const dateFrom = ref(defaultDateFrom)
+const dateTo = ref(defaultDateTo)
 
 // 인라인 헤더 필터
 const showHeaderFilters = ref(false)
@@ -69,49 +77,20 @@ function sortIcon(colKey: string) {
   return sortDirection.value === 'asc' ? '\u25B2' : '\u25BC'
 }
 
-// Notion 동기화 (관리자)
-const notionToken = ref('')
-const syncing = ref(false)
-const syncResult = ref<any>(null)
-const adminSyncStatus = ref<any>(null)
-
-async function loadAdminSyncStatus() {
-  try {
-    const { data } = await blogApi.getNotionSyncStatus()
-    adminSyncStatus.value = data?.last_sync || null
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-async function runNotionSync() {
-  if (!notionToken.value.trim()) return
-  syncing.value = true
-  syncResult.value = null
-  try {
-    const { data } = await blogApi.syncNotion(notionToken.value.trim())
-    syncResult.value = data
-    loadAdminSyncStatus()
-  } catch (e: any) {
-    syncResult.value = { message: e.response?.data?.detail || '동기화 실패' }
-  } finally {
-    syncing.value = false
-  }
-}
 
 const selectedPost = ref<any>(null)
 const detailLoading = ref(false)
 
 // 컬럼 리사이즈
 const columns = ref([
-  { key: 'blog_channel', label: '채널', width: 52, minWidth: 40 },
-  { key: 'branch_name', label: '지점', width: 80, minWidth: 50 },
-  { key: 'post_type_main', label: '종류', width: 64, minWidth: 50 },
-  { key: 'keyword', label: '키워드', width: 200, minWidth: 100 },
+  { key: 'blog_channel', label: '채널', width: 64, minWidth: 50 },
+  { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
+  { key: 'post_type_main', label: '원고종류', width: 72, minWidth: 50 },
+  { key: 'keyword', label: '키워드', width: 180, minWidth: 100 },
   { key: 'clean_title', label: '제목', width: 0, minWidth: 120 }, // flex
-  { key: 'author_main', label: '담당', width: 56, minWidth: 40 },
-  { key: 'published_at', label: '발행일', width: 78, minWidth: 60 },
-  { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
+  { key: 'author_main', label: '담당', width: 60, minWidth: 44 },
+  { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
+  { key: 'status_clean', label: '상태', width: 72, minWidth: 50 },
 ])
 
 const { startResize } = useColumnResize(columns)
@@ -120,6 +99,7 @@ async function loadPosts() {
   loading.value = true
   try {
     const params: any = { page: page.value, per_page: perPage.value }
+    if (isUandi.value) params.branch_filter = 'uandi'
     if (searchText.value) params.search = searchText.value
     if (filterChannel.value) params.channel = filterChannel.value
     if (filterTypeMain.value) params.post_type_main = filterTypeMain.value
@@ -143,7 +123,9 @@ async function loadPosts() {
 
 async function loadFilterOptions() {
   try {
-    const { data } = await blogApi.getBlogFilterOptions()
+    const params: any = {}
+    if (isUandi.value) params.branch_filter = 'uandi'
+    const { data } = await blogApi.getBlogFilterOptions(params)
     filterOptions.value = data
   } catch (e) {
     console.error(e)
@@ -205,8 +187,8 @@ function resetFilter() {
   filterBranch.value = ''
   filterProjectMonth.value = ''
   filterNeedsReview.value = null
-  dateFrom.value = ''
-  dateTo.value = ''
+  dateFrom.value = defaultDateFrom
+  dateTo.value = defaultDateTo
   for (const key in headerFilters.value) headerFilters.value[key] = ''
   sortColumn.value = ''
   sortDirection.value = 'asc'
@@ -219,6 +201,30 @@ const lastSyncInfo = computed(() => {
   return filterOptions.value?.last_sync || null
 })
 
+// 대시보드 카드 클릭 → 목록 이동
+function onDashboardNavigate(_tab: string, filter?: Record<string, any>) {
+  // 필터 초기화
+  searchText.value = ''
+  filterChannel.value = filter?.channel || ''
+  filterTypeMain.value = filter?.post_type_main || ''
+  filterAuthor.value = filter?.author || ''
+  filterBranch.value = filter?.branch_name || ''
+  filterProjectMonth.value = filter?.project_month || ''
+  filterNeedsReview.value = filter?.needs_review ?? null
+  // 날짜: 전체 조회를 위해 비우기 (대시보드에서 올 때)
+  dateFrom.value = ''
+  dateTo.value = ''
+  for (const key in headerFilters.value) headerFilters.value[key] = ''
+  sortColumn.value = ''
+  sortDirection.value = 'asc'
+
+  page.value = 1
+  activeTab.value = 'list'
+  listInitialized.value = true
+  loadPosts()
+  loadFilterOptions()
+}
+
 // ── 초기 로드 ──
 watch(page, () => loadPosts())
 
@@ -228,9 +234,6 @@ watch(activeTab, (tab) => {
     loadPosts()
     loadFilterOptions()
   }
-  if (tab === 'admin') {
-    loadAdminSyncStatus()
-  }
 })
 </script>
 
@@ -239,7 +242,7 @@ watch(activeTab, (tab) => {
     <!-- 헤더 -->
     <div class="flex items-center justify-between mb-4">
       <div>
-        <h2 class="text-xl font-bold text-slate-800">블로그 관리</h2>
+        <h2 class="text-xl font-bold text-slate-800">{{ pageTitle }}</h2>
         <p class="text-xs text-slate-400 mt-0.5" v-if="lastSyncInfo">
           마지막 데이터: {{ lastSyncInfo.csv_modified_at }}
         </p>
@@ -252,7 +255,6 @@ watch(activeTab, (tab) => {
         { key: 'dashboard' as const, label: '대시보드' },
         { key: 'list' as const, label: '목록' },
         { key: 'accounts' as const, label: '계정관리' },
-        ...(auth.role === 'admin' ? [{ key: 'admin' as const, label: '관리자' }] : []),
       ])" :key="tab.key"
         @click="activeTab = tab.key"
         class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
@@ -264,72 +266,10 @@ watch(activeTab, (tab) => {
     </div>
 
     <!-- 대시보드 탭 -->
-    <BlogDashboard v-if="activeTab === 'dashboard'" />
+    <BlogDashboard v-if="activeTab === 'dashboard'" :branch-filter="isUandi ? 'uandi' : undefined" @navigate="onDashboardNavigate" />
 
     <!-- 계정관리 탭 -->
     <BlogAccounts v-if="activeTab === 'accounts'" />
-
-    <!-- ═══════ 관리자 탭 ═══════ -->
-    <div v-if="activeTab === 'admin' && auth.role === 'admin'" class="flex-1 overflow-auto space-y-4">
-      <div class="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 class="text-sm font-semibold text-slate-800 mb-4">Notion 데이터 동기화</h3>
-
-        <!-- 마지막 동기화 정보 -->
-        <div v-if="adminSyncStatus" class="bg-slate-50 rounded-lg p-3 mb-4 text-xs space-y-1">
-          <div class="flex justify-between">
-            <span class="text-slate-400">마지막 동기화</span>
-            <span class="text-slate-700 font-medium">{{ adminSyncStatus.synced_at }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-400">유형</span>
-            <span class="text-slate-700">{{ adminSyncStatus.sync_type === 'full' ? '전체' : '증분' }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-400">Notion 조회</span>
-            <span class="text-slate-700">{{ adminSyncStatus.notion_pages?.toLocaleString() }}건</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-400">업데이트 / 신규</span>
-            <span class="text-slate-700">{{ adminSyncStatus.updated?.toLocaleString() }}건 / {{ adminSyncStatus.new_posts }}건</span>
-          </div>
-        </div>
-        <div v-else class="text-xs text-slate-400 mb-4">동기화 기록이 없습니다.</div>
-
-        <!-- 동기화 실행 -->
-        <div class="space-y-3">
-          <div class="flex items-center gap-2">
-            <input v-model="notionToken" type="password"
-                   placeholder="Notion Integration 토큰 (ntn_...)"
-                   class="border border-slate-300 rounded px-2 py-1.5 text-xs w-80 focus:border-blue-400 focus:outline-none" />
-            <button @click="runNotionSync" :disabled="syncing || !notionToken.trim()"
-                    class="px-4 py-1.5 bg-slate-700 text-white text-xs rounded hover:bg-slate-800 disabled:opacity-40 transition-colors">
-              {{ syncing ? '동기화 중...' : '증분 동기화 실행' }}
-            </button>
-          </div>
-          <p class="text-[10px] text-slate-400">
-            마지막 동기화 이후 노션에서 수정된 게시글만 업데이트합니다.
-            전체 동기화는 서버에서 직접 실행하세요.
-          </p>
-        </div>
-
-        <!-- 동기화 결과 -->
-        <div v-if="syncResult" class="mt-3 text-xs p-3 rounded"
-             :class="syncResult.updated != null ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">
-          <p class="font-medium">{{ syncResult.message }}</p>
-          <p v-if="syncResult.notion_pages" class="text-[10px] mt-1 text-slate-500">
-            Notion {{ syncResult.notion_pages?.toLocaleString() }}건 조회 /
-            {{ syncResult.matched?.toLocaleString() }}건 매칭 /
-            {{ syncResult.new_posts }}건 신규
-          </p>
-        </div>
-      </div>
-
-      <!-- 향후 예정: 정기 동기화 설정 -->
-      <div class="bg-white border border-dashed border-slate-300 rounded-lg p-5">
-        <h3 class="text-sm font-semibold text-slate-400 mb-2">정기 동기화 (예정)</h3>
-        <p class="text-xs text-slate-400">주 1회 자동으로 Notion 데이터를 동기화하는 기능을 준비 중입니다.</p>
-      </div>
-    </div>
 
     <!-- ═══════ 목록 탭 ═══════ -->
     <template v-if="activeTab === 'list'">
@@ -339,36 +279,37 @@ watch(activeTab, (tab) => {
                placeholder="제목·키워드·태그 검색"
                class="border border-slate-300 rounded px-2 py-1 text-sm w-48 focus:border-blue-400 focus:outline-none" />
         <select v-model="filterChannel" @change="applyFilter" class="border border-slate-300 rounded px-2 py-1 text-sm">
-          <option value="">전체 채널</option>
+          <option value="">채널 선택</option>
           <option value="br">브랜드</option>
           <option value="opt">최적</option>
           <option value="cafe">카페</option>
         </select>
         <select v-model="filterTypeMain" @change="applyFilter" class="border border-slate-300 rounded px-2 py-1 text-sm">
-          <option value="">전체 종류</option>
+          <option value="">원고 종류</option>
           <option v-for="t in filterOptions?.post_types_main" :key="t.post_type_main" :value="t.post_type_main">
             {{ t.post_type_main }} ({{ t.cnt }})
           </option>
         </select>
         <select v-model="filterBranch" @change="applyFilter" class="border border-slate-300 rounded px-2 py-1 text-sm">
-          <option value="">전체 지점</option>
+          <option value="">지점 선택</option>
           <option v-for="b in filterOptions?.branches?.slice(0, 30)" :key="b.branch_name" :value="b.branch_name">
             {{ b.branch_name }} ({{ b.cnt }})
           </option>
         </select>
         <select v-model="filterProjectMonth" @change="applyFilter" class="border border-slate-300 rounded px-2 py-1 text-sm">
-          <option value="">전체 월</option>
+          <option value="">프로젝트 월</option>
           <option v-for="m in filterOptions?.project_months?.slice(0, 24)" :key="m.project_month" :value="m.project_month">
             {{ m.project_month }} ({{ m.cnt }})
           </option>
         </select>
         <select v-model="filterAuthor" @change="applyFilter" class="border border-slate-300 rounded px-2 py-1 text-sm">
-          <option value="">전체 작성자</option>
+          <option value="">담당자 선택</option>
           <option v-for="a in filterOptions?.authors" :key="a.author" :value="a.author">
             {{ a.author }} ({{ a.cnt }})
           </option>
         </select>
         <input v-model="dateFrom" type="date" @change="applyFilter"
+               :placeholder="defaultDateFrom"
                class="border border-slate-300 rounded px-2 py-1 text-sm" />
         <span class="text-slate-400 text-xs">~</span>
         <input v-model="dateTo" type="date" @change="applyFilter"
@@ -488,8 +429,8 @@ watch(activeTab, (tab) => {
           </div>
         </div>
 
-        <!-- 우측: 상세 패널 -->
-        <div class="w-[360px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto">
+        <!-- 우측: 상세 패널 (sticky) -->
+        <div class="w-[360px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto sticky top-0 self-start max-h-[calc(100vh-160px)]">
           <div v-if="!selectedPost" class="flex items-center justify-center h-full text-slate-300 text-sm">
             게시글을 선택하세요
           </div>

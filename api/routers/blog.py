@@ -45,10 +45,15 @@ def list_posts(
     branch_name: Optional[str] = None,
     project_month: Optional[str] = None,
     needs_review: Optional[int] = None,
+    branch_filter: Optional[str] = None,
 ):
     conn = _conn()
     conditions = []
     params = []
+
+    # 지점 필터 (uandi = 유앤아이 관련 게시글만)
+    if branch_filter == "uandi":
+        conditions.append("branch_name LIKE '%유앤%'")
 
     if channel:
         conditions.append("blog_channel = ?")
@@ -144,31 +149,34 @@ def get_post(post_id: int):
 
 # ── 필터 옵션 (드롭다운용) ──
 @router.get("/filter-options")
-def filter_options():
+def filter_options(branch_filter: Optional[str] = None):
     conn = _conn()
 
+    bf_where = " AND branch_name LIKE '%유앤%'" if branch_filter == "uandi" else ""
+    bf_where_only = " WHERE branch_name LIKE '%유앤%'" if branch_filter == "uandi" else ""
+
     channels = conn.execute(
-        "SELECT blog_channel, COUNT(*) as cnt FROM blog_posts GROUP BY blog_channel ORDER BY cnt DESC"
+        f"SELECT blog_channel, COUNT(*) as cnt FROM blog_posts{bf_where_only} GROUP BY blog_channel ORDER BY cnt DESC"
     ).fetchall()
 
     types_main = conn.execute(
-        "SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != '' GROUP BY post_type_main ORDER BY cnt DESC"
+        f"SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != ''{bf_where} GROUP BY post_type_main ORDER BY cnt DESC"
     ).fetchall()
 
     authors = conn.execute(
-        "SELECT author_main as author, COUNT(*) as cnt FROM blog_posts WHERE author_main != '' GROUP BY author_main ORDER BY cnt DESC"
+        f"SELECT author_main as author, COUNT(*) as cnt FROM blog_posts WHERE author_main != ''{bf_where} GROUP BY author_main ORDER BY cnt DESC"
     ).fetchall()
 
     accounts = conn.execute(
-        "SELECT blog_id, blog_channel, COUNT(*) as cnt FROM blog_posts WHERE blog_id != '' GROUP BY blog_id ORDER BY cnt DESC LIMIT 30"
+        f"SELECT blog_id, blog_channel, COUNT(*) as cnt FROM blog_posts WHERE blog_id != ''{bf_where} GROUP BY blog_id ORDER BY cnt DESC LIMIT 30"
     ).fetchall()
 
     branches = conn.execute(
-        "SELECT branch_name, COUNT(*) as cnt FROM blog_posts WHERE branch_name != '' GROUP BY branch_name ORDER BY cnt DESC"
+        f"SELECT branch_name, COUNT(*) as cnt FROM blog_posts WHERE branch_name != ''{bf_where} GROUP BY branch_name ORDER BY cnt DESC"
     ).fetchall()
 
     project_months = conn.execute(
-        "SELECT project_month, COUNT(*) as cnt FROM blog_posts WHERE project_month != '' GROUP BY project_month ORDER BY project_month DESC"
+        f"SELECT project_month, COUNT(*) as cnt FROM blog_posts WHERE project_month != ''{bf_where} GROUP BY project_month ORDER BY project_month DESC"
     ).fetchall()
 
     sync = conn.execute(
@@ -189,49 +197,89 @@ def filter_options():
 
 # ── 대시보드 ──
 @router.get("/dashboard")
-def blog_dashboard():
+def blog_dashboard(
+    branch_filter: Optional[str] = None,
+    month: Optional[str] = None,
+):
     conn = _conn()
 
-    total = conn.execute("SELECT COUNT(*) FROM blog_posts").fetchone()[0]
+    bf = " WHERE branch_name LIKE '%유앤%'" if branch_filter == "uandi" else ""
+    bf_and = " AND branch_name LIKE '%유앤%'" if branch_filter == "uandi" else ""
+
+    total = conn.execute(f"SELECT COUNT(*) FROM blog_posts{bf}").fetchone()[0]
     by_channel = conn.execute(
-        "SELECT blog_channel, COUNT(*) as cnt FROM blog_posts GROUP BY blog_channel"
+        f"SELECT blog_channel, COUNT(*) as cnt FROM blog_posts{bf} GROUP BY blog_channel"
     ).fetchall()
     review_count = conn.execute(
-        "SELECT COUNT(*) FROM blog_posts WHERE needs_review = 1"
+        f"SELECT COUNT(*) FROM blog_posts WHERE needs_review = 1{bf_and}"
     ).fetchone()[0]
 
     by_type = conn.execute(
-        "SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != '' GROUP BY post_type_main ORDER BY cnt DESC"
+        f"SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != ''{bf_and} GROUP BY post_type_main ORDER BY cnt DESC"
     ).fetchall()
 
     by_branch = conn.execute(
-        "SELECT branch_name, COUNT(*) as cnt FROM blog_posts WHERE branch_name != '' GROUP BY branch_name ORDER BY cnt DESC LIMIT 15"
+        f"SELECT branch_name, COUNT(*) as cnt FROM blog_posts WHERE branch_name != ''{bf_and} GROUP BY branch_name ORDER BY cnt DESC"
     ).fetchall()
 
-    monthly = conn.execute("""
+    monthly = conn.execute(f"""
         SELECT project_month as month, COUNT(*) as cnt
         FROM blog_posts
-        WHERE project_month != ''
+        WHERE project_month != ''{bf_and}
         GROUP BY project_month ORDER BY project_month DESC LIMIT 12
     """).fetchall()
 
-    recent = conn.execute("""
+    # 주간 발행 추이 (최근 12주)
+    weekly = conn.execute(f"""
+        SELECT strftime('%Y-W%W', published_at) as week,
+               MIN(published_at) as week_start,
+               COUNT(*) as cnt
+        FROM blog_posts
+        WHERE published_at != '' AND published_at >= date('now', '-84 days'){bf_and}
+        GROUP BY week ORDER BY week DESC
+    """).fetchall()
+
+    # 담당자별 게시글 수 (전체 또는 월간)
+    if month:
+        by_author = conn.execute(
+            f"SELECT author_main, COUNT(*) as cnt FROM blog_posts WHERE author_main != ''{bf_and} AND project_month = ? GROUP BY author_main ORDER BY cnt DESC",
+            (month,)
+        ).fetchall()
+    else:
+        by_author = conn.execute(
+            f"SELECT author_main, COUNT(*) as cnt FROM blog_posts WHERE author_main != ''{bf_and} GROUP BY author_main ORDER BY cnt DESC"
+        ).fetchall()
+
+    # 종류별 분포 (전체 또는 월간)
+    by_type_monthly = None
+    if month:
+        by_type_monthly = [dict(r) for r in conn.execute(
+            f"SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != ''{bf_and} AND project_month = ? GROUP BY post_type_main ORDER BY cnt DESC",
+            (month,)
+        ).fetchall()]
+
+    recent = conn.execute(f"""
         SELECT id, clean_title, keyword, blog_channel, post_type_main, author_main, published_at, status_clean
         FROM blog_posts
-        WHERE published_at != ''
+        WHERE published_at != ''{bf_and}
         ORDER BY published_at DESC LIMIT 10
     """).fetchall()
 
     conn.close()
-    return {
+    result = {
         "total": total,
         "by_channel": {r["blog_channel"]: r["cnt"] for r in by_channel},
         "review_count": review_count,
         "by_type": [dict(r) for r in by_type],
         "by_branch": [dict(r) for r in by_branch],
         "monthly": [dict(m) for m in monthly],
+        "weekly": [dict(w) for w in weekly],
+        "by_author": [dict(a) for a in by_author],
         "recent": [dict(r) for r in recent],
     }
+    if by_type_monthly is not None:
+        result["by_type_monthly"] = by_type_monthly
+    return result
 
 
 # ── 통계 ──
@@ -372,19 +420,61 @@ def upload_csv(file: UploadFile = File(...), user: dict = Depends(require_role("
 
 # ── Notion 동기화 (관리자 전용) ──
 class NotionSyncRequest(BaseModel):
-    token: str
+    token: Optional[str] = None
     full: bool = False
 
 
 @router.post("/sync-notion")
 def sync_notion(body: NotionSyncRequest, user: dict = Depends(require_role("admin"))):
-    """Notion API 증분 동기화. 마지막 동기화 이후 수정된 페이지만 처리."""
+    """Notion API 증분 동기화. 토큰 미입력 시 저장된 토큰 사용."""
     from blog.sync_notion import incremental_sync, NOTION_BLOG_DB_ID
+    token = body.token.strip() if body.token else None
+    if not token:
+        conn = _conn()
+        row = conn.execute("SELECT value FROM app_settings WHERE key = 'notion_token'").fetchone()
+        conn.close()
+        token = row["value"] if row else None
+    if not token:
+        raise HTTPException(400, "Notion 토큰이 없습니다. 토큰을 입력하거나 먼저 저장해주세요.")
     try:
-        result = incremental_sync(body.token, NOTION_BLOG_DB_ID, dry_run=False)
+        result = incremental_sync(token, NOTION_BLOG_DB_ID, dry_run=False)
         return result
     except Exception as e:
         raise HTTPException(500, f"동기화 실패: {str(e)}")
+
+
+@router.get("/notion-token/status")
+def notion_token_status(user: dict = Depends(require_role("admin"))):
+    """저장된 Notion 토큰 존재 여부 확인 (토큰 값 자체는 반환하지 않음)."""
+    conn = _conn()
+    row = conn.execute("SELECT value, updated_at FROM app_settings WHERE key = 'notion_token'").fetchone()
+    conn.close()
+    if row and row["value"]:
+        masked = row["value"][:8] + "..." + row["value"][-4:]
+        return {"saved": True, "masked": masked, "updated_at": row["updated_at"]}
+    return {"saved": False}
+
+
+class NotionTokenRequest(BaseModel):
+    token: str
+
+
+@router.post("/notion-token")
+def save_notion_token(body: NotionTokenRequest, user: dict = Depends(require_role("admin"))):
+    """Notion 토큰을 서버에 저장."""
+    token = body.token.strip()
+    if not token.startswith("ntn_"):
+        raise HTTPException(400, "올바른 Notion 토큰 형식이 아닙니다 (ntn_...)")
+    conn = _conn()
+    conn.execute(
+        "INSERT INTO app_settings (key, value, updated_at) VALUES ('notion_token', ?, datetime('now','localtime')) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        (token,),
+    )
+    conn.commit()
+    conn.close()
+    masked = token[:8] + "..." + token[-4:]
+    return {"message": f"토큰 저장 완료 ({masked})", "masked": masked}
 
 
 @router.get("/sync-notion/status")
@@ -398,3 +488,28 @@ def sync_notion_status():
     if not row:
         return {"last_sync": None}
     return {"last_sync": dict(row)}
+
+
+# ── 제목 스크래핑 ──
+@router.get("/scrape-titles/status")
+def scrape_titles_status():
+    """스크래핑 대상 건수 조회."""
+    from blog.scrape_titles import get_scrape_status
+    return get_scrape_status()
+
+
+class ScrapeTitlesRequest(BaseModel):
+    limit: int = 0
+    delay: float = 0.3
+    include_cafe: bool = False
+
+
+@router.post("/scrape-titles")
+def scrape_titles(body: ScrapeTitlesRequest, user: dict = Depends(require_role("admin"))):
+    """제목 없는 게시글의 URL에서 제목 스크래핑."""
+    from blog.scrape_titles import scrape_missing_titles
+    try:
+        result = scrape_missing_titles(limit=body.limit, delay=body.delay, include_cafe=body.include_cafe)
+        return {"message": f"수집 {result['scraped']}건 완료", **result}
+    except Exception as e:
+        raise HTTPException(500, f"스크래핑 실패: {str(e)}")

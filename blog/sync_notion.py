@@ -248,11 +248,18 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False) -> dict:
             # 기존 레코드 업데이트
             matched += 1
             if not dry_run:
+                # URL이 변경되었으면 scraped_title 리셋 → 재수집 대상이 됨
+                old_url = conn.execute(
+                    "SELECT published_url FROM blog_posts WHERE id = ?", (existing["id"],)
+                ).fetchone()
+                url_changed = old_url and old_url["published_url"] != d["main_url"]
+
                 conn.execute("""
                     UPDATE blog_posts SET
                         title = ?, keyword = ?, tags = ?, post_type = ?,
                         author = ?, published_at = ?, status = ?,
                         exposure_rank = ?, note = ?,
+                        published_url = ?,
                         clean_title = ?, needs_review = 0,
                         post_type_main = ?, post_type_sub = ?,
                         status_clean = ?, author_main = ?, author_sub = ?,
@@ -262,11 +269,19 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False) -> dict:
                     d["title"], d["keyword"], d["tags"], d["post_type"],
                     d["author"], d["published_at"], d["status"],
                     d["exposure_rank"], d["note"],
+                    d["main_url"],
                     clean_title, enriched["post_type_main"], enriched["post_type_sub"],
                     enriched["status_clean"], enriched["author_main"], enriched["author_sub"],
                     enriched["branch_name"], enriched["slot_number"],
                     existing["id"],
                 ))
+
+                # URL 변경 시 scraped_title 리셋
+                if url_changed:
+                    conn.execute(
+                        "UPDATE blog_posts SET scraped_title = '', needs_review = 1 WHERE id = ?",
+                        (existing["id"],),
+                    )
             updated += 1
         else:
             # 신규 레코드 INSERT

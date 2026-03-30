@@ -15,7 +15,7 @@ const auth = useAuthStore()
   <div v-else class="flex min-h-screen bg-slate-50">
     <AppSidebar />
     <main class="ml-48 flex-1">
-      <RouterView />
+      <RouterView :key="route.path" />
     </main>
   </div>
 </template>

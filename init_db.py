@@ -823,5 +823,23 @@ def _seed_treatment_dictionary(conn):
     print(f"시술 사전 시드 데이터 삽입 완료 ({len(treatments)}개)")
 
 
+def import_blog_data_if_empty():
+    """blog_posts가 비어있고 덤프 파일이 있으면 자동 import."""
+    conn = sqlite3.connect(DB_PATH)
+    count = conn.execute("SELECT COUNT(*) FROM blog_posts").fetchone()[0]
+    conn.close()
+    if count > 0:
+        return  # 이미 데이터 있음
+
+    dump_path = os.path.join(os.path.dirname(__file__), "blog", "blog_data.json.gz")
+    if not os.path.exists(dump_path):
+        return
+
+    print("블로그 데이터 자동 import 시작...")
+    from blog.export_blog_data import import_data
+    import_data()
+
+
 if __name__ == "__main__":
     init_db()
+    import_blog_data_if_empty()

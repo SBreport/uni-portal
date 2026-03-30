@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import * as blogApi from '@/api/blog'
+import { useAuthStore } from '@/stores/auth'
 import { useColumnResize } from '@/composables/useResizePanel'
 import { channelLabel, channelColor, typeColor, statusColor } from '@/utils/blogFormatters'
 import BlogDashboard from '@/components/blog/BlogDashboard.vue'
 import BlogAccounts from '@/components/blog/BlogAccounts.vue'
 
+const auth = useAuthStore()
+
 // ── 탭 ──
-const activeTab = ref<'dashboard' | 'list' | 'accounts'>('dashboard')
+const activeTab = ref<'dashboard' | 'list' | 'accounts' | 'admin'>('dashboard')
 
 // ── 목록 ──
 const posts = ref<any[]>([])
@@ -30,6 +33,7 @@ const dateFrom = ref('')
 const dateTo = ref('')
 
 // 인라인 헤더 필터
+const showHeaderFilters = ref(false)
 const headerFilters = ref<Record<string, string>>({
   blog_channel: '',
   branch_name: '',
@@ -40,6 +44,60 @@ const headerFilters = ref<Record<string, string>>({
   published_at: '',
   status_clean: '',
 })
+
+// 정렬
+const sortColumn = ref('')
+const sortDirection = ref<'asc' | 'desc'>('asc')
+
+function toggleSort(colKey: string) {
+  if (sortColumn.value === colKey) {
+    if (sortDirection.value === 'asc') {
+      sortDirection.value = 'desc'
+    } else {
+      // 정렬 해제
+      sortColumn.value = ''
+      sortDirection.value = 'asc'
+    }
+  } else {
+    sortColumn.value = colKey
+    sortDirection.value = 'asc'
+  }
+}
+
+function sortIcon(colKey: string) {
+  if (sortColumn.value !== colKey) return ''
+  return sortDirection.value === 'asc' ? '\u25B2' : '\u25BC'
+}
+
+// Notion 동기화 (관리자)
+const notionToken = ref('')
+const syncing = ref(false)
+const syncResult = ref<any>(null)
+const adminSyncStatus = ref<any>(null)
+
+async function loadAdminSyncStatus() {
+  try {
+    const { data } = await blogApi.getNotionSyncStatus()
+    adminSyncStatus.value = data?.last_sync || null
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+async function runNotionSync() {
+  if (!notionToken.value.trim()) return
+  syncing.value = true
+  syncResult.value = null
+  try {
+    const { data } = await blogApi.syncNotion(notionToken.value.trim())
+    syncResult.value = data
+    loadAdminSyncStatus()
+  } catch (e: any) {
+    syncResult.value = { message: e.response?.data?.detail || '동기화 실패' }
+  } finally {
+    syncing.value = false
+  }
+}
 
 const selectedPost = ref<any>(null)
 const detailLoading = ref(false)
@@ -92,9 +150,11 @@ async function loadFilterOptions() {
   }
 }
 
-// 인라인 헤더 필터 적용
+// 인라인 헤더 필터 + 정렬 적용
 const filteredPosts = computed(() => {
   let result = posts.value
+
+  // 헤더 필터
   for (const [key, val] of Object.entries(headerFilters.value)) {
     if (!val) continue
     const lower = val.toLowerCase()
@@ -103,6 +163,18 @@ const filteredPosts = computed(() => {
       return v.includes(lower)
     })
   }
+
+  // 정렬
+  if (sortColumn.value) {
+    const col = sortColumn.value
+    const dir = sortDirection.value === 'asc' ? 1 : -1
+    result = [...result].sort((a: any, b: any) => {
+      const va = String(a[col] || '')
+      const vb = String(b[col] || '')
+      return va.localeCompare(vb, 'ko') * dir
+    })
+  }
+
   return result
 })
 
@@ -136,6 +208,9 @@ function resetFilter() {
   dateFrom.value = ''
   dateTo.value = ''
   for (const key in headerFilters.value) headerFilters.value[key] = ''
+  sortColumn.value = ''
+  sortDirection.value = 'asc'
+  showHeaderFilters.value = false
   page.value = 1
   loadPosts()
 }
@@ -152,6 +227,9 @@ watch(activeTab, (tab) => {
     listInitialized.value = true
     loadPosts()
     loadFilterOptions()
+  }
+  if (tab === 'admin') {
+    loadAdminSyncStatus()
   }
 })
 </script>
@@ -171,14 +249,15 @@ watch(activeTab, (tab) => {
     <!-- 탭 바 -->
     <div class="flex gap-1 mb-4 border-b border-slate-200">
       <button v-for="tab in ([
-        { key: 'dashboard', label: '대시보드' },
-        { key: 'list', label: '목록' },
-        { key: 'accounts', label: '계정관리' },
-      ] as const)" :key="tab.key"
+        { key: 'dashboard' as const, label: '대시보드' },
+        { key: 'list' as const, label: '목록' },
+        { key: 'accounts' as const, label: '계정관리' },
+        ...(auth.role === 'admin' ? [{ key: 'admin' as const, label: '관리자' }] : []),
+      ])" :key="tab.key"
         @click="activeTab = tab.key"
         class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px"
         :class="activeTab === tab.key
-          ? 'border-blue-500 text-blue-600'
+          ? (tab.key === 'admin' ? 'border-slate-700 text-slate-800' : 'border-blue-500 text-blue-600')
           : 'border-transparent text-slate-500 hover:text-slate-700'">
         {{ tab.label }}
       </button>
@@ -189,6 +268,68 @@ watch(activeTab, (tab) => {
 
     <!-- 계정관리 탭 -->
     <BlogAccounts v-if="activeTab === 'accounts'" />
+
+    <!-- ═══════ 관리자 탭 ═══════ -->
+    <div v-if="activeTab === 'admin' && auth.role === 'admin'" class="flex-1 overflow-auto space-y-4">
+      <div class="bg-white border border-slate-200 rounded-lg p-5">
+        <h3 class="text-sm font-semibold text-slate-800 mb-4">Notion 데이터 동기화</h3>
+
+        <!-- 마지막 동기화 정보 -->
+        <div v-if="adminSyncStatus" class="bg-slate-50 rounded-lg p-3 mb-4 text-xs space-y-1">
+          <div class="flex justify-between">
+            <span class="text-slate-400">마지막 동기화</span>
+            <span class="text-slate-700 font-medium">{{ adminSyncStatus.synced_at }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">유형</span>
+            <span class="text-slate-700">{{ adminSyncStatus.sync_type === 'full' ? '전체' : '증분' }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Notion 조회</span>
+            <span class="text-slate-700">{{ adminSyncStatus.notion_pages?.toLocaleString() }}건</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">업데이트 / 신규</span>
+            <span class="text-slate-700">{{ adminSyncStatus.updated?.toLocaleString() }}건 / {{ adminSyncStatus.new_posts }}건</span>
+          </div>
+        </div>
+        <div v-else class="text-xs text-slate-400 mb-4">동기화 기록이 없습니다.</div>
+
+        <!-- 동기화 실행 -->
+        <div class="space-y-3">
+          <div class="flex items-center gap-2">
+            <input v-model="notionToken" type="password"
+                   placeholder="Notion Integration 토큰 (ntn_...)"
+                   class="border border-slate-300 rounded px-2 py-1.5 text-xs w-80 focus:border-blue-400 focus:outline-none" />
+            <button @click="runNotionSync" :disabled="syncing || !notionToken.trim()"
+                    class="px-4 py-1.5 bg-slate-700 text-white text-xs rounded hover:bg-slate-800 disabled:opacity-40 transition-colors">
+              {{ syncing ? '동기화 중...' : '증분 동기화 실행' }}
+            </button>
+          </div>
+          <p class="text-[10px] text-slate-400">
+            마지막 동기화 이후 노션에서 수정된 게시글만 업데이트합니다.
+            전체 동기화는 서버에서 직접 실행하세요.
+          </p>
+        </div>
+
+        <!-- 동기화 결과 -->
+        <div v-if="syncResult" class="mt-3 text-xs p-3 rounded"
+             :class="syncResult.updated != null ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">
+          <p class="font-medium">{{ syncResult.message }}</p>
+          <p v-if="syncResult.notion_pages" class="text-[10px] mt-1 text-slate-500">
+            Notion {{ syncResult.notion_pages?.toLocaleString() }}건 조회 /
+            {{ syncResult.matched?.toLocaleString() }}건 매칭 /
+            {{ syncResult.new_posts }}건 신규
+          </p>
+        </div>
+      </div>
+
+      <!-- 향후 예정: 정기 동기화 설정 -->
+      <div class="bg-white border border-dashed border-slate-300 rounded-lg p-5">
+        <h3 class="text-sm font-semibold text-slate-400 mb-2">정기 동기화 (예정)</h3>
+        <p class="text-xs text-slate-400">주 1회 자동으로 Notion 데이터를 동기화하는 기능을 준비 중입니다.</p>
+      </div>
+    </div>
 
     <!-- ═══════ 목록 탭 ═══════ -->
     <template v-if="activeTab === 'list'">
@@ -240,6 +381,13 @@ watch(activeTab, (tab) => {
           검토필요
         </label>
         <button @click="resetFilter" class="text-xs text-slate-400 hover:text-slate-600 ml-1">초기화</button>
+        <button @click="showHeaderFilters = !showHeaderFilters"
+                class="text-xs ml-2 px-2 py-0.5 rounded border transition-colors"
+                :class="showHeaderFilters
+                  ? 'border-blue-400 text-blue-600 bg-blue-50'
+                  : 'border-slate-300 text-slate-400 hover:text-slate-600'">
+          {{ showHeaderFilters ? '컬럼필터 닫기' : '컬럼필터' }}
+        </button>
         <span class="ml-auto text-xs text-slate-400">{{ totalCount.toLocaleString() }}건</span>
       </div>
 
@@ -254,21 +402,25 @@ watch(activeTab, (tab) => {
                      :style="col.width ? { width: col.width + 'px' } : {}" />
               </colgroup>
               <thead class="bg-slate-50 sticky top-0 z-10">
-                <!-- 헤더 라벨 + 리사이즈 핸들 -->
+                <!-- 헤더 라벨 (클릭=정렬) + 리사이즈 핸들 -->
                 <tr class="text-left text-xs text-slate-500 border-b">
                   <th v-for="(col, idx) in columns" :key="col.key"
-                      class="px-2 py-2 relative select-none">
-                    {{ col.label }}
+                      @click="toggleSort(col.key)"
+                      class="px-2 py-2 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group">
+                    <span>{{ col.label }}</span>
+                    <span v-if="sortColumn === col.key"
+                          class="ml-0.5 text-blue-500 text-[9px]">{{ sortIcon(col.key) }}</span>
+                    <span v-else class="ml-0.5 text-slate-300 text-[9px] opacity-0 group-hover:opacity-100">&#x25B2;</span>
                     <div v-if="col.width > 0"
-                         @mousedown="startResize(idx, $event)"
+                         @mousedown.stop="startResize(idx, $event)"
                          class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-300 transition-colors" />
                   </th>
                 </tr>
-                <!-- 인라인 헤더 필터 -->
-                <tr class="border-b bg-slate-50/80">
+                <!-- 인라인 헤더 필터 (토글) -->
+                <tr v-if="showHeaderFilters" class="border-b bg-slate-50/80">
                   <th v-for="col in columns" :key="'f-' + col.key" class="px-1 py-1">
                     <input v-model="headerFilters[col.key]"
-                           :placeholder="'필터'"
+                           :placeholder="col.label"
                            class="w-full border border-slate-200 rounded px-1 py-0.5 text-[10px] text-slate-600
                                   focus:border-blue-300 focus:outline-none bg-white/80" />
                   </th>
@@ -305,8 +457,11 @@ watch(activeTab, (tab) => {
                   <td class="px-2 py-1.5 text-slate-700 font-medium truncate text-xs">
                     {{ post.keyword || '-' }}
                   </td>
-                  <td class="px-2 py-1.5 text-slate-600 truncate text-xs">
-                    {{ post.clean_title || post.title || '-' }}
+                  <td class="px-2 py-1.5 truncate text-xs"
+                      :class="(post.title && post.title !== '' && !post.title.startsWith('http'))
+                        ? 'text-slate-600'
+                        : 'text-slate-400 italic'">
+                    {{ post.clean_title || post.keyword || '-' }}
                   </td>
                   <td class="px-2 py-1.5 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
                   <td class="px-2 py-1.5 text-slate-400 text-[11px]">{{ post.published_at || '-' }}</td>
@@ -359,8 +514,12 @@ watch(activeTab, (tab) => {
                   검토필요
                 </span>
               </div>
-              <h3 class="font-bold text-slate-800 text-sm leading-snug">
-                {{ selectedPost.clean_title || selectedPost.title || '(제목 없음)' }}
+              <h3 class="font-bold text-sm leading-snug"
+                  :class="selectedPost.title && !selectedPost.title.startsWith('http')
+                    ? 'text-slate-800' : 'text-slate-500'">
+                {{ selectedPost.clean_title || selectedPost.keyword || '(제목 없음)' }}
+                <span v-if="!selectedPost.title || selectedPost.title.startsWith('http')"
+                      class="text-[10px] text-slate-400 font-normal ml-1">(키워드)</span>
               </h3>
             </div>
 

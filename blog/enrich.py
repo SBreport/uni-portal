@@ -140,16 +140,18 @@ def clean_status(val: str) -> str:
     return cleaned if cleaned else val
 
 
-def clean_title(title: str, keyword: str = "") -> dict:
+def clean_title(title: str, keyword: str = "", content_number: str = "") -> dict:
     """
-    제목에서 URL/[출처] 제거, 빈 제목은 keyword로 대체.
+    제목에서 URL/[출처] 제거, 빈 제목은 keyword → content_number 순으로 대체.
     Returns: {clean_title: str, needs_review: int}
     """
     original = title.strip()
     keyword = keyword.strip()
+    content_number = content_number.strip()
 
     if not original:
-        return {"clean_title": keyword, "needs_review": 1 if not keyword else 0}
+        fallback = keyword or content_number
+        return {"clean_title": fallback, "needs_review": 1 if not keyword else 0}
 
     cleaned = original
 
@@ -173,7 +175,7 @@ def clean_title(title: str, keyword: str = "") -> dict:
 
     needs_review = 0
     if not cleaned:
-        cleaned = keyword
+        cleaned = keyword or content_number
         needs_review = 1
 
     return {"clean_title": cleaned, "needs_review": needs_review}
@@ -205,7 +207,7 @@ def enrich_row(row: dict) -> dict:
     pt = normalize_post_type(row.get("post_type", ""))
     pj = parse_project(row.get("project", ""))
     sc = clean_status(row.get("status", ""))
-    ct = clean_title(row.get("title", ""), row.get("keyword", ""))
+    ct = clean_title(row.get("title", ""), row.get("keyword", ""), row.get("content_number", ""))
     au = split_author(row.get("author", ""))
 
     needs_review = ct["needs_review"]

@@ -104,13 +104,13 @@ const detailLoading = ref(false)
 
 // 컬럼 리사이즈
 const columns = ref([
-  { key: 'blog_channel', label: '채널', width: 56, minWidth: 40 },
-  { key: 'branch_name', label: '지점', width: 68, minWidth: 50 },
-  { key: 'post_type_main', label: '종류', width: 68, minWidth: 50 },
-  { key: 'keyword', label: '키워드', width: 120, minWidth: 70 },
-  { key: 'clean_title', label: '제목', width: 0, minWidth: 100 }, // flex
-  { key: 'author_main', label: '담당', width: 60, minWidth: 40 },
-  { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
+  { key: 'blog_channel', label: '채널', width: 52, minWidth: 40 },
+  { key: 'branch_name', label: '지점', width: 80, minWidth: 50 },
+  { key: 'post_type_main', label: '종류', width: 64, minWidth: 50 },
+  { key: 'keyword', label: '키워드', width: 200, minWidth: 100 },
+  { key: 'clean_title', label: '제목', width: 0, minWidth: 120 }, // flex
+  { key: 'author_main', label: '담당', width: 56, minWidth: 40 },
+  { key: 'published_at', label: '발행일', width: 78, minWidth: 60 },
   { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
 ])
 

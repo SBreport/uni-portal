@@ -500,6 +500,20 @@ def init_db():
     )
     """)
 
+    # ── Notion 동기화 로그 ──
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS notion_sync_log (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_type       TEXT NOT NULL DEFAULT 'incremental',
+        notion_pages    INTEGER DEFAULT 0,
+        matched         INTEGER DEFAULT 0,
+        updated         INTEGER DEFAULT 0,
+        new_posts       INTEGER DEFAULT 0,
+        last_edited_cutoff TEXT DEFAULT '',
+        synced_at       TEXT DEFAULT (datetime('now','localtime'))
+    )
+    """)
+
     # ── 논문-블로그 연동 테이블 ──
     c.execute("""
     CREATE TABLE IF NOT EXISTS paper_blog_links (

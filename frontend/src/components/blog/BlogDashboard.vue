@@ -1,20 +1,54 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import * as blogApi from '@/api/blog'
+import { useAuthStore } from '@/stores/auth'
 import { channelLabel, channelColor, typeColor } from '@/utils/blogFormatters'
 
+const auth = useAuthStore()
 const dashboard = ref<any>(null)
 const loading = ref(false)
+
+// Notion 동기화
+const notionToken = ref('')
+const syncing = ref(false)
+const syncResult = ref<any>(null)
+const syncStatus = ref<any>(null)
+const showSyncPanel = ref(false)
 
 async function loadDashboard() {
   loading.value = true
   try {
-    const { data } = await blogApi.getBlogDashboard()
-    dashboard.value = data
+    const [dashRes, statusRes] = await Promise.all([
+      blogApi.getBlogDashboard(),
+      blogApi.getNotionSyncStatus(),
+    ])
+    dashboard.value = dashRes.data
+    syncStatus.value = statusRes.data?.last_sync || null
   } catch (e) {
     console.error('대시보드 로드 실패:', e)
   } finally {
     loading.value = false
+  }
+}
+
+async function runNotionSync() {
+  if (!notionToken.value.trim()) return
+  syncing.value = true
+  syncResult.value = null
+  try {
+    const { data } = await blogApi.syncNotion(notionToken.value.trim())
+    syncResult.value = data
+    // 대시보드 새로고침
+    const [dashRes, statusRes] = await Promise.all([
+      blogApi.getBlogDashboard(),
+      blogApi.getNotionSyncStatus(),
+    ])
+    dashboard.value = dashRes.data
+    syncStatus.value = statusRes.data?.last_sync || null
+  } catch (e: any) {
+    syncResult.value = { message: e.response?.data?.detail || '동기화 실패' }
+  } finally {
+    syncing.value = false
   }
 }
 
@@ -38,6 +72,44 @@ onMounted(loadDashboard)
   <div class="flex-1 overflow-auto space-y-4">
     <div v-if="loading" class="text-center py-12 text-slate-400">로딩 중...</div>
     <template v-else-if="dashboard">
+      <!-- Notion 동기화 (관리자만) -->
+      <div v-if="auth.role === 'admin'" class="bg-white border border-slate-200 rounded-lg p-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <button @click="showSyncPanel = !showSyncPanel"
+                    class="px-3 py-1.5 bg-slate-700 text-white text-xs rounded hover:bg-slate-800 transition-colors">
+              Notion 동기화
+            </button>
+            <span v-if="syncStatus" class="text-[11px] text-slate-400">
+              마지막: {{ syncStatus.synced_at }}
+              ({{ syncStatus.updated }}건 업데이트, {{ syncStatus.new_posts }}건 신규)
+            </span>
+            <span v-else class="text-[11px] text-slate-400">동기화 기록 없음</span>
+          </div>
+        </div>
+        <!-- 동기화 패널 (토글) -->
+        <div v-if="showSyncPanel" class="mt-3 pt-3 border-t border-slate-100 space-y-2">
+          <div class="flex items-center gap-2">
+            <input v-model="notionToken" type="password"
+                   placeholder="Notion Integration 토큰 (ntn_...)"
+                   class="border border-slate-300 rounded px-2 py-1 text-xs w-80 focus:border-blue-400 focus:outline-none" />
+            <button @click="runNotionSync" :disabled="syncing || !notionToken.trim()"
+                    class="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 disabled:opacity-40 transition-colors">
+              {{ syncing ? '동기화 중...' : '증분 동기화 실행' }}
+            </button>
+          </div>
+          <p class="text-[10px] text-slate-400">마지막 동기화 이후 노션에서 수정된 게시글만 업데이트합니다.</p>
+          <!-- 결과 -->
+          <div v-if="syncResult" class="text-xs p-2 rounded"
+               :class="syncResult.updated != null ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">
+            <p>{{ syncResult.message }}</p>
+            <p v-if="syncResult.notion_pages" class="text-[10px] mt-1 text-slate-500">
+              Notion {{ syncResult.notion_pages }}건 조회 / {{ syncResult.matched }}건 매칭 / {{ syncResult.new_posts }}건 신규
+            </p>
+          </div>
+        </div>
+      </div>
+
       <!-- 요약 카드 -->
       <div class="grid grid-cols-5 gap-3">
         <div class="bg-white border border-slate-200 rounded-lg p-4">

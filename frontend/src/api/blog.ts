@@ -51,3 +51,9 @@ export const uploadBlogCsv = (file: File) => {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
+
+export const syncNotion = (token: string, full: boolean = false) =>
+  api.post('/blog/sync-notion', { token, full })
+
+export const getNotionSyncStatus = () =>
+  api.get('/blog/sync-notion/status')

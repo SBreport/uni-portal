@@ -368,3 +368,33 @@ def upload_csv(file: UploadFile = File(...), user: dict = Depends(require_role("
         raise HTTPException(500, f"임포트 실패: {result.stderr}")
 
     return {"message": "임포트 완료", "output": result.stdout}
+
+
+# ── Notion 동기화 (관리자 전용) ──
+class NotionSyncRequest(BaseModel):
+    token: str
+    full: bool = False
+
+
+@router.post("/sync-notion")
+def sync_notion(body: NotionSyncRequest, user: dict = Depends(require_role("admin"))):
+    """Notion API 증분 동기화. 마지막 동기화 이후 수정된 페이지만 처리."""
+    from blog.sync_notion import incremental_sync, NOTION_BLOG_DB_ID
+    try:
+        result = incremental_sync(body.token, NOTION_BLOG_DB_ID, dry_run=False)
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"동기화 실패: {str(e)}")
+
+
+@router.get("/sync-notion/status")
+def sync_notion_status():
+    """마지막 Notion 동기화 상태 조회."""
+    conn = _conn()
+    row = conn.execute(
+        "SELECT * FROM notion_sync_log ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    if not row:
+        return {"last_sync": None}
+    return {"last_sync": dict(row)}

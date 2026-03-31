@@ -211,6 +211,279 @@ def scrape_missing_titles(
     return result
 
 
+def _extract_meta(html: str, prop: str) -> Optional[str]:
+    """HTML에서 특정 property/name의 meta content 추출."""
+    # property="xxx" content="yyy"
+    m = re.search(rf'<meta\s+[^>]*property=["\']{ re.escape(prop) }["\']\s+content=["\']([^"\']+)["\']', html)
+    if not m:
+        m = re.search(rf'<meta\s+content=["\']([^"\']+)["\']\s+[^>]*property=["\']{ re.escape(prop) }["\']', html)
+    if not m:
+        m = re.search(rf'<meta\s+[^>]*name=["\']{ re.escape(prop) }["\']\s+content=["\']([^"\']+)["\']', html)
+    if not m:
+        m = re.search(rf'<meta\s+content=["\']([^"\']+)["\']\s+[^>]*name=["\']{ re.escape(prop) }["\']', html)
+    return html_mod.unescape(m.group(1).strip()) if m else None
+
+
+def _extract_blog_profile(blog_id: str, timeout: int = 10) -> dict:
+    """
+    블로그 프로필(닉네임, 타이틀) 추출.
+
+    전략:
+    1. PostList.naver에서 <strong class="nick">닉네임</strong> + <span class="dsc">타이틀</span> 추출
+    2. 실패 시 블로그 메인 og:title에서 타이틀만 폴백
+
+    Returns:
+        {"nickname": str, "title": str, "error": str}
+        - error: 빈 문자열이면 성공, 아니면 실패 사유
+    """
+    result = {"nickname": "", "title": "", "error": ""}
+
+    # 전략 1: PostList.naver — 가장 정확한 닉네임 소스
+    try:
+        postlist_url = f"https://blog.naver.com/PostList.naver?blogId={blog_id}"
+        html = _fetch_html(postlist_url, timeout)
+        if html:
+            # <strong class="nick">닉네임</strong>
+            m_nick = re.search(
+                r'<strong\s+class=["\']nick["\'][^>]*>([^<{]+)</strong>',
+                html,
+            )
+            if m_nick:
+                nick = html_mod.unescape(m_nick.group(1).strip())
+                if nick:
+                    result["nickname"] = nick
+
+            # <span class="dsc">블로그 타이틀</span>
+            m_dsc = re.search(
+                r'<span\s+class=["\']dsc["\'][^>]*>([^<]+)</span>',
+                html,
+            )
+            if m_dsc:
+                dsc = html_mod.unescape(m_dsc.group(1).strip())
+                # {=blogName} 같은 템플릿 변수 제외
+                if dsc and not dsc.startswith("{="):
+                    result["title"] = dsc
+
+            if result["nickname"]:
+                return result
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            result["error"] = "(계정 차단)"
+            return result
+        if e.code == 403:
+            result["error"] = "(비공개 블로그 전환)"
+            return result
+        result["error"] = f"(HTTP {e.code})"
+        return result
+    except urllib.error.URLError:
+        result["error"] = "(접속 불가)"
+        return result
+    except Exception:
+        pass
+
+    # 전략 2: 블로그 메인 og:title 폴백 (닉네임이 아닌 타이틀만)
+    try:
+        main_url = f"https://blog.naver.com/{blog_id}"
+        html = _fetch_html(main_url, timeout)
+        if html:
+            og_title = _extract_meta(html, "og:title")
+            if og_title:
+                cleaned = _NAVER_SUFFIX.sub("", og_title).strip()
+                if cleaned and not _BLOG_CHANNEL_NAME.match(cleaned):
+                    result["title"] = cleaned
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            result["error"] = "(계정 차단)"
+        elif e.code == 403:
+            result["error"] = "(비공개 블로그 전환)"
+        else:
+            result["error"] = f"(HTTP {e.code})"
+    except urllib.error.URLError:
+        result["error"] = "(접속 불가)"
+    except Exception:
+        result["error"] = "(수집 실패)"
+
+    if not result["nickname"] and not result["title"] and not result["error"]:
+        result["error"] = "(닉네임 없음)"
+
+    return result
+
+
+def scrape_account_nicknames(
+    force: bool = False,
+    delay: float = 0.5,
+    progress_callback: Optional[Callable] = None,
+) -> dict:
+    """
+    blog_accounts의 닉네임/타이틀을 수집.
+
+    PostList.naver 페이지의 <strong class="nick"> 태그에서 닉네임을 추출합니다.
+    실패 시 사유를 blog_nickname에 기록합니다 (예: "(블로그 없음)", "(접속 불가)").
+
+    Args:
+        force: True면 이미 수집된 계정도 재수집
+        delay: 요청 간 대기(초)
+        progress_callback: fn(current, total, message)
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+
+    # 대상: 닉네임이 비어있거나, force=True면 에러 표시인 계정도 재수집
+    if force:
+        where = "channel != 'cafe'"
+    else:
+        where = """
+            (blog_nickname = '' OR blog_nickname IS NULL
+             OR blog_nickname LIKE '(%)')
+            AND channel != 'cafe'
+        """
+    accounts = conn.execute(f"""
+        SELECT blog_id, channel FROM blog_accounts WHERE {where}
+    """).fetchall()
+
+    total = len(accounts)
+    result = {"total": total, "updated": 0, "failed": 0, "errors": {}}
+
+    for i, acc in enumerate(accounts):
+        blog_id = acc["blog_id"]
+        profile = _extract_blog_profile(blog_id)
+
+        nickname_val = profile["nickname"]
+        title_val = profile["title"]
+
+        if nickname_val:
+            # 닉네임 수집 성공
+            conn.execute("""
+                UPDATE blog_accounts
+                SET blog_nickname = ?,
+                    blog_title = CASE WHEN ? != '' THEN ? ELSE blog_title END
+                WHERE blog_id = ?
+            """, (nickname_val, title_val, title_val, blog_id))
+            result["updated"] += 1
+            msg = f"{blog_id}: {nickname_val}"
+        elif profile["error"]:
+            # 실패 사유를 닉네임 필드에 기록
+            conn.execute("""
+                UPDATE blog_accounts
+                SET blog_nickname = ?,
+                    blog_title = CASE WHEN ? != '' THEN ? ELSE blog_title END
+                WHERE blog_id = ?
+            """, (profile["error"], title_val, title_val, blog_id))
+            result["failed"] += 1
+            result["errors"][blog_id] = profile["error"]
+            msg = f"{blog_id}: {profile['error']}"
+        else:
+            # 닉네임 없지만 타이틀은 있을 수 있음
+            error_msg = "(닉네임 없음)"
+            conn.execute("""
+                UPDATE blog_accounts
+                SET blog_nickname = ?,
+                    blog_title = CASE WHEN ? != '' THEN ? ELSE blog_title END
+                WHERE blog_id = ?
+            """, (error_msg, title_val, title_val, blog_id))
+            result["failed"] += 1
+            result["errors"][blog_id] = error_msg
+            msg = f"{blog_id}: {error_msg}"
+
+        if progress_callback:
+            progress_callback(i + 1, total, msg)
+
+        if (i + 1) % 20 == 0:
+            conn.commit()
+
+        if delay > 0 and i < total - 1:
+            time.sleep(delay)
+
+    conn.commit()
+    conn.close()
+    return result
+
+
+def fix_url_titles(
+    delay: float = 0.3,
+    progress_callback: Optional[Callable] = None,
+) -> dict:
+    """
+    needs_review=1이면서 title에 blog.naver.com URL이 포함된 글의
+    실제 제목을 URL에서 스크래핑하여 clean_title을 갱신.
+
+    대상: 노션 CSV에서 제목 필드에 하이퍼링크가 잘못 삽입된 케이스
+    예: "https://blog.naver.com/xxx/123https://blog.naver.com/xxx/123"
+
+    Returns:
+        {total, fixed, failed, details: [{id, blog_id, url, title}]}
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+
+    # 대상: needs_review=1 AND title에 blog.naver.com URL 포함
+    rows = conn.execute("""
+        SELECT id, title, keyword, content_number, blog_id
+        FROM blog_posts
+        WHERE needs_review = 1
+          AND title LIKE '%blog.naver.com/%'
+    """).fetchall()
+
+    total = len(rows)
+    result = {"total": total, "fixed": 0, "failed": 0, "details": []}
+
+    for i, row in enumerate(rows):
+        raw_title = row["title"].strip()
+
+        # URL 추출: blog.naver.com/{blogId}/{logNo} 패턴
+        m = re.search(r"https?://blog\.naver\.com/([^/\s]+)/(\d+)", raw_title)
+        if not m:
+            result["failed"] += 1
+            continue
+
+        url = m.group(0)
+        scraped = extract_title_from_url(url)
+
+        if scraped and scraped != "(삭제됨)":
+            conn.execute("""
+                UPDATE blog_posts
+                SET clean_title = ?, scraped_title = ?, needs_review = 0
+                WHERE id = ?
+            """, (scraped, scraped, row["id"]))
+            result["fixed"] += 1
+            result["details"].append({
+                "id": row["id"],
+                "blog_id": row["blog_id"],
+                "url": url,
+                "title": scraped,
+            })
+            msg = f"{row['blog_id']}: {scraped}"
+        elif scraped == "(삭제됨)":
+            # 삭제된 글은 keyword로 대체하되 review 유지
+            keyword = (row["keyword"] or "").strip()
+            conn.execute("""
+                UPDATE blog_posts
+                SET scraped_title = '(삭제됨)',
+                    clean_title = CASE WHEN ? != '' THEN ? ELSE clean_title END
+                WHERE id = ?
+            """, (keyword, keyword, row["id"]))
+            result["failed"] += 1
+            msg = f"{row['blog_id']}: (삭제됨)"
+        else:
+            result["failed"] += 1
+            msg = f"{row['blog_id']}: (추출 실패)"
+
+        if progress_callback:
+            progress_callback(i + 1, total, msg)
+
+        if (i + 1) % 20 == 0:
+            conn.commit()
+
+        if delay > 0 and i < total - 1:
+            time.sleep(delay)
+
+    conn.commit()
+    conn.close()
+    return result
+
+
 def get_scrape_status() -> dict:
     """현재 스크래핑 대상 건수 조회 (블로그/카페 구분)."""
     conn = sqlite3.connect(DB_PATH)

@@ -71,5 +71,11 @@ export const getScrapeTitlesStatus = () =>
 export const scrapeTitles = (params?: { limit?: number; delay?: number; include_cafe?: boolean }) =>
   api.post('/blog/scrape-titles', params || {})
 
+export const scrapeNicknames = () =>
+  api.post('/blog/scrape-nicknames')
+
+export const fixUrlTitles = () =>
+  api.post('/blog/fix-url-titles')
+
 export const importBlogData = () =>
   api.post('/blog/import-data')

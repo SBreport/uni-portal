@@ -27,6 +27,47 @@ def _conn():
     return conn
 
 
+import re as _re
+
+def _normalize_branch(name: str) -> str:
+    """project_branch 정규화: 핵심 지점명만 추출.
+    '유앤아이 창원 - 추가 운영' → '유앤아이 창원'
+    '하남미사 막글 작업' → '하남미사'
+    '유앤명동 10월' → '유앤명동'
+    '유앤수원 리뉴얼' → '유앤수원'
+    '컴플란트치과 (x)' → '컴플란트치과'
+    '유앤아이 안산ㅓ' → '유앤아이 안산'
+    """
+    name = name.strip()
+    if not name:
+        return name
+    # (x) 종료 표시 제거
+    name = _re.sub(r"\s*\(x\)\s*$", "", name)
+    # " - " 이후 제거 (부가 설명)
+    name = name.split(" - ")[0].strip()
+    # 끝에 붙는 숫자월, 작업 설명 등 제거
+    name = _re.sub(r"\s+\d+월$", "", name)
+    name = _re.sub(r"\s+(막글\s*작업|리뉴얼|추가\s*운영|작업|마감|연장|재계약|신규)$", "", name)
+    # 끝에 붙은 한글 자모 오타 제거 (ㅓ, ㅏ 등 낱자음/낱모음)
+    name = _re.sub(r"[ㄱ-ㅎㅏ-ㅣ]+$", "", name)
+    # 끝에 "점" 제거 (건대점 → 건대) — 같은 지점의 표기 통일
+    name = _re.sub(r"점$", "", name)
+    return name.strip()
+
+
+def _merge_branches(rows) -> list:
+    """정규화된 지점명으로 재그룹핑."""
+    merged: dict[str, int] = {}
+    for r in rows:
+        key = _normalize_branch(r["project_branch"])
+        if not key:
+            continue
+        merged[key] = merged.get(key, 0) + r["cnt"]
+    result = [{"branch_name": k, "cnt": v} for k, v in merged.items()]
+    result.sort(key=lambda x: x["cnt"], reverse=True)
+    return result
+
+
 # ── 게시글 목록 (페이지네이션 + 필터) ──
 @router.get("/posts")
 def list_posts(
@@ -86,8 +127,8 @@ def list_posts(
         conditions.append("(author_main = ? OR author LIKE ?)")
         params.extend([author, f"%{author}%"])
     if branch_name:
-        conditions.append("branch_name = ?")
-        params.append(branch_name)
+        conditions.append("(branch_name = ? OR project_branch = ? OR project_branch LIKE ?)")
+        params.extend([branch_name, branch_name, f"{branch_name}%"])
     if project_month:
         conditions.append("project_month = ?")
         params.append(project_month)
@@ -154,6 +195,7 @@ def filter_options(branch_filter: Optional[str] = None):
 
     bf_where = " AND branch_name LIKE '%유앤%'" if branch_filter == "uandi" else ""
     bf_where_only = " WHERE branch_name LIKE '%유앤%'" if branch_filter == "uandi" else ""
+    bf_pb = " AND project_branch LIKE '%유앤%'" if branch_filter == "uandi" else ""
 
     channels = conn.execute(
         f"SELECT blog_channel, COUNT(*) as cnt FROM blog_posts{bf_where_only} GROUP BY blog_channel ORDER BY cnt DESC"
@@ -171,9 +213,10 @@ def filter_options(branch_filter: Optional[str] = None):
         f"SELECT blog_id, blog_channel, COUNT(*) as cnt FROM blog_posts WHERE blog_id != ''{bf_where} GROUP BY blog_id ORDER BY cnt DESC LIMIT 30"
     ).fetchall()
 
-    branches = conn.execute(
-        f"SELECT branch_name, COUNT(*) as cnt FROM blog_posts WHERE branch_name != ''{bf_where} GROUP BY branch_name ORDER BY cnt DESC"
+    raw_branches = conn.execute(
+        f"SELECT project_branch, COUNT(*) as cnt FROM blog_posts WHERE project_branch != ''{bf_pb} GROUP BY project_branch ORDER BY cnt DESC"
     ).fetchall()
+    branches = _merge_branches(raw_branches)
 
     project_months = conn.execute(
         f"SELECT project_month, COUNT(*) as cnt FROM blog_posts WHERE project_month != ''{bf_where} GROUP BY project_month ORDER BY project_month DESC"
@@ -205,6 +248,7 @@ def blog_dashboard(
 
     bf = " WHERE branch_name LIKE '%유앤%'" if branch_filter == "uandi" else ""
     bf_and = " AND branch_name LIKE '%유앤%'" if branch_filter == "uandi" else ""
+    bf_pb = " AND project_branch LIKE '%유앤%'" if branch_filter == "uandi" else ""
 
     total = conn.execute(f"SELECT COUNT(*) FROM blog_posts{bf}").fetchone()[0]
     by_channel = conn.execute(
@@ -218,15 +262,23 @@ def blog_dashboard(
         f"SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != ''{bf_and} GROUP BY post_type_main ORDER BY cnt DESC"
     ).fetchall()
 
-    by_branch = conn.execute(
-        f"SELECT branch_name, COUNT(*) as cnt FROM blog_posts WHERE branch_name != ''{bf_and} GROUP BY branch_name ORDER BY cnt DESC"
-    ).fetchall()
+    if month:
+        raw_branch = conn.execute(
+            f"SELECT project_branch, COUNT(*) as cnt FROM blog_posts WHERE project_branch != ''{bf_pb} AND project_month = ? GROUP BY project_branch ORDER BY cnt DESC",
+            (month,)
+        ).fetchall()
+    else:
+        raw_branch = conn.execute(
+            f"SELECT project_branch, COUNT(*) as cnt FROM blog_posts WHERE project_branch != ''{bf_pb} GROUP BY project_branch ORDER BY cnt DESC"
+        ).fetchall()
+    # project_branch 정규화: "유앤아이 창원 - 추가 운영" → "유앤아이 창원" 등
+    by_branch = _merge_branches(raw_branch)
 
     monthly = conn.execute(f"""
         SELECT project_month as month, COUNT(*) as cnt
         FROM blog_posts
         WHERE project_month != ''{bf_and}
-        GROUP BY project_month ORDER BY project_month DESC LIMIT 12
+        GROUP BY project_month ORDER BY project_month DESC LIMIT 6
     """).fetchall()
 
     # 주간 발행 추이 (최근 12주)
@@ -235,7 +287,7 @@ def blog_dashboard(
                MIN(published_at) as week_start,
                COUNT(*) as cnt
         FROM blog_posts
-        WHERE published_at != '' AND published_at >= date('now', '-84 days'){bf_and}
+        WHERE published_at != '' AND published_at >= date('now', '-42 days'){bf_and}
         GROUP BY week ORDER BY week DESC
     """).fetchall()
 
@@ -258,11 +310,21 @@ def blog_dashboard(
             (month,)
         ).fetchall()]
 
-    recent = conn.execute(f"""
-        SELECT id, clean_title, keyword, blog_channel, post_type_main, author_main, published_at, status_clean
+    # 이번주 발행글 (최근 7일)
+    this_week = conn.execute(f"""
+        SELECT id, clean_title, keyword, blog_channel, post_type_main, author_main, published_at, branch_name
         FROM blog_posts
-        WHERE published_at != ''{bf_and}
-        ORDER BY published_at DESC LIMIT 10
+        WHERE published_at >= date('now', '-7 days'){bf_and}
+        ORDER BY published_at DESC
+    """).fetchall()
+
+    # 지난주 발행글 (7~14일 전)
+    last_week = conn.execute(f"""
+        SELECT id, clean_title, keyword, blog_channel, post_type_main, author_main, published_at, branch_name
+        FROM blog_posts
+        WHERE published_at >= date('now', '-14 days')
+          AND published_at < date('now', '-7 days'){bf_and}
+        ORDER BY published_at DESC
     """).fetchall()
 
     conn.close()
@@ -275,7 +337,8 @@ def blog_dashboard(
         "monthly": [dict(m) for m in monthly],
         "weekly": [dict(w) for w in weekly],
         "by_author": [dict(a) for a in by_author],
-        "recent": [dict(r) for r in recent],
+        "this_week": [dict(r) for r in this_week],
+        "last_week": [dict(r) for r in last_week],
     }
     if by_type_monthly is not None:
         result["by_type_monthly"] = by_type_monthly
@@ -342,6 +405,7 @@ def list_accounts(
     rows = conn.execute(f"""
         SELECT ba.*,
                COUNT(bp.id) as post_count,
+               SUM(CASE WHEN bp.published_at >= date('now', '-30 days') THEN 1 ELSE 0 END) as recent_count,
                MAX(bp.published_at) as last_published
         FROM blog_accounts ba
         LEFT JOIN blog_posts bp ON bp.blog_id = ba.blog_id
@@ -515,6 +579,30 @@ def scrape_titles(body: ScrapeTitlesRequest, user: dict = Depends(require_role("
         raise HTTPException(500, f"스크래핑 실패: {str(e)}")
 
 
+# ── 계정 닉네임 수집 ──
+@router.post("/scrape-nicknames")
+def scrape_nicknames(user: dict = Depends(require_role("admin"))):
+    """닉네임이 없는 blog_accounts의 닉네임/타이틀을 스크래핑."""
+    from blog.scrape_titles import scrape_account_nicknames
+    try:
+        result = scrape_account_nicknames(delay=0.5)
+        return {"message": f"닉네임 수집 {result['updated']}건 완료", **result}
+    except Exception as e:
+        raise HTTPException(500, f"닉네임 수집 실패: {str(e)}")
+
+
+# ── URL 제목 수정 (needs_review + URL 포함 제목) ──
+@router.post("/fix-url-titles")
+def fix_url_titles_api(user: dict = Depends(require_role("admin"))):
+    """needs_review=1이면서 제목에 URL이 포함된 글의 실제 제목을 스크래핑."""
+    from blog.scrape_titles import fix_url_titles
+    try:
+        result = fix_url_titles(delay=0.3)
+        return {"message": f"URL 제목 수정 {result['fixed']}건 완료", **result}
+    except Exception as e:
+        raise HTTPException(500, f"URL 제목 수정 실패: {str(e)}")
+
+
 # ── 블로그 데이터 임포트 (서버 DB에 로컬 덤프 반영) ──
 @router.post("/import-data")
 def import_blog_data(user: dict = Depends(require_role("admin"))):
@@ -527,3 +615,4 @@ def import_blog_data(user: dict = Depends(require_role("admin"))):
         return {"message": "블로그 데이터 임포트 완료"}
     except Exception as e:
         raise HTTPException(500, f"임포트 실패: {str(e)}")
+

@@ -33,12 +33,39 @@ const filterAuthor = ref('')
 const filterBranch = ref('')
 const filterProjectMonth = ref('')
 const filterNeedsReview = ref<number | null>(null)
-// 기본 날짜: 이번 달 1일 ~ 오늘
+// 기본 날짜: 올해 1월 1일 ~ 오늘
 const now = new Date()
-const defaultDateFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-const defaultDateTo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-const dateFrom = ref(defaultDateFrom)
-const dateTo = ref(defaultDateTo)
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const todayStr = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`
+const yearStartStr = `${now.getFullYear()}-01-01`
+const dateFrom = ref(yearStartStr)
+const dateTo = ref(todayStr)
+
+// 빠른 기간 선택
+type DatePreset = 'year' | 'this_month' | 'last_month' | 'all'
+const activeDatePreset = ref<DatePreset>('year')
+function setDatePreset(preset: DatePreset) {
+  activeDatePreset.value = preset
+  const y = now.getFullYear()
+  const m = now.getMonth() // 0-indexed
+  if (preset === 'year') {
+    dateFrom.value = `${y}-01-01`
+    dateTo.value = todayStr
+  } else if (preset === 'this_month') {
+    dateFrom.value = `${y}-${pad2(m + 1)}-01`
+    dateTo.value = todayStr
+  } else if (preset === 'last_month') {
+    const lm = m === 0 ? 12 : m
+    const ly = m === 0 ? y - 1 : y
+    const lastDay = new Date(ly, lm, 0).getDate()
+    dateFrom.value = `${ly}-${pad2(lm)}-01`
+    dateTo.value = `${ly}-${pad2(lm)}-${pad2(lastDay)}`
+  } else {
+    dateFrom.value = ''
+    dateTo.value = ''
+  }
+  applyFilter()
+}
 
 // 인라인 헤더 필터
 const showHeaderFilters = ref(false)
@@ -93,16 +120,28 @@ function decodeHtml(text: string): string {
 }
 
 // 컬럼 리사이즈
-const columns = ref([
-  { key: 'blog_channel', label: '채널', width: 64, minWidth: 50 },
-  { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
-  { key: 'post_type_main', label: '원고종류', width: 72, minWidth: 50 },
-  { key: 'keyword', label: '키워드', width: 200, minWidth: 120 },
-  { key: 'clean_title', label: '제목', width: 0, minWidth: 120 }, // flex
-  { key: 'author_main', label: '담당', width: 56, minWidth: 44 },
-  { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
-  { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
-])
+const columns = ref(
+  props.mode !== 'all'
+    ? [
+        { key: 'blog_channel', label: '채널', width: 64, minWidth: 50 },
+        { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
+        { key: 'post_type_main', label: '원고종류', width: 72, minWidth: 50 },
+        { key: 'keyword', label: '키워드', width: 200, minWidth: 120 },
+        { key: 'clean_title', label: '제목', width: 0, minWidth: 120 },
+        { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
+        { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
+      ]
+    : [
+        { key: 'blog_channel', label: '채널', width: 64, minWidth: 50 },
+        { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
+        { key: 'post_type_main', label: '원고종류', width: 72, minWidth: 50 },
+        { key: 'keyword', label: '키워드', width: 200, minWidth: 120 },
+        { key: 'clean_title', label: '제목', width: 0, minWidth: 120 },
+        { key: 'author_main', label: '담당', width: 56, minWidth: 44 },
+        { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
+        { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
+      ]
+)
 
 const { startResize } = useColumnResize(columns)
 
@@ -198,8 +237,9 @@ function resetFilter() {
   filterBranch.value = ''
   filterProjectMonth.value = ''
   filterNeedsReview.value = null
-  dateFrom.value = defaultDateFrom
-  dateTo.value = defaultDateTo
+  dateFrom.value = yearStartStr
+  dateTo.value = todayStr
+  activeDatePreset.value = 'year'
   for (const key in headerFilters.value) headerFilters.value[key] = ''
   sortColumn.value = ''
   sortDirection.value = 'asc'
@@ -219,12 +259,13 @@ function onDashboardNavigate(_tab: string, filter?: Record<string, any>) {
   filterChannel.value = filter?.channel || ''
   filterTypeMain.value = filter?.post_type_main || ''
   filterAuthor.value = filter?.author || ''
-  filterBranch.value = filter?.branch_name || ''
+  filterBranch.value = filter?.branch_name || filter?.project_branch || ''
   filterProjectMonth.value = filter?.project_month || ''
   filterNeedsReview.value = filter?.needs_review ?? null
   // 날짜: 전체 조회를 위해 비우기 (대시보드에서 올 때)
   dateFrom.value = ''
   dateTo.value = ''
+  activeDatePreset.value = 'all'
   for (const key in headerFilters.value) headerFilters.value[key] = ''
   sortColumn.value = ''
   sortDirection.value = 'asc'
@@ -249,7 +290,7 @@ watch(activeTab, (tab) => {
 </script>
 
 <template>
-  <div class="p-5 h-full flex flex-col">
+  <div class="p-5 h-[calc(100vh-1rem)] flex flex-col">
     <!-- 헤더 -->
     <div class="flex items-center justify-between mb-4">
       <div>
@@ -277,7 +318,9 @@ watch(activeTab, (tab) => {
     </div>
 
     <!-- 대시보드 탭 -->
-    <BlogDashboard v-if="activeTab === 'dashboard'" :branch-filter="isUandi ? 'uandi' : undefined" @navigate="onDashboardNavigate" />
+    <div v-if="activeTab === 'dashboard'" class="flex-1 overflow-auto min-h-0">
+      <BlogDashboard :branch-filter="isUandi ? 'uandi' : undefined" :hide-author="isUandi" @navigate="onDashboardNavigate" />
+    </div>
 
     <!-- 계정관리 탭 -->
     <BlogAccounts v-if="activeTab === 'accounts'" />
@@ -303,7 +346,7 @@ watch(activeTab, (tab) => {
         </select>
         <select v-model="filterBranch" @change="applyFilter" class="border border-slate-300 rounded px-2 py-1 text-sm">
           <option value="">지점 선택</option>
-          <option v-for="b in filterOptions?.branches?.slice(0, 30)" :key="b.branch_name" :value="b.branch_name">
+          <option v-for="b in filterOptions?.branches" :key="b.branch_name" :value="b.branch_name">
             {{ b.branch_name }} ({{ b.cnt }})
           </option>
         </select>
@@ -313,18 +356,32 @@ watch(activeTab, (tab) => {
             {{ m.project_month }} ({{ m.cnt }})
           </option>
         </select>
-        <select v-model="filterAuthor" @change="applyFilter" class="border border-slate-300 rounded px-2 py-1 text-sm">
+        <select v-if="!isUandi" v-model="filterAuthor" @change="applyFilter" class="border border-slate-300 rounded px-2 py-1 text-sm">
           <option value="">담당자 선택</option>
           <option v-for="a in filterOptions?.authors" :key="a.author" :value="a.author">
             {{ a.author }} ({{ a.cnt }})
           </option>
         </select>
-        <input v-model="dateFrom" type="date" @change="applyFilter"
-               :placeholder="defaultDateFrom"
-               class="border border-slate-300 rounded px-2 py-1 text-sm" />
+        <input v-model="dateFrom" type="date" @change="activeDatePreset = 'year'; applyFilter()"
+               class="border border-slate-300 rounded px-2 py-1 text-sm w-[130px]" />
         <span class="text-slate-400 text-xs">~</span>
-        <input v-model="dateTo" type="date" @change="applyFilter"
-               class="border border-slate-300 rounded px-2 py-1 text-sm" />
+        <input v-model="dateTo" type="date" @change="activeDatePreset = 'year'; applyFilter()"
+               class="border border-slate-300 rounded px-2 py-1 text-sm w-[130px]" />
+        <div class="flex gap-0.5">
+          <button v-for="dp in ([
+            { key: 'year' as DatePreset, label: '올해' },
+            { key: 'this_month' as DatePreset, label: '이번달' },
+            { key: 'last_month' as DatePreset, label: '지난달' },
+            { key: 'all' as DatePreset, label: '전체' },
+          ])" :key="dp.key"
+            @click="setDatePreset(dp.key)"
+            class="px-2 py-1 text-[11px] rounded border transition-colors"
+            :class="activeDatePreset === dp.key
+              ? 'bg-slate-700 text-white border-slate-700'
+              : 'border-slate-300 text-slate-500 hover:bg-slate-100'">
+            {{ dp.label }}
+          </button>
+        </div>
         <label class="flex items-center gap-1 text-xs text-amber-600 cursor-pointer">
           <input type="checkbox"
                  :checked="filterNeedsReview === 1"
@@ -353,12 +410,12 @@ watch(activeTab, (tab) => {
                 <col v-for="col in columns" :key="col.key"
                      :style="col.width ? { width: col.width + 'px' } : {}" />
               </colgroup>
-              <thead class="bg-slate-50 sticky top-0 z-10">
+              <thead class="sticky top-0 z-10" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
                 <!-- 헤더 라벨 (클릭=정렬) + 리사이즈 핸들 -->
                 <tr class="text-left text-xs text-slate-500 border-b">
                   <th v-for="(col, idx) in columns" :key="col.key"
                       @click="toggleSort(col.key)"
-                      class="px-2 py-2 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group">
+                      class="px-2 py-2 bg-slate-50 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group">
                     <span>{{ col.label }}</span>
                     <span v-if="sortColumn === col.key"
                           class="ml-0.5 text-blue-500 text-[9px]">{{ sortIcon(col.key) }}</span>
@@ -369,8 +426,8 @@ watch(activeTab, (tab) => {
                   </th>
                 </tr>
                 <!-- 인라인 헤더 필터 (토글) -->
-                <tr v-if="showHeaderFilters" class="border-b bg-slate-50/80">
-                  <th v-for="col in columns" :key="'f-' + col.key" class="px-1 py-1">
+                <tr v-if="showHeaderFilters" class="border-b">
+                  <th v-for="col in columns" :key="'f-' + col.key" class="px-1 py-1 bg-slate-50">
                     <input v-model="headerFilters[col.key]"
                            :placeholder="col.label"
                            class="w-full border border-slate-200 rounded px-1 py-0.5 text-[10px] text-slate-600
@@ -415,7 +472,7 @@ watch(activeTab, (tab) => {
                         : 'text-slate-400 italic'">
                     {{ decodeHtml(post.clean_title) || post.keyword || '-' }}
                   </td>
-                  <td class="px-2 py-1.5 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
+                  <td v-if="!isUandi" class="px-2 py-1.5 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
                   <td class="px-2 py-1.5 text-slate-400 text-[11px]">{{ post.published_at || '-' }}</td>
                   <td class="px-2 py-1.5 text-[11px]" :class="statusColor(post.status_clean)">
                     {{ post.status_clean || '-' }}
@@ -445,7 +502,7 @@ watch(activeTab, (tab) => {
         </div>
 
         <!-- 우측: 상세 패널 (sticky) -->
-        <div class="w-[420px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto sticky top-0 self-start max-h-[calc(100vh-160px)]">
+        <div class="w-[420px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto">
           <div v-if="!selectedPost" class="flex items-center justify-center h-full text-slate-300 text-sm">
             게시글을 선택하세요
           </div>
@@ -479,54 +536,59 @@ watch(activeTab, (tab) => {
               </h3>
             </div>
 
-            <div class="space-y-1.5 text-xs">
-              <div class="flex justify-between">
-                <span class="text-slate-400">키워드</span>
-                <span class="text-slate-700 font-medium">{{ selectedPost.keyword || '-' }}</span>
-              </div>
-              <div class="flex justify-between" v-if="selectedPost.tags">
+            <div class="grid text-xs gap-y-1" style="grid-template-columns: 56px 1fr;">
+              <span class="text-slate-400">키워드</span>
+              <span class="text-slate-700 font-medium">{{ selectedPost.keyword || '-' }}</span>
+
+              <template v-if="selectedPost.tags">
                 <span class="text-slate-400">태그</span>
                 <span class="text-slate-700">{{ selectedPost.tags }}</span>
-              </div>
-              <div class="flex justify-between">
+              </template>
+
+              <template v-if="!isUandi">
                 <span class="text-slate-400">담당자</span>
                 <span class="text-slate-700">
                   {{ selectedPost.author_main || '-' }}
                   <span v-if="selectedPost.author_sub" class="text-slate-400"> · {{ selectedPost.author_sub }}</span>
                 </span>
-              </div>
-              <div class="flex justify-between" v-if="selectedPost.branch_name">
+              </template>
+
+              <template v-if="selectedPost.branch_name">
                 <span class="text-slate-400">지점</span>
-                <span class="text-slate-700">{{ selectedPost.branch_name }}
+                <span class="text-slate-700">
+                  {{ selectedPost.branch_name }}
                   <span v-if="selectedPost.slot_number" class="text-slate-400">#{{ selectedPost.slot_number }}</span>
                 </span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-400">발행일</span>
-                <span class="text-slate-700">{{ selectedPost.published_at || '-' }}</span>
-              </div>
-              <div class="flex justify-between" v-if="selectedPost.deadline_at">
+              </template>
+
+              <span class="text-slate-400">발행일</span>
+              <span class="text-slate-700">{{ selectedPost.published_at || '-' }}</span>
+
+              <template v-if="selectedPost.deadline_at">
                 <span class="text-slate-400">마감일</span>
                 <span class="text-slate-700">{{ selectedPost.deadline_at }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-slate-400">상태</span>
-                <span :class="statusColor(selectedPost.status_clean)">{{ selectedPost.status_clean || '-' }}</span>
-              </div>
-              <div class="flex justify-between" v-if="selectedPost.blog_id">
+              </template>
+
+              <span class="text-slate-400">상태</span>
+              <span :class="statusColor(selectedPost.status_clean)">{{ selectedPost.status_clean || '-' }}</span>
+
+              <template v-if="selectedPost.blog_id">
                 <span class="text-slate-400">계정</span>
                 <span class="text-slate-700 font-mono text-[11px]">{{ selectedPost.blog_id }}</span>
-              </div>
-              <div class="flex justify-between" v-if="selectedPost.project_month">
+              </template>
+
+              <template v-if="selectedPost.project_month">
                 <span class="text-slate-400">프로젝트</span>
-                <span class="text-slate-700">{{ selectedPost.project_month }}
+                <span class="text-slate-700">
+                  {{ selectedPost.project_month }}
                   <span v-if="selectedPost.project_branch" class="text-slate-400"> · {{ selectedPost.project_branch }}</span>
                 </span>
-              </div>
-              <div class="flex justify-between" v-if="selectedPost.exposure_rank">
+              </template>
+
+              <template v-if="selectedPost.exposure_rank">
                 <span class="text-slate-400">노출순위</span>
                 <span class="text-slate-700">{{ selectedPost.exposure_rank }}</span>
-              </div>
+              </template>
             </div>
 
             <div v-if="selectedPost.published_url" class="pt-2 border-t">

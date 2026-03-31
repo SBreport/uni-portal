@@ -22,31 +22,88 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "equipment.db")
 # 네이버 블로그 title 접미사 제거 패턴
 _NAVER_SUFFIX = re.compile(r"\s*:\s*네이버 블로그$")
 _NAVER_CAFE_SUFFIX = re.compile(r"\s*:\s*네이버 카페$")
+# "xxx님의 블로그" 채널명 패턴 (실제 제목이 아님)
+_BLOG_CHANNEL_NAME = re.compile(r"^[a-zA-Z0-9_]+님의 블로그$")
+
+
+def _fetch_html(url: str, timeout: int = 10) -> Optional[str]:
+    """URL에서 HTML을 가져옴. Content-Type charset을 자동 감지."""
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    })
+    resp = urllib.request.urlopen(req, timeout=timeout)
+    raw = resp.read()
+    # Content-Type 헤더에서 charset 감지
+    content_type = resp.headers.get("Content-Type", "")
+    charset_m = re.search(r"charset=([^\s;]+)", content_type, re.IGNORECASE)
+    charset = charset_m.group(1).strip() if charset_m else "utf-8"
+    try:
+        return raw.decode(charset, errors="replace")
+    except (LookupError, UnicodeDecodeError):
+        return raw.decode("utf-8", errors="replace")
+
+
+def _clean_title(title: str) -> Optional[str]:
+    """제목 정제: 네이버 접미사 제거, 채널명 필터, 빈 값 처리."""
+    title = _NAVER_SUFFIX.sub("", title)
+    title = _NAVER_CAFE_SUFFIX.sub("", title)
+    title = title.strip()
+    if not title or title in ("네이버 블로그", "네이버 카페"):
+        return None
+    # "xxx님의 블로그" 채널명은 실제 제목이 아님
+    if _BLOG_CHANNEL_NAME.match(title):
+        return None
+    return title
+
+
+def _extract_og_title(html: str) -> Optional[str]:
+    """HTML에서 og:title 메타 태그 추출."""
+    m = re.search(r'<meta\s+property=["\']og:title["\']\s+content=["\']([^"\']+)["\']', html)
+    if not m:
+        m = re.search(r'content=["\']([^"\']+)["\']\s+property=["\']og:title["\']', html)
+    return m.group(1).strip() if m else None
 
 
 def extract_title_from_url(url: str, timeout: int = 10) -> Optional[str]:
-    """URL에서 <title> 태그를 추출하여 정제된 제목 반환."""
+    """URL에서 게시글 제목을 추출. 네이버 블로그는 PostView에서 og:title 우선 사용."""
     try:
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        })
-        resp = urllib.request.urlopen(req, timeout=timeout)
-        html = resp.read().decode("utf-8", errors="replace")
+        # 네이버 카페: 로그인 없이 게시글 제목 접근 불가 (SPA + 인증 필요)
+        if "cafe.naver.com" in url:
+            return None
 
+        # 네이버 블로그: PostView iframe URL에서 og:title 추출
+        m_blog = re.match(r"https?://blog\.naver\.com/([^/]+)/(\d+)", url)
+        if m_blog:
+            blog_id, log_no = m_blog.group(1), m_blog.group(2)
+            postview_url = f"https://blog.naver.com/PostView.naver?blogId={blog_id}&logNo={log_no}"
+            html = _fetch_html(postview_url, timeout)
+            if html:
+                og = _extract_og_title(html)
+                if og:
+                    return _clean_title(og)
+                # og:title 없으면 <title> fallback
+                m_t = re.search(r"<title>([^<]+)</title>", html)
+                if m_t:
+                    return _clean_title(m_t.group(1).strip())
+
+        # 일반 URL: <title> 태그 → og:title 순서
+        html = _fetch_html(url, timeout)
+        if not html:
+            return None
+
+        # og:title 우선
+        og = _extract_og_title(html)
+        if og:
+            cleaned = _clean_title(og)
+            if cleaned:
+                return cleaned
+
+        # <title> fallback
         m = re.search(r"<title>([^<]+)</title>", html)
         if not m:
             return None
+        return _clean_title(m.group(1).strip())
 
-        title = m.group(1).strip()
-        # 네이버 접미사 제거
-        title = _NAVER_SUFFIX.sub("", title)
-        title = _NAVER_CAFE_SUFFIX.sub("", title)
-        title = title.strip()
-
-        if not title or title in ("네이버 블로그", "네이버 카페"):
-            return None
-
-        return title
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return "(삭제됨)"
@@ -99,6 +156,24 @@ def scrape_missing_titles(
         url = row["published_url"].strip()
         if not url:
             result["skipped"] += 1
+            continue
+
+        # 카페 URL은 스크래핑 불가 → keyword를 대체 제목으로 사용
+        is_cafe = "cafe.naver.com" in url
+        if is_cafe:
+            keyword = (row["keyword"] or "").strip()
+            scraped_val = "(카페-수집불가)"
+            clean_val = keyword if keyword else ""
+            conn.execute(
+                "UPDATE blog_posts SET scraped_title = ?, clean_title = ?, needs_review = ? WHERE id = ?",
+                (scraped_val, clean_val, 0 if clean_val else 1, row["id"]),
+            )
+            result["skipped"] += 1
+            # 카페는 HTTP 요청하지 않으므로 delay 불필요
+            if progress_callback and (i + 1) % 10 == 0:
+                progress_callback(i + 1, total, clean_val or scraped_val)
+            if (i + 1) % 100 == 0:
+                conn.commit()
             continue
 
         title = extract_title_from_url(url)

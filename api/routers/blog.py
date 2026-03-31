@@ -388,6 +388,7 @@ def blog_stats():
 def list_accounts(
     channel: Optional[str] = None,
     search: Optional[str] = None,
+    branch_filter: Optional[str] = None,
 ):
     conn = _conn()
     conditions = []
@@ -400,6 +401,13 @@ def list_accounts(
         conditions.append("(ba.blog_id LIKE ? OR ba.account_name LIKE ? OR ba.blog_nickname LIKE ? OR ba.blog_title LIKE ?)")
         params.extend([f"%{search}%"] * 4)
 
+    # uandi 모드: 유앤아이 관련 게시글이 있는 계정만 표시
+    bp_join = "bp.blog_id = ba.blog_id"
+    having = ""
+    if branch_filter == "uandi":
+        bp_join += " AND bp.branch_name LIKE '%유앤%'"
+        having = "HAVING COUNT(bp.id) > 0"
+
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
     rows = conn.execute(f"""
@@ -408,9 +416,10 @@ def list_accounts(
                SUM(CASE WHEN bp.published_at >= date('now', '-30 days') THEN 1 ELSE 0 END) as recent_count,
                MAX(bp.published_at) as last_published
         FROM blog_accounts ba
-        LEFT JOIN blog_posts bp ON bp.blog_id = ba.blog_id
+        LEFT JOIN blog_posts bp ON {bp_join}
         {where}
         GROUP BY ba.id
+        {having}
         ORDER BY post_count DESC
     """, params).fetchall()
 

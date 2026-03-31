@@ -160,12 +160,14 @@ def scrape_missing_titles(
             result["skipped"] += 1
             continue
 
-        # 카페 URL은 스크래핑 불가 → keyword를 대체 제목으로 사용
+        # 카페 URL은 스크래핑 불가 → 카페명(cafe_id)을 대체 제목으로 사용
         is_cafe = "cafe.naver.com" in url
         if is_cafe:
-            keyword = (row["keyword"] or "").strip()
+            # URL에서 카페명 추출: cafe.naver.com/{cafe_id}/{번호}
+            cafe_m = re.match(r"https?://cafe\.naver\.com/([^/?\s]+)", url)
+            cafe_name = cafe_m.group(1) if cafe_m else ""
             scraped_val = "(카페-수집불가)"
-            clean_val = keyword if keyword else ""
+            clean_val = cafe_name if cafe_name else (row["keyword"] or "").strip()
             conn.execute(
                 "UPDATE blog_posts SET scraped_title = ?, clean_title = ?, needs_review = ? WHERE id = ?",
                 (scraped_val, clean_val, 0 if clean_val else 1, row["id"]),

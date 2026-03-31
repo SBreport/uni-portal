@@ -4,6 +4,10 @@ import * as blogApi from '@/api/blog'
 import { channelLabel, channelColor } from '@/utils/blogFormatters'
 import { useColumnResize } from '@/composables/useResizePanel'
 
+const props = defineProps<{
+  branchFilter?: string
+}>()
+
 const accounts = ref<any[]>([])
 const loading = ref(false)
 const search = ref('')
@@ -117,6 +121,7 @@ async function loadAccounts() {
     const params: any = {}
     if (channelFilter.value) params.channel = channelFilter.value
     if (search.value) params.search = search.value
+    if (props.branchFilter) params.branch_filter = props.branchFilter
     const { data } = await blogApi.getBlogAccounts(params)
     accounts.value = data.items
   } catch (e) {

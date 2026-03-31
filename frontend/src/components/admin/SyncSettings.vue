@@ -256,16 +256,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-2.5">
+  <div class="max-w-3xl space-y-2.5">
     <!-- 전역 알림 -->
     <div v-if="syncMsg" class="px-3 py-2 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700">{{ syncMsg }}</div>
     <div v-if="syncError" class="px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{{ syncError }}</div>
 
     <!-- ═══ E 보유장비 ═══ -->
     <div class="space-y-1.5">
-      <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">E 보유장비</div>
-
-      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 flex items-center gap-3 max-w-2xl hover:border-slate-300 transition-colors">
+    <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">E 보유장비</div>
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
         <span class="w-1 self-stretch rounded-full bg-blue-400 flex-shrink-0"></span>
         <div>
           <div class="text-sm font-semibold text-slate-700">보유장비 시트 동기화</div>
@@ -278,240 +278,218 @@ onMounted(() => {
       </div>
     </div>
 
+    </div>
+
     <!-- ═══ V 이벤트 ═══ -->
     <div class="space-y-1.5">
-      <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">V 이벤트</div>
-
-      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 max-w-2xl hover:border-slate-300 transition-colors">
-        <div class="flex items-center gap-3">
-          <span class="w-1 self-stretch rounded-full bg-violet-400 flex-shrink-0"></span>
-          <div>
-            <div class="text-sm font-semibold text-slate-700">유앤아이 지점별 이벤트 시트 갱신</div>
-            <div class="text-xs text-slate-400">최신 업데이트 정보 : {{ evtYear }}년 {{ evtStartMonth }}~{{ evtEndMonth }}월 이벤트 데이터</div>
-          </div>
-          <div class="ml-auto flex items-center gap-2 text-xs">
-            <label class="flex items-center gap-1"><input type="radio" v-model="evtSyncMethod" value="url" class="w-3 h-3" /> 링크</label>
-            <label class="flex items-center gap-1"><input type="radio" v-model="evtSyncMethod" value="file" class="w-3 h-3" /> 파일</label>
-            <button @click="syncEvents" :disabled="syncing"
-              class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
-              {{ syncing ? '수집 중...' : '수집' }}
-            </button>
-          </div>
+    <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">V 이벤트</div>
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="w-1 self-stretch rounded-full bg-violet-400 flex-shrink-0"></span>
+        <div>
+          <div class="text-sm font-semibold text-slate-700">유앤아이 지점별 이벤트 시트 갱신</div>
+          <div class="text-xs text-slate-400">{{ evtYear }}년 {{ evtStartMonth }}~{{ evtEndMonth }}월 이벤트 데이터</div>
         </div>
-        <div class="mt-2 ml-4">
-          <input v-if="evtSyncMethod === 'url'" v-model="evtSheetUrl" placeholder="Google Sheets URL"
-            class="w-full px-2.5 py-1.5 border border-slate-300 rounded text-sm focus:border-blue-400 focus:outline-none" />
-          <input v-else type="file" accept=".xlsx,.xls" @change="onEvtFileChange"
-            class="w-full text-sm text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:bg-slate-100 file:text-xs" />
+        <div class="ml-auto flex items-center gap-2 text-xs">
+          <label class="flex items-center gap-1"><input type="radio" v-model="evtSyncMethod" value="url" class="w-3 h-3" /> 링크</label>
+          <label class="flex items-center gap-1"><input type="radio" v-model="evtSyncMethod" value="file" class="w-3 h-3" /> 파일</label>
+          <button @click="syncEvents" :disabled="syncing"
+            class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+            {{ syncing ? '수집 중...' : '수집' }}
+          </button>
         </div>
       </div>
+      <div class="mt-2 ml-4">
+        <input v-if="evtSyncMethod === 'url'" v-model="evtSheetUrl" placeholder="Google Sheets URL"
+          class="w-full px-2.5 py-1.5 border border-slate-300 rounded text-sm focus:border-blue-400 focus:outline-none" />
+        <input v-else type="file" accept=".xlsx,.xls" @change="onEvtFileChange"
+          class="w-full text-sm text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:bg-slate-100 file:text-xs" />
+      </div>
+    </div>
+
     </div>
 
     <!-- ═══ T 시술정보 ═══ -->
     <div class="space-y-1.5">
-      <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">T 시술정보</div>
-
-      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 max-w-2xl hover:border-slate-300 transition-colors">
-        <div class="flex items-center gap-3">
-          <span class="w-1 self-stretch rounded-full bg-teal-400 flex-shrink-0"></span>
-          <div>
-            <div class="text-sm font-semibold text-slate-700">시술사전 · 논문 DB 동기화</div>
-            <div class="text-xs text-slate-400">로컬 DB 파일을 서버에 업로드하거나 다운로드합니다</div>
-          </div>
-          <div class="ml-auto flex gap-2">
-            <label class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded cursor-pointer hover:bg-blue-700"
-              :class="{ 'opacity-50 pointer-events-none': dbUploading }">
-              {{ dbUploading ? '업로드 중...' : 'DB 업로드' }}
-              <input type="file" accept=".db" class="hidden" @change="uploadDb" :disabled="dbUploading" />
-            </label>
-            <button @click="downloadDb" class="px-3 py-1.5 bg-slate-500 text-white text-xs rounded hover:bg-slate-600">
-              DB 다운로드
-            </button>
-          </div>
+    <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">T 시술정보</div>
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="w-1 self-stretch rounded-full bg-teal-400 flex-shrink-0"></span>
+        <div>
+          <div class="text-sm font-semibold text-slate-700">시술사전 · 논문 DB 동기화</div>
+          <div class="text-xs text-slate-400">로컬 DB 파일을 서버에 업로드하거나 다운로드합니다</div>
         </div>
-        <div v-if="dbMsg" class="mt-2 ml-4 px-2 py-1 rounded text-xs inline-block"
-          :class="dbMsg.startsWith('오류') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'">
-          {{ dbMsg }}
+        <div class="ml-auto flex gap-2">
+          <label class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded cursor-pointer hover:bg-blue-700"
+            :class="{ 'opacity-50 pointer-events-none': dbUploading }">
+            {{ dbUploading ? '업로드 중...' : 'DB 업로드' }}
+            <input type="file" accept=".db" class="hidden" @change="uploadDb" :disabled="dbUploading" />
+          </label>
+          <button @click="downloadDb" class="px-3 py-1.5 bg-slate-500 text-white text-xs rounded hover:bg-slate-600">DB 다운로드</button>
         </div>
       </div>
+      <div v-if="dbMsg" class="mt-2 ml-4 px-2 py-1 rounded text-xs inline-block"
+        :class="dbMsg.startsWith('오류') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'">{{ dbMsg }}</div>
+    </div>
+
     </div>
 
     <!-- ═══ C 카페 ═══ -->
     <div class="space-y-1.5">
-      <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">C 카페</div>
-
-      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 max-w-2xl hover:border-slate-300 transition-colors">
-        <div class="flex items-center gap-3">
-          <span class="w-1 self-stretch rounded-full bg-orange-400 flex-shrink-0"></span>
-          <div>
-            <div class="text-sm font-semibold text-slate-700">유앤아이 카페 원고 불러오기</div>
-            <div class="text-xs text-slate-400">최신 업데이트 정보 : {{ now.getMonth() + 1 }}월 원고</div>
-          </div>
-          <div class="ml-auto flex items-center gap-2">
-            <select v-model="cafeBranch" class="px-2 py-1 border border-slate-300 rounded text-xs">
-              <option value="">전체 지점</option>
-              <option v-for="b in props.branches" :key="b.id" :value="b.name">{{ b.name }}</option>
-            </select>
-            <button @click="syncCafe" :disabled="syncing"
-              class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
-              {{ syncing ? '가져오는 중...' : '가져오기' }}
-            </button>
-          </div>
+    <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">C 카페</div>
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="w-1 self-stretch rounded-full bg-orange-400 flex-shrink-0"></span>
+        <div>
+          <div class="text-sm font-semibold text-slate-700">유앤아이 카페 원고 불러오기</div>
+          <div class="text-xs text-slate-400">{{ now.getMonth() + 1 }}월 원고</div>
         </div>
-        <div class="mt-2 ml-4">
-          <input v-model="cafeSheetUrl" placeholder="Google Sheets URL"
-            class="w-full px-2.5 py-1.5 border border-slate-300 rounded text-sm focus:border-blue-400 focus:outline-none" />
+        <div class="ml-auto flex items-center gap-2">
+          <select v-model="cafeBranch" class="px-2 py-1 border border-slate-300 rounded text-xs">
+            <option value="">전체 지점</option>
+            <option v-for="b in props.branches" :key="b.id" :value="b.name">{{ b.name }}</option>
+          </select>
+          <button @click="syncCafe" :disabled="syncing"
+            class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+            {{ syncing ? '가져오는 중...' : '가져오기' }}
+          </button>
         </div>
       </div>
+      <div class="mt-2 ml-4">
+        <input v-model="cafeSheetUrl" placeholder="Google Sheets URL"
+          class="w-full px-2.5 py-1.5 border border-slate-300 rounded text-sm focus:border-blue-400 focus:outline-none" />
+      </div>
+    </div>
+
     </div>
 
     <!-- ═══ B 블로그 ═══ -->
     <div class="space-y-1.5">
-      <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">B 블로그</div>
-
-      <!-- Notion 동기화 -->
-      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 max-w-2xl hover:border-slate-300 transition-colors">
-        <div class="flex items-center gap-3">
-          <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
-          <div>
-            <div class="text-sm font-semibold text-slate-700">블로그 Notion 동기화</div>
-            <div class="text-xs text-slate-400">
-              <template v-if="notionSyncStatus">
-                최신 업데이트 정보 : {{ notionSyncStatus.synced_at?.slice(0, 16) }} · {{ notionSyncStatus.notion_pages?.toLocaleString() }}건
-              </template>
-              <template v-else-if="notionTokenStatus?.saved">동기화 기록 없음</template>
-              <template v-else>토큰 미등록 — 아래에서 토큰을 저장해주세요</template>
-            </div>
-          </div>
-          <div class="ml-auto flex items-center gap-2">
-            <button v-if="notionTokenStatus?.saved" @click="showNotionTokenInput = !showNotionTokenInput"
-              class="px-2 py-1 text-slate-400 hover:text-slate-600 text-xs" title="토큰 변경">
-              {{ showNotionTokenInput ? '닫기' : '토큰 변경' }}
-            </button>
-            <button @click="syncNotion" :disabled="notionSyncing || (!notionTokenStatus?.saved && !notionToken.trim())"
-              class="px-4 py-1.5 bg-slate-700 text-white text-xs rounded hover:bg-slate-800 disabled:opacity-40 whitespace-nowrap">
-              {{ notionSyncing ? '동기화 중...' : '증분 동기화' }}
-            </button>
+    <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">B 블로그</div>
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
+        <div>
+          <div class="text-sm font-semibold text-slate-700">블로그 Notion 동기화</div>
+          <div class="text-xs text-slate-400">
+            <template v-if="notionSyncStatus">{{ notionSyncStatus.synced_at?.slice(0, 16) }} · {{ notionSyncStatus.notion_pages?.toLocaleString() }}건</template>
+            <template v-else-if="notionTokenStatus?.saved">동기화 기록 없음</template>
+            <template v-else>토큰 미등록 — 아래에서 토큰을 저장해주세요</template>
           </div>
         </div>
-        <!-- 토큰 미등록 또는 토큰 변경 클릭 시에만 입력 표시 -->
-        <div v-if="!notionTokenStatus?.saved || showNotionTokenInput" class="mt-2 ml-4">
-          <div class="flex items-center gap-2">
-            <input v-model="notionToken" type="password" placeholder="Notion 토큰 (ntn_...)"
-              class="flex-1 border border-slate-300 rounded px-2.5 py-1.5 text-sm focus:border-blue-400 focus:outline-none" />
-            <button v-if="notionToken.trim()" @click="saveNotionToken" :disabled="notionTokenSaving"
-              class="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 disabled:opacity-40 whitespace-nowrap">
-              {{ notionTokenSaving ? '저장 중...' : '토큰 저장' }}
-            </button>
-          </div>
-          <p class="text-xs text-slate-400 mt-1">
-            <a href="https://www.notion.so/profile/integrations" target="_blank" class="text-blue-500 hover:underline">Notion 내 통합 관리</a>에서
-            Internal Integration 생성 후 토큰(ntn_...)을 복사하세요.
-            대상 DB 페이지에서 연결(Connect)도 필요합니다.
-          </p>
-        </div>
-        <div v-if="notionSyncResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
-          :class="notionSyncResult.updated != null ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">
-          {{ notionSyncResult.message }}
-        </div>
-      </div>
-
-      <!-- 블로그 원고 제목 수집 -->
-      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 max-w-2xl hover:border-slate-300 transition-colors">
-        <div class="flex items-center gap-3">
-          <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
-          <div>
-            <div class="text-sm font-semibold text-slate-700">블로그 원고 제목 수집</div>
-            <div v-if="scrapeStatus" class="text-xs text-slate-400">
-              수집 {{ scrapeStatus.already_scraped?.toLocaleString() }}건
-              <template v-if="scrapeStatus.remaining > 0">
-                / 남은 블로그 <span class="text-amber-600 font-medium">{{ scrapeStatus.remaining_blog?.toLocaleString() }}건</span>
-                <template v-if="scrapeStatus.remaining_cafe > 0"> · 카페 {{ scrapeStatus.remaining_cafe?.toLocaleString() }}건</template>
-              </template>
-            </div>
-          </div>
-          <div class="ml-auto flex gap-2">
-            <button @click="runScrape(false)" :disabled="scraping || !scrapeStatus?.remaining_blog"
-              class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40 whitespace-nowrap">
-              {{ scraping ? '수집 중...' : '블로그만' }}
-            </button>
-            <button @click="runScrape(true)" :disabled="scraping || !scrapeStatus?.remaining"
-              class="px-3 py-1.5 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap">
-              {{ scraping ? '수집 중...' : '카페 포함' }}
-            </button>
-          </div>
-        </div>
-        <div v-if="scrapeResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
-          :class="scrapeResult.scraped != null ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">
-          {{ scrapeResult.message }}
-          <span v-if="scrapeResult.scraped != null" class="text-slate-500 ml-1">
-            ({{ scrapeResult.scraped }}수집 / {{ scrapeResult.failed }}실패 / {{ scrapeResult.deleted }}삭제)
-          </span>
-        </div>
-      </div>
-
-      <!-- 블로그 데이터 임포트 (로컬→서버) -->
-      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 max-w-2xl hover:border-slate-300 transition-colors">
-        <div class="flex items-center gap-3">
-          <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
-          <div>
-            <div class="text-sm font-semibold text-slate-700">블로그 데이터 임포트</div>
-            <div class="text-xs text-slate-400">로컬에서 수집한 블로그 데이터를 서버 DB에 반영합니다</div>
-          </div>
-          <button @click="importBlogData" :disabled="importing"
-            class="ml-auto px-4 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:opacity-40 whitespace-nowrap">
-            {{ importing ? '임포트 중...' : '데이터 임포트' }}
+        <div class="ml-auto flex items-center gap-2">
+          <button v-if="notionTokenStatus?.saved" @click="showNotionTokenInput = !showNotionTokenInput"
+            class="px-2 py-1 text-slate-400 hover:text-slate-600 text-xs">{{ showNotionTokenInput ? '닫기' : '토큰 변경' }}</button>
+          <button @click="syncNotion" :disabled="notionSyncing || (!notionTokenStatus?.saved && !notionToken.trim())"
+            class="px-4 py-1.5 bg-slate-700 text-white text-xs rounded hover:bg-slate-800 disabled:opacity-40 whitespace-nowrap">
+            {{ notionSyncing ? '동기화 중...' : '증분 동기화' }}
           </button>
         </div>
-        <div v-if="importResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
-          :class="importResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">
-          {{ importResult.message }}
-        </div>
       </div>
+      <div v-if="!notionTokenStatus?.saved || showNotionTokenInput" class="mt-2 ml-4">
+        <div class="flex items-center gap-2">
+          <input v-model="notionToken" type="password" placeholder="Notion 토큰 (ntn_...)"
+            class="flex-1 border border-slate-300 rounded px-2.5 py-1.5 text-sm focus:border-blue-400 focus:outline-none" />
+          <button v-if="notionToken.trim()" @click="saveNotionToken" :disabled="notionTokenSaving"
+            class="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 disabled:opacity-40 whitespace-nowrap">
+            {{ notionTokenSaving ? '저장 중...' : '토큰 저장' }}
+          </button>
+        </div>
+        <p class="text-xs text-slate-400 mt-1">
+          <a href="https://www.notion.so/profile/integrations" target="_blank" class="text-blue-500 hover:underline">Notion 내 통합 관리</a>에서
+          Internal Integration 생성 후 토큰(ntn_...)을 복사하세요. 대상 DB 페이지에서 연결(Connect)도 필요합니다.
+        </p>
+      </div>
+      <div v-if="notionSyncResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
+        :class="notionSyncResult.updated != null ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">{{ notionSyncResult.message }}</div>
+    </div>
 
-      <!-- 블로그 CSV 업로드 -->
-      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 max-w-2xl hover:border-slate-300 transition-colors">
-        <div class="flex items-center gap-3">
-          <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
-          <div>
-            <div class="text-sm font-semibold text-slate-700">블로그 게시글 CSV 업로드</div>
-            <div class="text-xs text-slate-400">노션에서 내보낸 CSV 파일 · 중복 항목은 자동 건너뜀</div>
+    <!-- B 블로그 원고 제목 수집 -->
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
+        <div>
+          <div class="text-sm font-semibold text-slate-700">블로그 원고 제목 수집</div>
+          <div v-if="scrapeStatus" class="text-xs text-slate-400">
+            수집 {{ scrapeStatus.already_scraped?.toLocaleString() }}건
+            <template v-if="scrapeStatus.remaining > 0">
+              / 남은 블로그 <span class="text-amber-600 font-medium">{{ scrapeStatus.remaining_blog?.toLocaleString() }}건</span>
+              <template v-if="scrapeStatus.remaining_cafe > 0"> · 카페 {{ scrapeStatus.remaining_cafe?.toLocaleString() }}건</template>
+            </template>
           </div>
-          <label class="ml-auto px-4 py-1.5 bg-blue-600 text-white text-xs rounded cursor-pointer hover:bg-blue-700 whitespace-nowrap"
-            :class="{ 'opacity-50 pointer-events-none': blogCsvUploading }">
-            {{ blogCsvUploading ? '업로드 중...' : 'CSV 파일 선택' }}
-            <input type="file" accept=".csv" class="hidden" @change="uploadBlogCsv" :disabled="blogCsvUploading" />
-          </label>
         </div>
-        <div v-if="blogCsvMsg" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block whitespace-pre-line"
-          :class="blogCsvMsg.startsWith('오류') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'">
-          {{ blogCsvMsg }}
+        <div class="ml-auto flex gap-2">
+          <button @click="runScrape(false)" :disabled="scraping || !scrapeStatus?.remaining_blog"
+            class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40 whitespace-nowrap">
+            {{ scraping ? '수집 중...' : '블로그만' }}
+          </button>
+          <button @click="runScrape(true)" :disabled="scraping || !scrapeStatus?.remaining"
+            class="px-3 py-1.5 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap">카페 포함</button>
         </div>
       </div>
+      <div v-if="scrapeResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
+        :class="scrapeResult.scraped != null ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">
+        {{ scrapeResult.message }}
+        <span v-if="scrapeResult.scraped != null" class="text-slate-500 ml-1">({{ scrapeResult.scraped }}수집 / {{ scrapeResult.failed }}실패 / {{ scrapeResult.deleted }}삭제)</span>
+      </div>
+    </div>
+
+    <!-- B 블로그 데이터 임포트 -->
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
+        <div>
+          <div class="text-sm font-semibold text-slate-700">블로그 데이터 임포트</div>
+          <div class="text-xs text-slate-400">로컬에서 수집한 블로그 데이터를 서버 DB에 반영합니다</div>
+        </div>
+        <button @click="importBlogData" :disabled="importing"
+          class="ml-auto px-4 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:opacity-40 whitespace-nowrap">
+          {{ importing ? '임포트 중...' : '데이터 임포트' }}
+        </button>
+      </div>
+      <div v-if="importResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
+        :class="importResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">{{ importResult.message }}</div>
+    </div>
+
+    <!-- B 블로그 CSV 업로드 -->
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
+        <div>
+          <div class="text-sm font-semibold text-slate-700">블로그 게시글 CSV 업로드</div>
+          <div class="text-xs text-slate-400">노션에서 내보낸 CSV 파일 · 중복 항목은 자동 건너뜀</div>
+        </div>
+        <label class="ml-auto px-4 py-1.5 bg-blue-600 text-white text-xs rounded cursor-pointer hover:bg-blue-700 whitespace-nowrap"
+          :class="{ 'opacity-50 pointer-events-none': blogCsvUploading }">
+          {{ blogCsvUploading ? '업로드 중...' : 'CSV 파일 선택' }}
+          <input type="file" accept=".csv" class="hidden" @change="uploadBlogCsv" :disabled="blogCsvUploading" />
+        </label>
+      </div>
+      <div v-if="blogCsvMsg" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block whitespace-pre-line"
+        :class="blogCsvMsg.startsWith('오류') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'">{{ blogCsvMsg }}</div>
+    </div>
+
     </div>
 
     <!-- ═══ 공통 설정 ═══ -->
     <div class="space-y-1.5">
-      <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">공통 설정</div>
-
-      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 max-w-2xl hover:border-slate-300 transition-colors">
-        <div class="flex items-center gap-3">
-          <span class="w-1 self-stretch rounded-full bg-amber-400 flex-shrink-0"></span>
-          <div>
-            <div class="text-sm font-semibold text-slate-700">Google 서비스 인증 파일</div>
-            <div class="text-xs text-slate-400">보유장비 · 이벤트 · 카페 시트 동기화에 필요 (최초 1회)</div>
-          </div>
-          <label class="ml-auto px-4 py-1.5 bg-amber-600 text-white text-xs rounded cursor-pointer hover:bg-amber-700 whitespace-nowrap"
-            :class="{ 'opacity-50 pointer-events-none': credUploading }">
-            {{ credUploading ? '업로드 중...' : 'credentials.json 업로드' }}
-            <input type="file" accept=".json" class="hidden" @change="uploadCred" :disabled="credUploading" />
-          </label>
+    <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">공통 설정</div>
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="w-1 self-stretch rounded-full bg-amber-400 flex-shrink-0"></span>
+        <div>
+          <div class="text-sm font-semibold text-slate-700">Google 서비스 인증 파일</div>
+          <div class="text-xs text-slate-400">보유장비 · 이벤트 · 카페 시트 동기화에 필요 (최초 1회)</div>
         </div>
-        <div v-if="credMsg" class="mt-2 ml-4 px-2 py-1 rounded text-xs inline-block"
-          :class="credMsg.startsWith('오류') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'">
-          {{ credMsg }}
-        </div>
+        <label class="ml-auto px-4 py-1.5 bg-amber-600 text-white text-xs rounded cursor-pointer hover:bg-amber-700 whitespace-nowrap"
+          :class="{ 'opacity-50 pointer-events-none': credUploading }">
+          {{ credUploading ? '업로드 중...' : 'credentials.json 업로드' }}
+          <input type="file" accept=".json" class="hidden" @change="uploadCred" :disabled="credUploading" />
+        </label>
       </div>
+      <div v-if="credMsg" class="mt-2 ml-4 px-2 py-1 rounded text-xs inline-block"
+        :class="credMsg.startsWith('오류') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'">{{ credMsg }}</div>
+    </div>
     </div>
 
   </div>

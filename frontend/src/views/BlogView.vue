@@ -323,7 +323,7 @@ watch(activeTab, (tab) => {
     </div>
 
     <!-- 계정관리 탭 -->
-    <BlogAccounts v-if="activeTab === 'accounts'" />
+    <BlogAccounts v-if="activeTab === 'accounts'" :branch-filter="isUandi ? 'uandi' : undefined" />
 
     <!-- ═══════ 목록 탭 ═══════ -->
     <template v-if="activeTab === 'list'">

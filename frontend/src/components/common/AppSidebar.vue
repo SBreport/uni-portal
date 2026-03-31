@@ -20,6 +20,8 @@ interface MenuItem {
   path: string
   label: string
   icon: string
+  color?: string        // 비활성 아이콘 배경색
+  colorActive?: string  // 활성 아이콘 배경색
   adminOnly?: boolean
 }
 
@@ -80,7 +82,7 @@ function handleLogout() {
         ]"
       >
         <span class="w-5 h-5 flex items-center justify-center text-xs font-bold rounded"
-          :class="isActive(item.path) ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'"
+          :class="isActive(item.path) ? (item.colorActive || 'bg-blue-500 text-white') : (item.color || 'bg-slate-100 text-slate-500')"
         >{{ item.icon }}</span>
         {{ item.label }}
       </router-link>
@@ -123,7 +125,7 @@ function handleLogout() {
               ]"
             >
               <span class="w-4 h-4 flex items-center justify-center text-[10px] font-bold rounded"
-                :class="isActive(child.path) ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'"
+                :class="isActive(child.path) ? (child.colorActive || 'bg-blue-500 text-white') : (child.color || 'bg-slate-100 text-slate-400')"
               >{{ child.icon }}</span>
               {{ child.label }}
             </router-link>
@@ -147,7 +149,7 @@ function handleLogout() {
           ]"
         >
           <span class="w-5 h-5 flex items-center justify-center text-xs font-bold rounded"
-            :class="isActive(item.path) ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'"
+            :class="isActive(item.path) ? (item.colorActive || 'bg-blue-500 text-white') : (item.color || 'bg-slate-100 text-slate-500')"
           >{{ item.icon }}</span>
           {{ item.label }}
         </router-link>

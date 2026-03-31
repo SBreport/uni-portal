@@ -93,22 +93,32 @@ onMounted(loadAccounts)
 
     <!-- 테이블 -->
     <div class="flex-1 bg-white border border-slate-200 rounded-lg overflow-auto">
-      <table class="w-full text-sm">
+      <table class="w-full text-sm table-fixed">
+        <colgroup>
+          <col class="w-10" />
+          <col class="w-16" />
+          <col style="width: 140px" />
+          <col style="width: 160px" />
+          <col />
+          <col class="w-16" />
+          <col class="w-24" />
+          <col class="w-14" />
+        </colgroup>
         <thead class="bg-slate-50 sticky top-0">
           <tr class="text-left text-xs text-slate-500 border-b">
-            <th class="px-3 py-2 w-10">
+            <th class="px-3 py-2">
               <input type="checkbox"
                      :checked="allAccountsSelected"
                      @change="toggleAllAccounts"
                      class="rounded border-slate-300" />
             </th>
-            <th class="px-3 py-2 w-14">채널</th>
-            <th class="px-3 py-2 w-36">블로그 ID</th>
+            <th class="px-3 py-2">채널</th>
+            <th class="px-3 py-2">블로그 ID</th>
             <th class="px-3 py-2">닉네임</th>
             <th class="px-3 py-2">블로그 타이틀</th>
-            <th class="px-3 py-2 w-16 text-right">게시글</th>
-            <th class="px-3 py-2 w-24">마지막 발행</th>
-            <th class="px-3 py-2 w-16"></th>
+            <th class="px-3 py-2 text-right">게시글</th>
+            <th class="px-3 py-2">마지막 발행</th>
+            <th class="px-3 py-2"></th>
           </tr>
         </thead>
         <tbody>
@@ -122,14 +132,14 @@ onMounted(loadAccounts)
                      class="rounded border-slate-300" />
             </td>
             <td class="px-3 py-2">
-              <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+              <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
                     :class="channelColor(acc.channel)">
                 {{ channelLabel(acc.channel) }}
               </span>
             </td>
-            <td class="px-3 py-2 font-mono text-[11px] text-slate-600">{{ acc.blog_id }}</td>
-            <td class="px-3 py-2 text-xs text-slate-700 truncate max-w-[160px]">{{ acc.blog_nickname || '-' }}</td>
-            <td class="px-3 py-2 text-xs text-slate-500 truncate max-w-[200px]">{{ acc.blog_title || '-' }}</td>
+            <td class="px-3 py-2 font-mono text-[11px] text-slate-600 truncate">{{ acc.blog_id }}</td>
+            <td class="px-3 py-2 text-xs text-slate-700 truncate">{{ acc.blog_nickname || '-' }}</td>
+            <td class="px-3 py-2 text-xs text-slate-500 truncate">{{ acc.blog_title || '-' }}</td>
             <td class="px-3 py-2 text-right text-xs text-slate-600 font-medium">{{ acc.post_count }}</td>
             <td class="px-3 py-2 text-xs text-slate-400">{{ acc.last_published || '-' }}</td>
             <td class="px-3 py-2 text-right">

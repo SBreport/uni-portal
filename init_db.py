@@ -489,6 +489,12 @@ def init_db():
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_blog_accounts_channel ON blog_accounts(channel)")
 
+    # blog_accounts 컬럼 마이그레이션 (기존 DB에 컬럼이 없는 경우)
+    existing_cols = {row[1] for row in c.execute("PRAGMA table_info(blog_accounts)").fetchall()}
+    for col_name in ["blog_nickname", "blog_title"]:
+        if col_name not in existing_cols:
+            c.execute(f"ALTER TABLE blog_accounts ADD COLUMN {col_name} TEXT DEFAULT ''")
+
     # ── 블로그 CSV 동기화 로그 ──
     c.execute("""
     CREATE TABLE IF NOT EXISTS blog_sync_log (

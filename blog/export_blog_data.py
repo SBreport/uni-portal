@@ -53,33 +53,53 @@ def import_data():
     with gzip.open(DUMP_PATH, "rt", encoding="utf-8") as f:
         dump = json.load(f)
 
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.execute("PRAGMA journal_mode=WAL")
+    import time
 
-    for table, rows in dump.items():
-        if not rows:
-            print(f"  {table}: 0건 (스킵)")
-            continue
+    # DB 잠금 대기: uvicorn이 실행 중이어도 WAL 모드에서 쓰기 가능
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=60)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=60000")
 
-        # 기존 데이터 삭제 후 삽입
-        conn.execute(f"DELETE FROM {table}")
+            for table, rows in dump.items():
+                if not rows:
+                    print(f"  {table}: 0건 (스킵)")
+                    continue
 
-        cols = list(rows[0].keys())
-        placeholders = ", ".join(["?"] * len(cols))
-        col_names = ", ".join(cols)
+                conn.execute(f"DELETE FROM {table}")
 
-        for row in rows:
-            vals = [row.get(c) for c in cols]
-            try:
-                conn.execute(f"INSERT INTO {table} ({col_names}) VALUES ({placeholders})", vals)
-            except Exception:
-                pass  # 스키마 차이 무시
+                cols = list(rows[0].keys())
+                placeholders = ", ".join(["?"] * len(cols))
+                col_names = ", ".join(cols)
 
-        print(f"  {table}: {len(rows)}건 반영")
+                batch = []
+                for row in rows:
+                    batch.append([row.get(c) for c in cols])
 
-    conn.commit()
-    conn.close()
-    print("\n가져오기 완료")
+                conn.executemany(
+                    f"INSERT OR IGNORE INTO {table} ({col_names}) VALUES ({placeholders})",
+                    batch,
+                )
+                print(f"  {table}: {len(rows)}건 반영")
+
+            conn.commit()
+            conn.close()
+            print("\n가져오기 완료")
+            return
+
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e) and attempt < max_retries - 1:
+                wait = (attempt + 1) * 5
+                print(f"  DB 잠금 감지, {wait}초 후 재시도... ({attempt + 1}/{max_retries})")
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                time.sleep(wait)
+            else:
+                raise
 
 
 if __name__ == "__main__":

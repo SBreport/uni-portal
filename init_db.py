@@ -482,6 +482,8 @@ def init_db():
         account_group   TEXT DEFAULT '',
         channel         TEXT DEFAULT '',
         note            TEXT DEFAULT '',
+        blog_nickname   TEXT DEFAULT '',
+        blog_title      TEXT DEFAULT '',
         created_at      TEXT DEFAULT (datetime('now','localtime'))
     )
     """)

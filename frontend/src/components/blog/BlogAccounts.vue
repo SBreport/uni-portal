@@ -103,12 +103,12 @@ onMounted(loadAccounts)
                      class="rounded border-slate-300" />
             </th>
             <th class="px-3 py-2 w-14">채널</th>
-            <th class="px-3 py-2 w-40">블로그 ID</th>
-            <th class="px-3 py-2 w-36">별명</th>
-            <th class="px-3 py-2 w-36">그룹</th>
-            <th class="px-3 py-2 w-20 text-right">게시글</th>
+            <th class="px-3 py-2 w-36">블로그 ID</th>
+            <th class="px-3 py-2">닉네임</th>
+            <th class="px-3 py-2">블로그 타이틀</th>
+            <th class="px-3 py-2 w-16 text-right">게시글</th>
             <th class="px-3 py-2 w-24">마지막 발행</th>
-            <th class="px-3 py-2 w-20"></th>
+            <th class="px-3 py-2 w-16"></th>
           </tr>
         </thead>
         <tbody>
@@ -128,26 +128,8 @@ onMounted(loadAccounts)
               </span>
             </td>
             <td class="px-3 py-2 font-mono text-[11px] text-slate-600">{{ acc.blog_id }}</td>
-            <td class="px-3 py-2">
-              <template v-if="editingAccount === acc.blog_id">
-                <input v-model="editForm.account_name"
-                       class="border border-blue-300 rounded px-1.5 py-0.5 text-xs w-full"
-                       placeholder="별명 입력" />
-              </template>
-              <template v-else>
-                <span class="text-xs text-slate-700">{{ acc.account_name || '-' }}</span>
-              </template>
-            </td>
-            <td class="px-3 py-2">
-              <template v-if="editingAccount === acc.blog_id">
-                <input v-model="editForm.account_group"
-                       class="border border-blue-300 rounded px-1.5 py-0.5 text-xs w-full"
-                       placeholder="그룹 입력" />
-              </template>
-              <template v-else>
-                <span class="text-xs text-slate-500">{{ acc.account_group || '-' }}</span>
-              </template>
-            </td>
+            <td class="px-3 py-2 text-xs text-slate-700 truncate max-w-[160px]">{{ acc.blog_nickname || '-' }}</td>
+            <td class="px-3 py-2 text-xs text-slate-500 truncate max-w-[200px]">{{ acc.blog_title || '-' }}</td>
             <td class="px-3 py-2 text-right text-xs text-slate-600 font-medium">{{ acc.post_count }}</td>
             <td class="px-3 py-2 text-xs text-slate-400">{{ acc.last_published || '-' }}</td>
             <td class="px-3 py-2 text-right">

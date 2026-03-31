@@ -334,8 +334,8 @@ def list_accounts(
         conditions.append("ba.channel = ?")
         params.append(channel)
     if search:
-        conditions.append("(ba.blog_id LIKE ? OR ba.account_name LIKE ? OR ba.account_group LIKE ?)")
-        params.extend([f"%{search}%"] * 3)
+        conditions.append("(ba.blog_id LIKE ? OR ba.account_name LIKE ? OR ba.blog_nickname LIKE ? OR ba.blog_title LIKE ?)")
+        params.extend([f"%{search}%"] * 4)
 
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 

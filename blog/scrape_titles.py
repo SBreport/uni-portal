@@ -10,6 +10,7 @@ scraped_title 컬럼에 저장합니다.
 """
 
 import re
+import html as html_mod
 import time
 import sqlite3
 import os
@@ -44,7 +45,8 @@ def _fetch_html(url: str, timeout: int = 10) -> Optional[str]:
 
 
 def _clean_title(title: str) -> Optional[str]:
-    """제목 정제: 네이버 접미사 제거, 채널명 필터, 빈 값 처리."""
+    """제목 정제: HTML 엔티티 디코딩, 네이버 접미사 제거, 채널명 필터, 빈 값 처리."""
+    title = html_mod.unescape(title)  # &lt; → <, &amp; → &
     title = _NAVER_SUFFIX.sub("", title)
     title = _NAVER_CAFE_SUFFIX.sub("", title)
     title = title.strip()

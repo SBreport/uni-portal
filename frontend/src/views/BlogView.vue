@@ -81,12 +81,23 @@ function sortIcon(colKey: string) {
 const selectedPost = ref<any>(null)
 const detailLoading = ref(false)
 
+// HTML 엔티티 디코딩 (&lt; → <, &gt; → >, &amp; → &)
+function decodeHtml(text: string): string {
+  if (!text) return text
+  return text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+}
+
 // 컬럼 리사이즈
 const columns = ref([
   { key: 'blog_channel', label: '채널', width: 64, minWidth: 50 },
   { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
   { key: 'post_type_main', label: '원고종류', width: 72, minWidth: 50 },
-  { key: 'keyword', label: '키워드', width: 180, minWidth: 100 },
+  { key: 'keyword', label: '키워드', width: 140, minWidth: 80 },
   { key: 'clean_title', label: '제목', width: 0, minWidth: 120 }, // flex
   { key: 'author_main', label: '담당', width: 60, minWidth: 44 },
   { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
@@ -402,7 +413,7 @@ watch(activeTab, (tab) => {
                       :class="(post.title && post.title !== '' && !post.title.startsWith('http'))
                         ? 'text-slate-600'
                         : 'text-slate-400 italic'">
-                    {{ post.clean_title || post.keyword || '-' }}
+                    {{ decodeHtml(post.clean_title) || post.keyword || '-' }}
                   </td>
                   <td class="px-2 py-1.5 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
                   <td class="px-2 py-1.5 text-slate-400 text-[11px]">{{ post.published_at || '-' }}</td>
@@ -420,17 +431,21 @@ watch(activeTab, (tab) => {
           <div class="flex items-center justify-between px-3 py-2 border-t bg-slate-50 text-xs text-slate-500">
             <span>{{ totalCount.toLocaleString() }}건 중 {{ (page - 1) * perPage + 1 }}~{{ Math.min(page * perPage, totalCount) }}</span>
             <div class="flex gap-1">
+              <button @click="page = 1" :disabled="page <= 1"
+                      class="px-1.5 py-1 rounded border hover:bg-white disabled:opacity-30" title="첫 페이지">«</button>
               <button @click="page = Math.max(1, page - 1)" :disabled="page <= 1"
-                      class="px-2 py-1 rounded border hover:bg-white disabled:opacity-30">이전</button>
+                      class="px-2 py-1 rounded border hover:bg-white disabled:opacity-30" title="이전">‹</button>
               <span class="px-2 py-1">{{ page }} / {{ totalPages }}</span>
               <button @click="page = Math.min(totalPages, page + 1)" :disabled="page >= totalPages"
-                      class="px-2 py-1 rounded border hover:bg-white disabled:opacity-30">다음</button>
+                      class="px-2 py-1 rounded border hover:bg-white disabled:opacity-30" title="다음">›</button>
+              <button @click="page = totalPages" :disabled="page >= totalPages"
+                      class="px-1.5 py-1 rounded border hover:bg-white disabled:opacity-30" title="마지막 페이지">»</button>
             </div>
           </div>
         </div>
 
         <!-- 우측: 상세 패널 (sticky) -->
-        <div class="w-[360px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto sticky top-0 self-start max-h-[calc(100vh-160px)]">
+        <div class="w-[420px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto sticky top-0 self-start max-h-[calc(100vh-160px)]">
           <div v-if="!selectedPost" class="flex items-center justify-center h-full text-slate-300 text-sm">
             게시글을 선택하세요
           </div>
@@ -458,7 +473,7 @@ watch(activeTab, (tab) => {
               <h3 class="font-bold text-sm leading-snug"
                   :class="selectedPost.title && !selectedPost.title.startsWith('http')
                     ? 'text-slate-800' : 'text-slate-500'">
-                {{ selectedPost.clean_title || selectedPost.keyword || '(제목 없음)' }}
+                {{ decodeHtml(selectedPost.clean_title) || selectedPost.keyword || '(제목 없음)' }}
                 <span v-if="!selectedPost.title || selectedPost.title.startsWith('http')"
                       class="text-[10px] text-slate-400 font-normal ml-1">(키워드)</span>
               </h3>

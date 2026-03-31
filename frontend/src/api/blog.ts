@@ -70,3 +70,6 @@ export const getScrapeTitlesStatus = () =>
 
 export const scrapeTitles = (params?: { limit?: number; delay?: number; include_cafe?: boolean }) =>
   api.post('/blog/scrape-titles', params || {})
+
+export const importBlogData = () =>
+  api.post('/blog/import-data')

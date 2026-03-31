@@ -146,6 +146,24 @@ async function runScrape(includeCafe: boolean = false) {
   }
 }
 
+// 블로그 데이터 임포트 (로컬 덤프 → 서버 DB)
+const importing = ref(false)
+const importResult = ref<any>(null)
+
+async function importBlogData() {
+  importing.value = true
+  importResult.value = null
+  try {
+    const { data } = await blogApi.importBlogData()
+    importResult.value = { ok: true, message: data.message }
+    loadScrapeStatus()
+  } catch (e: any) {
+    importResult.value = { ok: false, message: e.response?.data?.detail || '임포트 실패' }
+  } finally {
+    importing.value = false
+  }
+}
+
 // 블로그 CSV 업로드
 const blogCsvMsg = ref('')
 const blogCsvUploading = ref(false)
@@ -429,6 +447,25 @@ onMounted(() => {
           <span v-if="scrapeResult.scraped != null" class="text-slate-500 ml-1">
             ({{ scrapeResult.scraped }}수집 / {{ scrapeResult.failed }}실패 / {{ scrapeResult.deleted }}삭제)
           </span>
+        </div>
+      </div>
+
+      <!-- 블로그 데이터 임포트 (로컬→서버) -->
+      <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 max-w-2xl hover:border-slate-300 transition-colors">
+        <div class="flex items-center gap-3">
+          <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
+          <div>
+            <div class="text-sm font-semibold text-slate-700">블로그 데이터 임포트</div>
+            <div class="text-xs text-slate-400">로컬에서 수집한 블로그 데이터를 서버 DB에 반영합니다</div>
+          </div>
+          <button @click="importBlogData" :disabled="importing"
+            class="ml-auto px-4 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:opacity-40 whitespace-nowrap">
+            {{ importing ? '임포트 중...' : '데이터 임포트' }}
+          </button>
+        </div>
+        <div v-if="importResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
+          :class="importResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">
+          {{ importResult.message }}
         </div>
       </div>
 

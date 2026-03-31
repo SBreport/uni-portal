@@ -513,3 +513,17 @@ def scrape_titles(body: ScrapeTitlesRequest, user: dict = Depends(require_role("
         return {"message": f"수집 {result['scraped']}건 완료", **result}
     except Exception as e:
         raise HTTPException(500, f"스크래핑 실패: {str(e)}")
+
+
+# ── 블로그 데이터 임포트 (서버 DB에 로컬 덤프 반영) ──
+@router.post("/import-data")
+def import_blog_data(user: dict = Depends(require_role("admin"))):
+    """blog_data.json.gz를 서버 DB에 임포트."""
+    from blog.export_blog_data import import_data, DUMP_PATH
+    if not os.path.exists(DUMP_PATH):
+        raise HTTPException(404, "blog_data.json.gz 파일이 없습니다")
+    try:
+        import_data()
+        return {"message": "블로그 데이터 임포트 완료"}
+    except Exception as e:
+        raise HTTPException(500, f"임포트 실패: {str(e)}")

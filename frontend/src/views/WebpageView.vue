@@ -20,6 +20,7 @@ interface BranchRanking {
   streak: number
   status: 'active' | 'fail' | '미달' | 'stopped'
   month_exposed_count: number
+  work_days: number
   daily: DailyData[]
 }
 
@@ -68,7 +69,7 @@ function goNext() { if (canNext.value) monthIndex.value-- }
 
 // 검색 + 정렬
 const searchQuery = ref('')
-type SortKey = 'branch' | 'keyword' | 'today_exposed' | 'streak' | 'nosul_count' | 'status' | 'agency'
+type SortKey = 'branch' | 'keyword' | 'today_exposed' | 'streak' | 'month_exposed_count' | 'work_days' | 'nosul_count' | 'status' | 'agency'
 const sortKey = ref<SortKey>('nosul_count')
 const sortAsc = ref(false)
 
@@ -108,6 +109,8 @@ const filteredBranches = computed(() => {
       case 'today_exposed': av = a.today_exposed ? 0 : 1; bv = b.today_exposed ? 0 : 1; break
       case 'streak': av = a.streak; bv = b.streak; break
       case 'nosul_count': av = a.nosul_count; bv = b.nosul_count; break
+      case 'month_exposed_count': av = a.month_exposed_count; bv = b.month_exposed_count; break
+      case 'work_days': av = a.work_days; bv = b.work_days; break
       case 'agency': av = getAgency(a.branch); bv = getAgency(b.branch); break
       case 'status':
         const order: Record<string, number> = { 'active': 0, 'fail': 1, '미달': 2, 'stopped': 3 }
@@ -276,9 +279,9 @@ onMounted(async () => {
 
     <template v-else-if="data">
       <!-- ─── ROW 2: 미노출 지점 태그 + 실행사 카드 ─── -->
-      <div class="flex gap-2 px-5 pb-2 shrink-0">
+      <div class="flex flex-wrap gap-2 px-5 pb-2 shrink-0">
         <!-- 미노출 지점 태그 -->
-        <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 min-w-0" :style="agencyStats.length > 0 ? 'flex: 2 1 0' : 'flex: 1 1 0'">
+        <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 min-w-0" :style="agencyStats.length > 0 ? 'flex: 2 1 300px' : 'flex: 1 1 0'">
           <div class="flex flex-wrap items-center gap-1">
             <span class="text-[11px] text-slate-400 mr-1 shrink-0">미노출</span>
             <span v-for="b in failedBranches" :key="b.branch"
@@ -298,7 +301,7 @@ onMounted(async () => {
         <!-- 실행사 카드 (매핑 완료 시 표시) -->
         <template v-if="!isBranch && agencyStats.length > 0">
           <div v-for="a in agencyStats" :key="a.name"
-            class="bg-white border border-slate-200 rounded-lg px-3 py-2" style="flex: 1 1 0; min-width: 140px">
+            class="bg-white border border-slate-200 rounded-lg px-3 py-2" style="flex: 1 1 140px; min-width: 140px">
             <div class="flex items-baseline justify-between mb-1">
               <span class="text-xs font-bold text-slate-700">{{ a.name }}</span>
               <span class="text-[10px] text-slate-400">{{ a.total }}지점</span>
@@ -316,10 +319,10 @@ onMounted(async () => {
       </div>
 
       <!-- ─── ROW 3: 메인 테이블 + 사이드 막대그래프 ─── -->
-      <div class="flex gap-3 px-5 pb-3 flex-1 min-h-0">
+      <div class="flex flex-wrap gap-3 px-5 pb-3 flex-1 min-h-0">
 
         <!-- 테이블 -->
-        <div class="flex flex-col min-h-0" style="flex: 3 1 0; min-width: 0">
+        <div class="flex flex-col min-h-0" style="flex: 3 1 500px; min-width: 0">
           <div class="bg-white border border-slate-200 rounded-lg overflow-hidden flex-1 min-h-0">
             <div class="h-full overflow-y-auto">
               <table class="w-full text-xs">
@@ -330,6 +333,8 @@ onMounted(async () => {
                     <th @click="toggleSort('today_exposed')" class="th-cell text-center w-[44px]">오늘 <span class="sort-icon">{{ sortIcon('today_exposed') }}</span></th>
                     <th class="th-cell text-center w-[100px]">최근 5일</th>
                     <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
+                    <th @click="toggleSort('month_exposed_count')" class="th-cell text-center w-[36px]">총노출 <span class="sort-icon">{{ sortIcon('month_exposed_count') }}</span></th>
+                    <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]">진행 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
                     <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]">노출 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
                     <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
                     <th v-if="!isBranch && AGENCIES.length > 0" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
@@ -337,7 +342,7 @@ onMounted(async () => {
                 </thead>
                 <tbody>
                   <tr v-if="filteredBranches.length === 0">
-                    <td :colspan="isBranch || AGENCIES.length === 0 ? 7 : 8" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
+                    <td :colspan="isBranch || AGENCIES.length === 0 ? 9 : 10" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
                   <tr v-for="b in filteredBranches" :key="b.branch"
                     class="border-b border-slate-100 hover:bg-blue-50/30 transition-colors">
@@ -356,6 +361,8 @@ onMounted(async () => {
                       </span>
                     </td>
                     <td class="py-[5px] text-center text-slate-500 tabular-nums">{{ b.streak > 0 ? b.streak + '일' : '-' }}</td>
+                    <td class="py-[5px] text-center text-blue-500 tabular-nums">{{ b.month_exposed_count > 0 ? b.month_exposed_count + '일' : '-' }}</td>
+                    <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
                     <td class="py-[5px] text-center font-semibold tabular-nums"
                       :class="b.nosul_count >= 23 ? 'text-red-500' : b.nosul_count >= 15 ? 'text-amber-500' : 'text-slate-600'">
                       {{ b.nosul_count }}
@@ -374,7 +381,7 @@ onMounted(async () => {
         </div>
 
         <!-- 노출일수 막대그래프 -->
-        <div class="flex flex-col min-h-0" style="flex: 2 1 0; min-width: 240px">
+        <div class="flex flex-col min-h-0" style="flex: 2 1 240px; min-width: 240px">
           <div class="bg-white border border-slate-200 rounded-lg p-3 flex-1 min-h-0 flex flex-col">
             <div class="flex items-center justify-between mb-2 shrink-0">
               <h3 class="text-xs font-bold text-slate-600">노출일수 현황</h3>

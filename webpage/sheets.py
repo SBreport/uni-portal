@@ -145,6 +145,9 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
         # 월간 노출 횟수 (오늘까지)
         month_exposed_count = sum(1 for d in daily[:today_index] if d["exposed"] == 1)
 
+        # 작업 진행일 (모니터링 데이터가 있는 일수: ㅇ 또는 x)
+        work_days = sum(1 for d in daily[:today_index] if d["mark"] in ("ㅇ", "x"))
+
         # 연속 노출일 (오늘부터 역방향)
         streak = 0
         for d in reversed(daily[:today_index]):
@@ -169,6 +172,7 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
             "streak": streak,
             "status": status,
             "month_exposed_count": month_exposed_count,
+            "work_days": work_days,
             "daily": daily,
         })
 

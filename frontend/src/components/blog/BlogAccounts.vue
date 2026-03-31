@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import * as blogApi from '@/api/blog'
 import { channelLabel, channelColor } from '@/utils/blogFormatters'
+import { useColumnResize } from '@/composables/useResizePanel'
 
 const accounts = ref<any[]>([])
 const loading = ref(false)
@@ -10,6 +11,67 @@ const channelFilter = ref('')
 const editingAccount = ref<string | null>(null)
 const editForm = ref({ account_name: '', account_group: '' })
 const selectedAccounts = ref<Set<string>>(new Set())
+
+// 정렬
+type SortKey = 'channel' | 'blog_id' | 'blog_nickname' | 'blog_title' | 'post_count' | 'last_published'
+const sortKey = ref<SortKey>('last_published')
+const sortAsc = ref(false)
+
+function toggleSort(key: SortKey) {
+  if (sortKey.value === key) {
+    sortAsc.value = !sortAsc.value
+  } else {
+    sortKey.value = key
+    // 기본 방향: 게시글/발행일은 내림차순, 나머지는 오름차순
+    sortAsc.value = !['post_count', 'last_published'].includes(key)
+  }
+}
+
+function sortIcon(key: SortKey) {
+  if (sortKey.value !== key) return ''
+  return sortAsc.value ? ' \u25B2' : ' \u25BC'
+}
+
+// 컬럼 리사이즈
+const cols = ref([
+  { key: 'check',          label: '',             width: 36,  minWidth: 36 },
+  { key: 'channel',        label: '채널',         width: 56,  minWidth: 50 },
+  { key: 'blog_id',        label: '블로그 ID',    width: 130, minWidth: 80 },
+  { key: 'blog_nickname',  label: '닉네임',       width: 130, minWidth: 60 },
+  { key: 'post_count',     label: '게시글',       width: 56,  minWidth: 44 },
+  { key: 'last_published', label: '최근발행',     width: 88,  minWidth: 60 },
+  { key: 'blog_title',     label: '블로그 타이틀', width: 0,  minWidth: 120 }, // flex
+  { key: 'edit',           label: '',             width: 44,  minWidth: 36 },
+])
+const { startResize } = useColumnResize(cols)
+
+const sortedAccounts = computed(() => {
+  const arr = [...accounts.value]
+  const key = sortKey.value
+  const asc = sortAsc.value
+  arr.sort((a, b) => {
+    let va = a[key] ?? ''
+    let vb = b[key] ?? ''
+    if (key === 'post_count') {
+      va = Number(va) || 0
+      vb = Number(vb) || 0
+    } else {
+      va = String(va).toLowerCase()
+      vb = String(vb).toLowerCase()
+    }
+    if (va < vb) return asc ? -1 : 1
+    if (va > vb) return asc ? 1 : -1
+    // 2차 정렬: 채널 오름차순
+    if (key !== 'channel') {
+      const ca = (a.channel || '').toLowerCase()
+      const cb = (b.channel || '').toLowerCase()
+      if (ca < cb) return -1
+      if (ca > cb) return 1
+    }
+    return 0
+  })
+  return arr
+})
 
 async function loadAccounts() {
   loading.value = true
@@ -74,7 +136,7 @@ onMounted(loadAccounts)
     <!-- 필터 -->
     <div class="bg-white border border-slate-200 rounded-lg p-3 mb-3 flex items-center gap-2">
       <input v-model="search" @keyup.enter="loadAccounts"
-             placeholder="계정 ID / 별명 검색"
+             placeholder="계정 ID / 닉네임 검색"
              class="border border-slate-300 rounded px-2 py-1 text-sm w-56 focus:border-blue-400 focus:outline-none" />
       <button @click="loadAccounts" class="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">검색</button>
       <select v-model="channelFilter" @change="loadAccounts" class="border border-slate-300 rounded px-2 py-1 text-sm">
@@ -93,56 +155,57 @@ onMounted(loadAccounts)
 
     <!-- 테이블 -->
     <div class="flex-1 bg-white border border-slate-200 rounded-lg overflow-auto">
-      <table class="w-full text-sm table-fixed">
+      <table class="text-sm" style="width: 100%; table-layout: fixed;">
         <colgroup>
-          <col class="w-10" />
-          <col class="w-16" />
-          <col style="width: 140px" />
-          <col style="width: 160px" />
-          <col />
-          <col class="w-16" />
-          <col class="w-24" />
-          <col class="w-14" />
+          <col v-for="c in cols" :key="c.key"
+               :style="c.width ? { width: c.width + 'px' } : {}" />
         </colgroup>
-        <thead class="bg-slate-50 sticky top-0">
+        <thead class="bg-slate-50 sticky top-0 z-10">
           <tr class="text-left text-xs text-slate-500 border-b">
-            <th class="px-3 py-2">
+            <!-- 체크박스 -->
+            <th class="px-2 py-2">
               <input type="checkbox"
                      :checked="allAccountsSelected"
                      @change="toggleAllAccounts"
                      class="rounded border-slate-300" />
             </th>
-            <th class="px-3 py-2">채널</th>
-            <th class="px-3 py-2">블로그 ID</th>
-            <th class="px-3 py-2">닉네임</th>
-            <th class="px-3 py-2">블로그 타이틀</th>
-            <th class="px-3 py-2 text-right">게시글</th>
-            <th class="px-3 py-2">마지막 발행</th>
-            <th class="px-3 py-2"></th>
+            <!-- 정렬 가능 헤더 + 리사이즈 핸들 -->
+            <th v-for="(c, idx) in cols.slice(1, -1)" :key="c.key"
+                @click="toggleSort(c.key as SortKey)"
+                class="px-2 py-2 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group"
+                :class="{ 'text-right': c.key === 'post_count' }">
+              <span>{{ c.label }}</span>
+              <span v-if="sortKey === c.key" class="ml-0.5 text-blue-500 text-[9px]">{{ sortIcon(c.key as SortKey) }}</span>
+              <div v-if="c.width > 0"
+                   @mousedown.stop="startResize(idx + 1, $event)"
+                   class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-300 transition-colors" />
+            </th>
+            <!-- 편집 -->
+            <th class="px-2 py-2"></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="acc in accounts" :key="acc.blog_id"
+          <tr v-for="acc in sortedAccounts" :key="acc.blog_id"
               class="border-b border-slate-100 hover:bg-slate-50/50"
               :class="{ 'bg-blue-50/50': selectedAccounts.has(acc.blog_id) }">
-            <td class="px-3 py-2">
+            <td class="px-2 py-1.5">
               <input type="checkbox"
                      :checked="selectedAccounts.has(acc.blog_id)"
                      @change="toggleAccount(acc.blog_id)"
                      class="rounded border-slate-300" />
             </td>
-            <td class="px-3 py-2">
+            <td class="px-2 py-1.5">
               <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
                     :class="channelColor(acc.channel)">
                 {{ channelLabel(acc.channel) }}
               </span>
             </td>
-            <td class="px-3 py-2 font-mono text-[11px] text-slate-600 truncate">{{ acc.blog_id }}</td>
-            <td class="px-3 py-2 text-xs text-slate-700 truncate">{{ acc.blog_nickname || '-' }}</td>
-            <td class="px-3 py-2 text-xs text-slate-500 truncate">{{ acc.blog_title || '-' }}</td>
-            <td class="px-3 py-2 text-right text-xs text-slate-600 font-medium">{{ acc.post_count }}</td>
-            <td class="px-3 py-2 text-xs text-slate-400">{{ acc.last_published || '-' }}</td>
-            <td class="px-3 py-2 text-right">
+            <td class="px-2 py-1.5 font-mono text-[11px] text-slate-600 truncate">{{ acc.blog_id }}</td>
+            <td class="px-2 py-1.5 text-xs text-slate-700 truncate">{{ acc.blog_nickname || '-' }}</td>
+            <td class="px-2 py-1.5 text-right text-xs text-slate-600 font-medium">{{ acc.post_count }}</td>
+            <td class="px-2 py-1.5 text-xs text-slate-400">{{ acc.last_published || '-' }}</td>
+            <td class="px-2 py-1.5 text-xs text-slate-500 truncate">{{ acc.blog_title || '-' }}</td>
+            <td class="px-2 py-1.5 text-right">
               <template v-if="editingAccount === acc.blog_id">
                 <button @click="saveAccount(acc.blog_id)" class="text-[10px] text-blue-600 hover:underline mr-1">저장</button>
                 <button @click="cancelEdit" class="text-[10px] text-slate-400 hover:underline">취소</button>

@@ -97,11 +97,11 @@ const columns = ref([
   { key: 'blog_channel', label: '채널', width: 64, minWidth: 50 },
   { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
   { key: 'post_type_main', label: '원고종류', width: 72, minWidth: 50 },
-  { key: 'keyword', label: '키워드', width: 140, minWidth: 80 },
+  { key: 'keyword', label: '키워드', width: 200, minWidth: 120 },
   { key: 'clean_title', label: '제목', width: 0, minWidth: 120 }, // flex
-  { key: 'author_main', label: '담당', width: 60, minWidth: 44 },
+  { key: 'author_main', label: '담당', width: 56, minWidth: 44 },
   { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
-  { key: 'status_clean', label: '상태', width: 72, minWidth: 50 },
+  { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
 ])
 
 const { startResize } = useColumnResize(columns)

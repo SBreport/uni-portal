@@ -330,8 +330,8 @@ onMounted(async () => {
       <!-- ─── ROW 3: 메인 테이블 + 사이드 막대그래프 ─── -->
       <div class="flex gap-3 px-5 pb-3 flex-1 min-h-0">
 
-        <!-- 테이블 (60% 비율) -->
-        <div class="flex flex-col min-h-0" style="flex: 7 1 0; min-width: 0">
+        <!-- 테이블 (3:2 비율) -->
+        <div class="flex flex-col min-h-0" style="flex: 3 1 0; min-width: 0">
           <div class="bg-white border border-slate-200 rounded-lg overflow-hidden flex-1 min-h-0">
             <div class="h-full overflow-y-auto">
               <table class="w-full text-xs">
@@ -363,7 +363,7 @@ onMounted(async () => {
                         <span v-for="(r, i) in recentRanks(b)" :key="i"
                           class="text-[11px] font-medium tabular-nums"
                           :class="r.rank === null ? 'text-slate-300' : r.rank <= 5 ? 'text-emerald-600' : 'text-red-500'"
-                        >{{ r.rank ?? '-' }}<span v-if="i < recentRanks(b).length - 1" class="text-slate-200 mx-px">/</span></span>
+                        >{{ r.rank ?? '-' }}<span v-if="i < recentRanks(b).length - 1" class="text-slate-200 mx-px">·</span></span>
                       </span>
                     </td>
                     <td class="py-[5px] text-center text-slate-500 tabular-nums">{{ b.streak > 0 ? b.streak + '일' : '-' }}</td>
@@ -384,10 +384,17 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 노출일수 막대그래프 (40% 비율) -->
-        <div class="flex flex-col min-h-0" style="flex: 3 1 0; min-width: 240px">
+        <!-- 노출일수 막대그래프 (2:3 비율) -->
+        <div class="flex flex-col min-h-0" style="flex: 2 1 0; min-width: 240px">
           <div class="bg-white border border-slate-200 rounded-lg p-3 flex-1 min-h-0 flex flex-col">
-            <h3 class="text-xs font-bold text-slate-600 mb-2 shrink-0">노출일수 현황</h3>
+            <div class="flex items-center justify-between mb-2 shrink-0">
+              <h3 class="text-xs font-bold text-slate-600">노출일수 현황</h3>
+              <div class="flex items-center gap-2 text-[10px] text-slate-400">
+                <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-red-400"></span>23+</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-amber-400"></span>15+</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-blue-400"></span>1+</span>
+              </div>
+            </div>
             <div class="flex-1 min-h-0 overflow-y-auto space-y-[3px]">
               <div v-for="b in sortedByNosul" :key="b.branch" class="flex items-center gap-1.5">
                 <span class="w-16 text-[11px] text-right text-slate-500 truncate shrink-0">{{ shortName(b.branch) }}</span>

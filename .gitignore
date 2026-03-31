@@ -57,3 +57,4 @@ frontend/dist/
 
 # API
 api/requirements.txt.bak
+.gstack/

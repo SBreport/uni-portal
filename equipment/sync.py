@@ -135,7 +135,8 @@ def sync_from_sheets():
     print(f"Sheets에서 {len(df)}건 로드 완료")
 
     # 3. DB 연결
-    conn = sqlite3.connect(DB_PATH)
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
     c = conn.cursor()
 
     added = 0

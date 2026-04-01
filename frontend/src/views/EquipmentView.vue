@@ -29,8 +29,12 @@ const detailData = ref<{
 const detailPapers = ref<any[]>([])
 
 onMounted(async () => {
-  await Promise.all([store.loadBranches(), store.loadCategories()])
-  await store.loadEquipment()
+  try {
+    await Promise.all([store.loadBranches(), store.loadCategories()])
+    await store.loadEquipment()
+  } catch (e) {
+    console.error('[EquipmentView] 초기 데이터 로드 실패:', e)
+  }
 })
 
 // 사진 토글

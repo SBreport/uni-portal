@@ -8,9 +8,11 @@ import sqlite3
 import os
 from datetime import datetime
 
+from shared.db import get_conn as _shared_get_conn, BLOG_DB, EQUIPMENT_DB, now_str
+
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-DB_PATH = os.path.join(DB_DIR, "blog.db")
-EQUIPMENT_DB_PATH = os.path.join(DB_DIR, "equipment.db")
+DB_PATH = BLOG_DB
+EQUIPMENT_DB_PATH = EQUIPMENT_DB
 
 
 def _ensure_tables():
@@ -61,10 +63,7 @@ _ensure_tables()
 
 
 def _get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _shared_get_conn(BLOG_DB)
 
 
 # ── CRUD ──
@@ -72,91 +71,105 @@ def _get_conn():
 def get_all_articles(year: int = None, month: int = None,
                      branch_name: str = None, status: str = None) -> list[dict]:
     conn = _get_conn()
-    query = "SELECT * FROM blog_articles WHERE 1=1"
-    params = []
-    if year:
-        query += " AND year = ?"
-        params.append(year)
-    if month:
-        query += " AND month = ?"
-        params.append(month)
-    if branch_name:
-        query += " AND branch_name = ?"
-        params.append(branch_name)
-    if status:
-        query += " AND status = ?"
-        params.append(status)
-    query += " ORDER BY year DESC, month DESC, id DESC"
-    rows = [dict(r) for r in conn.execute(query, params).fetchall()]
-    conn.close()
-    return rows
+    try:
+        query = "SELECT * FROM blog_articles WHERE 1=1"
+        params = []
+        if year:
+            query += " AND year = ?"
+            params.append(year)
+        if month:
+            query += " AND month = ?"
+            params.append(month)
+        if branch_name:
+            query += " AND branch_name = ?"
+            params.append(branch_name)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        query += " ORDER BY year DESC, month DESC, id DESC"
+        return [dict(r) for r in conn.execute(query, params).fetchall()]
+    finally:
+        conn.close()
 
 
 def get_article(article_id: int) -> dict | None:
     conn = _get_conn()
-    row = conn.execute("SELECT * FROM blog_articles WHERE id = ?", (article_id,)).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    try:
+        row = conn.execute("SELECT * FROM blog_articles WHERE id = ?", (article_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
 
 
 def create_article(**kwargs) -> int:
     conn = _get_conn()
-    cols = [k for k in kwargs if kwargs[k] is not None]
-    vals = [kwargs[k] for k in cols]
-    placeholders = ",".join(["?"] * len(cols))
-    col_str = ",".join(cols)
-    c = conn.execute(f"INSERT INTO blog_articles ({col_str}) VALUES ({placeholders})", vals)
-    conn.commit()
-    article_id = c.lastrowid
-    conn.close()
-    return article_id
+    try:
+        cols = [k for k in kwargs if kwargs[k] is not None]
+        vals = [kwargs[k] for k in cols]
+        placeholders = ",".join(["?"] * len(cols))
+        col_str = ",".join(cols)
+        c = conn.execute(f"INSERT INTO blog_articles ({col_str}) VALUES ({placeholders})", vals)
+        conn.commit()
+        return c.lastrowid
+    finally:
+        conn.close()
 
 
 def update_article(article_id: int, **kwargs) -> bool:
     conn = _get_conn()
-    sets = []
-    vals = []
-    for k, v in kwargs.items():
-        sets.append(f"{k} = ?")
-        vals.append(v)
-    sets.append("updated_at = ?")
-    vals.append(datetime.now().isoformat())
-    vals.append(article_id)
-    conn.execute(f"UPDATE blog_articles SET {','.join(sets)} WHERE id = ?", vals)
-    conn.commit()
-    conn.close()
-    return True
+    try:
+        sets = []
+        vals = []
+        for k, v in kwargs.items():
+            sets.append(f"{k} = ?")
+            vals.append(v)
+        sets.append("updated_at = ?")
+        vals.append(now_str())
+        vals.append(article_id)
+        conn.execute(f"UPDATE blog_articles SET {','.join(sets)} WHERE id = ?", vals)
+        conn.commit()
+        return True
+    finally:
+        conn.close()
 
 
 def delete_article(article_id: int) -> bool:
     conn = _get_conn()
-    conn.execute("DELETE FROM blog_tags WHERE article_id = ?", (article_id,))
-    conn.execute("DELETE FROM blog_status_log WHERE article_id = ?", (article_id,))
-    conn.execute("DELETE FROM blog_articles WHERE id = ?", (article_id,))
-    conn.commit()
-    conn.close()
-    return True
+    try:
+        conn.execute("DELETE FROM blog_tags WHERE article_id = ?", (article_id,))
+        conn.execute("DELETE FROM blog_status_log WHERE article_id = ?", (article_id,))
+        conn.execute("DELETE FROM blog_articles WHERE id = ?", (article_id,))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 # ── 태그 ──
 
 def get_tags(article_id: int) -> list[dict]:
     conn = _get_conn()
-    rows = [dict(r) for r in conn.execute(
-        "SELECT * FROM blog_tags WHERE article_id = ?", (article_id,)
-    ).fetchall()]
-    conn.close()
-    return rows
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM blog_tags WHERE article_id = ?", (article_id,)
+        ).fetchall()]
+    finally:
+        conn.close()
 
 
 def add_tag(article_id: int, tag_name: str, device_info_id: int = None):
     conn = _get_conn()
-    conn.execute(
-        "INSERT OR IGNORE INTO blog_tags (article_id, tag_name, device_info_id) VALUES (?,?,?)",
-        (article_id, tag_name, device_info_id)
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO blog_tags (article_id, tag_name, device_info_id) VALUES (?,?,?)",
+            (article_id, tag_name, device_info_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ── 상태 이력 ──
@@ -164,12 +177,14 @@ def add_tag(article_id: int, tag_name: str, device_info_id: int = None):
 def log_status_change(article_id: int, old_status: str, new_status: str,
                       changed_by: str = "", note: str = ""):
     conn = _get_conn()
-    conn.execute(
-        "INSERT INTO blog_status_log (article_id, old_status, new_status, changed_by, note) VALUES (?,?,?,?,?)",
-        (article_id, old_status, new_status, changed_by, note)
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "INSERT INTO blog_status_log (article_id, old_status, new_status, changed_by, note) VALUES (?,?,?,?,?)",
+            (article_id, old_status, new_status, changed_by, note)
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ── 장비별 블로그 조회 (크로스 DB) ──
@@ -177,9 +192,10 @@ def log_status_change(article_id: int, old_status: str, new_status: str,
 def get_articles_by_device(device_info_id: int) -> list[dict]:
     """특정 장비와 관련된 블로그 원고 목록."""
     conn = _get_conn()
-    rows = [dict(r) for r in conn.execute(
-        "SELECT * FROM blog_articles WHERE device_info_id = ? ORDER BY year DESC, month DESC",
-        (device_info_id,)
-    ).fetchall()]
-    conn.close()
-    return rows
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM blog_articles WHERE device_info_id = ? ORDER BY year DESC, month DESC",
+            (device_info_id,)
+        ).fetchall()]
+    finally:
+        conn.close()

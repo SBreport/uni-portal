@@ -11,8 +11,7 @@ import re
 import sqlite3
 from datetime import datetime
 
-DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-DB_PATH = os.path.join(DB_DIR, "equipment.db")
+from shared.db import get_conn, EQUIPMENT_DB
 
 # 지점명 별칭 매핑 (시트 탭 이름 → DB 이름)
 BRANCH_ALIAS = {
@@ -21,11 +20,7 @@ BRANCH_ALIAS = {
 
 
 def _get_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=30000")
-    conn.row_factory = sqlite3.Row
-    return conn
+    return get_conn(EQUIPMENT_DB)
 
 
 def run_event_sync(year: int, start_month: int, end_month: int) -> dict:

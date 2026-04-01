@@ -247,28 +247,28 @@ onMounted(async () => {
   <div class="place-page flex flex-col overflow-hidden" style="height: calc(100vh - 48px)">
 
     <!-- ─── ROW 1: 타이틀 + 월 + 오늘 요약 숫자 ─── -->
-    <div class="flex items-center gap-4 px-5 pt-3 pb-2 shrink-0">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 pt-3 pb-2 shrink-0">
       <h2 class="text-lg font-bold text-slate-800 shrink-0">상위노출</h2>
       <!-- 월 네비 -->
       <div class="flex items-center gap-1 shrink-0">
         <button @click="goPrev" :disabled="!canPrev"
           class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition text-xs">&lt;</button>
-        <span class="px-2 text-sm font-medium text-slate-700 min-w-[100px] text-center">{{ selectedMonth }}</span>
+        <span class="px-2 text-sm font-medium text-slate-700 min-w-[80px] text-center">{{ selectedMonth }}</span>
         <button @click="goNext" :disabled="!canNext"
           class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition text-xs">&gt;</button>
       </div>
       <!-- 성공/실패/미달 큰 숫자 -->
       <template v-if="data">
-        <div class="flex items-center gap-2 ml-2">
-          <div class="flex items-baseline gap-1 px-3 py-1 bg-blue-50 rounded-lg">
+        <div class="flex items-center gap-2 shrink-0">
+          <div class="flex items-baseline gap-1 px-2 py-1 bg-blue-50 rounded-lg whitespace-nowrap">
             <span class="text-2xl font-bold text-blue-600">{{ data.summary.success_today }}</span>
             <span class="text-xs text-blue-400">성공 ({{ pct(data.summary.success_today, data.summary.total) }}%)</span>
           </div>
-          <div class="flex items-baseline gap-1 px-3 py-1 bg-red-50 rounded-lg">
+          <div class="flex items-baseline gap-1 px-2 py-1 bg-red-50 rounded-lg whitespace-nowrap">
             <span class="text-2xl font-bold text-red-500">{{ data.summary.fail_today }}</span>
             <span class="text-xs text-red-400">실패 ({{ pct(data.summary.fail_today, data.summary.total) }}%)</span>
           </div>
-          <div class="flex items-baseline gap-1 px-3 py-1 bg-slate-100 rounded-lg">
+          <div class="flex items-baseline gap-1 px-2 py-1 bg-slate-100 rounded-lg whitespace-nowrap">
             <span class="text-2xl font-bold text-slate-500">{{ data.summary.midal }}</span>
             <span class="text-xs text-slate-400">미달 ({{ pct(data.summary.midal, data.summary.total) }}%)</span>
           </div>
@@ -276,7 +276,7 @@ onMounted(async () => {
         <!-- 검색 -->
         <div class="shrink-0">
           <input v-model="searchQuery" type="text" placeholder="지점 · 키워드 검색"
-            class="w-44 px-2.5 py-1 border border-slate-200 rounded-md text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-slate-400" />
+            class="w-40 px-2.5 py-1 border border-slate-200 rounded-md text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-slate-400" />
         </div>
       </template>
     </div>
@@ -290,10 +290,9 @@ onMounted(async () => {
     </div>
 
     <template v-else-if="data">
-      <!-- ─── ROW 2: 실패지점 태그 + 실행사 카드 ─── -->
-      <div class="flex flex-wrap gap-2 px-5 pb-2 shrink-0">
-        <!-- 실패 지점 태그 -->
-        <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 min-w-0" style="flex: 2 1 300px">
+      <!-- ─── ROW 2: 실패 · 미달 태그 ─── -->
+      <div class="px-5 pb-1.5 shrink-0">
+        <div class="bg-white border border-slate-200 rounded-lg px-3 py-2">
           <div class="flex flex-wrap items-center gap-1">
             <span class="text-[11px] text-slate-400 mr-1 shrink-0">실패</span>
             <span v-for="b in failedBranches" :key="b.branch"
@@ -310,33 +309,43 @@ onMounted(async () => {
             </template>
           </div>
         </div>
-        <!-- 실행사 4개 카드 -->
-        <template v-if="!isBranch">
-          <div v-for="a in agencyStats" :key="a.name"
-            class="bg-white border border-slate-200 rounded-lg px-3 py-2" style="flex: 1 1 140px; min-width: 140px">
-            <div class="flex items-baseline justify-between mb-1">
-              <span class="text-xs font-bold text-slate-700">{{ a.name }}</span>
-              <span class="text-[10px] text-slate-400">{{ a.total }}지점</span>
-            </div>
-            <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
-              <span class="text-blue-600 font-medium">성공 {{ a.success }}곳</span>
-              <span class="text-blue-400 text-right">({{ pct(a.success, a.total) }}%)</span>
-              <span class="text-red-500 font-medium">실패 {{ a.fail }}곳</span>
-              <span class="text-red-300 text-right">({{ pct(a.fail, a.total) }}%)</span>
-              <span :class="a.midal > 0 ? 'text-red-500 font-medium' : 'text-slate-400'">미달 {{ a.midal }}</span>
-              <span class="text-slate-400 text-right">평균 {{ a.avgNosul }}일</span>
-            </div>
-          </div>
-        </template>
       </div>
 
-      <!-- ─── ROW 3: 메인 테이블 + 사이드 막대그래프 ─── -->
-      <div class="flex flex-wrap gap-3 px-5 pb-3 flex-1 min-h-0">
+      <!-- ─── ROW 3: 실행사 카드 4개 ─── -->
+      <div v-if="!isBranch" class="grid grid-cols-4 gap-2 px-5 pb-1.5 shrink-0">
+        <div v-for="a in agencyStats" :key="a.name"
+          class="bg-white border border-slate-200 rounded-lg px-3 py-2">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-slate-700">{{ a.name }}</span>
+            <span class="text-[10px] text-slate-400">{{ a.total }}지점</span>
+          </div>
+          <!-- 성공률 게이지 + % -->
+          <div class="flex items-center gap-2 mb-1.5">
+            <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div class="h-full rounded-full transition-all"
+                :class="a.total > 0 && (a.success / a.total) <= 0.5 ? 'bg-red-400' : 'bg-blue-400'"
+                :style="{ width: pct(a.success, a.total) + '%' }"></div>
+            </div>
+            <span class="text-[11px] font-semibold shrink-0"
+              :class="a.total > 0 && (a.success / a.total) <= 0.5 ? 'text-red-500' : 'text-blue-500'">{{ pct(a.success, a.total) }}%</span>
+          </div>
+          <!-- 한 줄 요약 -->
+          <div class="flex items-center gap-1 text-[11px] whitespace-nowrap overflow-hidden">
+            <span class="text-blue-600 font-medium shrink-0">성공 {{ a.success }}</span><span class="text-slate-300">·</span>
+            <span class="text-red-500 font-medium shrink-0">실패 {{ a.fail }}</span><span class="text-slate-300">·</span>
+            <span class="shrink-0" :class="a.midal > 0 ? 'text-red-400' : 'text-slate-400'">미달 {{ a.midal }}</span>
+            <span class="ml-auto text-slate-400 shrink-0">평균 {{ a.avgNosul }}일</span>
+          </div>
+        </div>
+      </div>
 
-        <!-- 테이블 (3:2 비율, 좁은 화면시 전체 너비) -->
-        <div class="flex flex-col min-h-0" style="flex: 3 1 500px; min-width: 0">
+      <!-- ─── ROW 4: 메인 테이블 + 사이드 막대그래프 ─── -->
+      <div class="flex flex-col lg:flex-row gap-3 px-5 pb-3 flex-1 min-h-0">
+
+        <!-- 테이블 -->
+        <div class="flex flex-col min-h-0 flex-1 lg:flex-[3_1_0%]" style="min-width: 0">
           <div class="bg-white border border-slate-200 rounded-lg overflow-hidden flex-1 min-h-0">
-            <div class="h-full overflow-y-auto">
+            <div class="h-full overflow-y-auto overflow-x-hidden">
               <table class="w-full text-xs">
                 <thead>
                   <tr class="bg-slate-50/95 border-b border-slate-200">
@@ -391,9 +400,9 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- 노출일수 막대그래프 (2:3 비율) -->
-        <div class="flex flex-col min-h-0" style="flex: 2 1 240px; min-width: 240px">
-          <div class="bg-white border border-slate-200 rounded-lg p-3 flex-1 min-h-0 flex flex-col">
+        <!-- 노출일수 막대그래프 -->
+        <div class="flex flex-col min-h-0 flex-1 lg:flex-[2_1_0%]" style="min-width: 0">
+          <div class="bg-white border border-slate-200 rounded-lg p-3 flex-1 min-h-0 flex flex-col overflow-hidden">
             <div class="flex items-center justify-between mb-2 shrink-0">
               <h3 class="text-xs font-bold text-slate-600">노출일수 현황</h3>
               <div class="flex items-center gap-2 text-[10px] text-slate-400">

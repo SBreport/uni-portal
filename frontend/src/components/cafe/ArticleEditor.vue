@@ -119,18 +119,26 @@ async function save() {
 // 상태 변경
 async function handleStatusChange() {
   if (!article.value || newStatus.value === article.value.status) return
-  await cafeApi.changeStatus(article.value.id, newStatus.value, auth.username, statusNote.value)
-  statusNote.value = ''
-  await loadArticle(article.value.id)
-  await store.loadArticles()
+  try {
+    await cafeApi.changeStatus(article.value.id, newStatus.value, auth.username, statusNote.value)
+    statusNote.value = ''
+    await loadArticle(article.value.id)
+    await store.loadArticles()
+  } catch (e) {
+    console.error('[ArticleEditor] 상태 변경 실패:', e)
+  }
 }
 
 // 피드백 등록
 async function submitFeedback() {
   if (!article.value || !feedbackText.value.trim()) return
-  await cafeApi.addFeedback(article.value.id, auth.username, feedbackText.value)
-  feedbackText.value = ''
-  await loadArticle(article.value.id)
+  try {
+    await cafeApi.addFeedback(article.value.id, auth.username, feedbackText.value)
+    feedbackText.value = ''
+    await loadArticle(article.value.id)
+  } catch (e) {
+    console.error('[ArticleEditor] 피드백 등록 실패:', e)
+  }
 }
 
 // 복사

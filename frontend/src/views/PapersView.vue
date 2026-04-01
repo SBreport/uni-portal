@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { usePapersStore, type Paper } from '@/stores/papers'
 import * as papersApi from '@/api/papers'
 import { useDetailPanel } from '@/composables/useDetailPanel'
@@ -80,6 +80,9 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 watch(() => store.filterSearch, () => {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => store.loadPapers(), 300)
+})
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
 })
 </script>
 

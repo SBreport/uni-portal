@@ -172,6 +172,8 @@ async function loadPosts() {
 }
 
 async function loadFilterOptions() {
+  // 이미 로드된 경우 재요청하지 않음 (세션 중 변하지 않는 데이터)
+  if (filterOptions.value) return
   try {
     const params: any = {}
     if (isUandi.value) params.branch_filter = 'uandi'

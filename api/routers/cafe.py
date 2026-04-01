@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.deps import get_current_user, require_role
 from api.models import (
-    BranchPeriodCreate, ArticleUpdate, StatusChange,
+    BranchPeriodCreate, BranchPeriodMetaUpdate, ArticleUpdate, StatusChange,
     PublishInfo, CommentUpsert, FeedbackCreate, CafeSyncRequest,
 )
 
@@ -60,10 +60,10 @@ async def get_branch_period_meta(
 @router.patch("/branch-periods/{bp_id}/meta")
 async def update_bp_meta(
     bp_id: int,
-    updates: dict,
+    updates: BranchPeriodMetaUpdate,
     user: Annotated[dict, Depends(_branch)],
 ):
-    update_branch_metadata(bp_id, **updates)
+    update_branch_metadata(bp_id, **updates.model_dump(exclude_none=True))
     return {"ok": True}
 
 

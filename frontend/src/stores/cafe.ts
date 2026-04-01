@@ -81,8 +81,14 @@ export const useCafeStore = defineStore('cafe', () => {
 
   async function saveArticle(articleId: number, updates: Record<string, any>) {
     await cafeApi.updateArticle(articleId, updates)
-    await loadArticleDetail(articleId)
-    await loadArticles()
+    // 로컬 상태 즉시 반영 (API 재호출 없이)
+    if (currentArticle.value && currentArticle.value.id === articleId) {
+      Object.assign(currentArticle.value, updates)
+    }
+    const idx = articles.value.findIndex(a => a.id === articleId)
+    if (idx !== -1) {
+      Object.assign(articles.value[idx], updates)
+    }
   }
 
   async function loadSummary() {

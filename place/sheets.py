@@ -1,72 +1,127 @@
 """Google Sheets에서 상위노출 데이터를 가져와 파싱하는 모듈."""
 
-import os
+import logging
 import re
-import time
-from datetime import datetime, date
+from datetime import date
+
+logger = logging.getLogger(__name__)
+
+from shared.sheets_base import (
+    get_cached, set_cached, get_client, safe_int,
+    calc_today_index, calc_streak, calc_status, build_summary,
+)
 
 SPREADSHEET_ID = "1h-Zhxpzz8EVHcxoxO4Z72iHIx9EKwYKppni3CKpeal0"
 SKIP_SHEETS = {"~30 템플릿", "~31 템플릿"}
 
-_cache: dict[str, tuple[float, object]] = {}
-_CACHE_TTL = 300  # 5분
-
-
-def _get_client():
-    try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-    except ImportError:
-        raise RuntimeError("gspread/google-auth 패키지가 설치되지 않았습니다.")
-
-    creds_file = os.environ.get(
-        "GOOGLE_CREDENTIALS_FILE",
-        os.path.join(os.path.dirname(__file__), "..", "credentials.json"),
-    )
-    if not os.path.exists(creds_file):
-        raise RuntimeError(f"credentials.json 파일을 찾을 수 없습니다: {creds_file}")
-
-    scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds = Credentials.from_service_account_file(creds_file, scopes=scopes)
-    return gspread.authorize(creds)
-
-
-def _get_cached(key: str):
-    if key in _cache:
-        ts, data = _cache[key]
-        if time.time() - ts < _CACHE_TTL:
-            return data
-    return None
-
-
-def _set_cached(key: str, data):
-    _cache[key] = (time.time(), data)
-
 
 def list_months() -> list[str]:
-    cached = _get_cached("__months__")
+    cached = get_cached("place__months__")
     if cached is not None:
         return cached
 
-    client = _get_client()
+    client = get_client()
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
     sheets = [ws.title for ws in spreadsheet.worksheets() if ws.title not in SKIP_SHEETS]
-    _set_cached("__months__", sheets)
+    set_cached("place__months__", sheets)
     return sheets
 
 
 def get_ranking(sheet_name: str) -> dict:
-    cached = _get_cached(sheet_name)
+    cache_key = f"place_{sheet_name}"
+    cached = get_cached(cache_key)
     if cached is not None:
         return cached
 
-    client = _get_client()
+    client = get_client()
     spreadsheet = client.open_by_key(SPREADSHEET_ID)
     ws = spreadsheet.worksheet(sheet_name)
     values = ws.get_all_values()
     result = _parse_sheet(values, sheet_name)
-    _set_cached(sheet_name, result)
+
+    # 누적 통계 병합 (총노출, 진행일)
+    cumulative = _get_cumulative_stats()
+    for branch in result["branches"]:
+        stats = cumulative.get(branch["branch"], {})
+        branch["month_success_count"] = stats.get("total_exposed", branch["month_success_count"])
+        branch["work_days"] = stats.get("work_days", branch["work_days"])
+
+    set_cached(cache_key, result)
     return result
+
+
+def _get_cumulative_stats() -> dict[str, dict]:
+    """모든 월별 시트에서 지점별 누적 통계 계산 (단일 배치 API 호출)."""
+    cached = get_cached("place__cumulative__")
+    if cached is not None:
+        return cached
+
+    client = get_client()
+    spreadsheet = client.open_by_key(SPREADSHEET_ID)
+    all_sheets = [ws.title for ws in spreadsheet.worksheets() if ws.title not in SKIP_SHEETS]
+
+    # 파싱 가능한 시트만 필터 → 오래된 순 정렬
+    parseable = []
+    for name in all_sheets:
+        try:
+            _parse_sheet_name(name)
+            parseable.append(name)
+        except ValueError:
+            logger.warning("시트 이름 파싱 불가, 건너뜀: %s", name)
+            continue
+    all_sheets_sorted = sorted(parseable, key=lambda s: _parse_sheet_name(s))
+
+    if not all_sheets_sorted:
+        set_cached("place__cumulative__", {})
+        return {}
+
+    # 모든 시트를 1번의 API 호출로 읽기
+    ranges = [f"'{name}'" for name in all_sheets_sorted]
+    batch_result = spreadsheet.values_batch_get(ranges)
+
+    today = date.today()
+    stats: dict[str, dict] = {}
+
+    for idx, sheet_name in enumerate(all_sheets_sorted):
+        year, month = _parse_sheet_name(sheet_name)
+        values = batch_result["valueRanges"][idx].get("values", [])
+        if not values:
+            logger.warning("시트 데이터 비어있음: %s", sheet_name)
+            continue
+
+        header = values[0]
+        num_day_cols = len(header) - 2
+        if num_day_cols <= 0:
+            logger.warning("헤더 컬럼 부족 (day_cols=%d): %s", num_day_cols, sheet_name)
+            continue
+
+        day_limit = calc_today_index(year, month, num_day_cols)
+
+        i = 1
+        while i < len(values):
+            success_row = values[i]
+            rank_row = values[i + 1] if i + 1 < len(values) else []
+            i += 2
+
+            if not success_row or not success_row[0]:
+                continue
+
+            branch_name = success_row[0].strip()
+            if branch_name not in stats:
+                stats[branch_name] = {"total_exposed": 0, "work_days": 0}
+
+            for d in range(day_limit):
+                col_idx = d + 1
+                success_val = safe_int(success_row[col_idx]) if col_idx < len(success_row) else 0
+                rank_val = _parse_rank(rank_row[col_idx] if rank_row and col_idx < len(rank_row) else None)
+
+                if rank_val is not None:
+                    stats[branch_name]["work_days"] += 1
+                if success_val == 1:
+                    stats[branch_name]["total_exposed"] += 1
+
+    set_cached("place__cumulative__", stats)
+    return stats
 
 
 def _parse_sheet_name(sheet_name: str) -> tuple[int, int]:
@@ -75,13 +130,6 @@ def _parse_sheet_name(sheet_name: str) -> tuple[int, int]:
     if not m:
         raise ValueError(f"시트 이름 파싱 실패: {sheet_name}")
     return int(m.group(2)), int(m.group(1))
-
-
-def _safe_int(val: str, default: int = 0) -> int:
-    try:
-        return int(str(val).strip())
-    except (ValueError, TypeError):
-        return default
 
 
 def _parse_rank(val: str | None) -> int | None:
@@ -98,18 +146,13 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
     year, month = _parse_sheet_name(sheet_name)
 
     header = values[0]
-    # 날짜 컬럼: header[1] ~ header[-2], 마지막은 "노출일수"
     num_day_cols = len(header) - 2
     if num_day_cols <= 0:
+        logger.warning("_parse_sheet 헤더 컬럼 부족 (day_cols=%d): %s", num_day_cols, sheet_name)
         return {"year": year, "month": month, "days": 0, "today_index": 0,
                 "branches": [], "summary": {"total": 0, "success_today": 0, "fail_today": 0, "midal": 0}}
 
-    # 오늘 인덱스 결정
-    today = date.today()
-    if year == today.year and month == today.month:
-        today_index = min(today.day, num_day_cols)
-    else:
-        today_index = num_day_cols
+    today_index = calc_today_index(year, month, num_day_cols)
 
     branches = []
     i = 1
@@ -124,16 +167,16 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
         branch_name = success_row[0].strip()
         keyword = rank_row[0].strip() if rank_row else ""
 
-        # 노출일수: success_row의 마지막 컬럼 (인덱스 = num_day_cols + 1)
+        # 노출일수: success_row의 마지막 컬럼
         nosul_idx = num_day_cols + 1
         nosul_raw = success_row[nosul_idx] if len(success_row) > nosul_idx else "0"
-        nosul_count = _safe_int(nosul_raw, 0)
+        nosul_count = safe_int(nosul_raw, 0)
 
         # 일별 데이터 파싱
         daily = []
         for d in range(num_day_cols):
             col_idx = d + 1
-            success_val = _safe_int(success_row[col_idx]) if col_idx < len(success_row) else None
+            success_val = safe_int(success_row[col_idx]) if col_idx < len(success_row) else None
             rank_val = _parse_rank(rank_row[col_idx] if col_idx < len(rank_row) else None)
             daily.append({"day": d + 1, "success": success_val, "rank": rank_val})
 
@@ -142,27 +185,10 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
         today_success = bool(today_data and today_data["success"] == 1) if today_data else False
         today_rank = today_data["rank"] if today_data else None
 
-        # 월간 성공 횟수 (오늘까지)
         month_success_count = sum(1 for d in daily[:today_index] if d["success"] == 1)
-
-        # 작업 진행일 (순위 데이터가 있는 일수)
         work_days = sum(1 for d in daily[:today_index] if d["rank"] is not None)
-
-        # 연속 성공일 (오늘부터 역방향)
-        streak = 0
-        for d in reversed(daily[:today_index]):
-            if d["success"] == 1:
-                streak += 1
-            else:
-                break
-
-        # 상태 판정
-        if nosul_count <= 0 and month_success_count == 0:
-            status = "미달"
-        elif today_success:
-            status = "active"
-        else:
-            status = "fail"
+        streak = calc_streak(daily, today_index, key="success")
+        status = calc_status(nosul_count, month_success_count, today_success)
 
         branches.append({
             "branch": branch_name,
@@ -170,18 +196,14 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
             "nosul_count": nosul_count,
             "today_rank": today_rank,
             "today_success": today_success,
+            "today_active": today_success,        # 공통 필드
             "streak": streak,
             "status": status,
             "month_success_count": month_success_count,
+            "month_count": month_success_count,    # 공통 필드
             "work_days": work_days,
             "daily": daily,
         })
-
-    # 요약
-    total = len(branches)
-    success_today = sum(1 for b in branches if b["status"] == "active")
-    midal = sum(1 for b in branches if b["status"] == "미달")
-    fail_today = total - success_today - midal
 
     return {
         "year": year,
@@ -189,10 +211,5 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
         "days": num_day_cols,
         "today_index": today_index,
         "branches": branches,
-        "summary": {
-            "total": total,
-            "success_today": success_today,
-            "fail_today": fail_today,
-            "midal": midal,
-        },
+        "summary": build_summary(branches),
     }

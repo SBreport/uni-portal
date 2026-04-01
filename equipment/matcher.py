@@ -17,16 +17,11 @@
 import sqlite3
 import os
 
-DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-DB_PATH = os.path.join(DB_DIR, "equipment.db")
+from shared.db import get_conn, EQUIPMENT_DB
 
 
 def _get_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=30000")
-    conn.row_factory = sqlite3.Row
-    return conn
+    return get_conn(EQUIPMENT_DB)
 
 
 # ── 한글 경계 유틸 ──

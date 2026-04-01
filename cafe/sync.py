@@ -100,17 +100,9 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
     print(f"  읽은 지점 수: {len(branch_data)}")
 
     # 3. 각 지점 처리
-    import sqlite3
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=30000")
-    conn.row_factory = sqlite3.Row
-
-    # evt_branches는 equipment.db에 있으므로 별도 연결
-    equip_db = os.path.join(DB_DIR, "equipment.db")
-    equip_conn = sqlite3.connect(equip_db, timeout=30)
-    equip_conn.execute("PRAGMA journal_mode=WAL")
-    equip_conn.row_factory = sqlite3.Row
+    from shared.db import get_conn, CAFE_DB, EQUIPMENT_DB
+    conn = get_conn(CAFE_DB)
+    equip_conn = get_conn(EQUIPMENT_DB)
 
     total_articles = 0
     processed = 0
@@ -175,8 +167,8 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
                     from cafe.db import change_status
                     try:
                         change_status(article_id, "작성완료", changed_by="시트가져오기")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"[WARN] 상태 변경 실패 (article_id={article_id}): {e}")
 
                 count += 1
 
@@ -190,7 +182,7 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
             errors.append(f"{tab_name}: {e}")
             print(f"  {tab_name}: 오류 - {e}")
 
-    conn.close()
+    conn.close()  # sync는 장시간 작업이므로 명시적 close 유지
     equip_conn.close()
 
     # 4. 로그 업데이트

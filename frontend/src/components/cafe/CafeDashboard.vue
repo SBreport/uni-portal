@@ -5,7 +5,7 @@ import { useCafeStore, type SummaryRow } from '@/stores/cafe'
 const emit = defineEmits<{ 'go-branch': [branchName: string] }>()
 const store = useCafeStore()
 
-onMounted(() => store.loadSummary())
+// loadSummary는 CafeView에서 이미 호출 — 여기서 중복 호출하지 않음
 
 // 접이식 유형별 상세
 const showTypeDetail = ref(false)

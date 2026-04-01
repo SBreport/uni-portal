@@ -47,6 +47,21 @@ class BranchPeriodCreate(BaseModel):
     branch_id: int
 
 
+class BranchPeriodMetaUpdate(BaseModel):
+    smart_manager: Optional[str] = None
+    writer: Optional[str] = None
+    publisher: Optional[str] = None
+    publish_count: Optional[int] = None
+    review_count: Optional[int] = None
+    superset_count: Optional[int] = None
+    self_made: Optional[str] = None
+    report_link: Optional[str] = None
+    comment_link: Optional[str] = None
+    photo_link: Optional[str] = None
+    general_photo_link: Optional[str] = None
+    progress_note: Optional[str] = None
+
+
 class ArticleUpdate(BaseModel):
     keyword: Optional[str] = None
     category: Optional[str] = None

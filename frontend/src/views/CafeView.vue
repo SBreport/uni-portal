@@ -16,19 +16,27 @@ const selectedArticleId = ref<number | null>(null)
 const listVersion = ref<'v1' | 'v2'>('v1')
 
 onMounted(async () => {
-  await Promise.all([store.loadPeriods(), store.loadBranches()])
-  // 전체 지점 대시보드 기본 로드
-  await store.loadSummary()
+  try {
+    await Promise.all([store.loadPeriods(), store.loadBranches()])
+    await store.loadSummary()
+  } catch (e) {
+    console.error('[CafeView] 초기 데이터 로드 실패:', e)
+  }
 })
 
-// 지점/기간 변경 시 데이터 로드
+// 지점/기간 변경 시 데이터 로드 (병렬 실행)
 watch([selectedBranchId, selectedYear, selectedMonth], async ([branchId, year, month]) => {
-  if (branchId && year && month) {
-    await store.selectBranchPeriod(branchId, year, month)
-  }
-  // 지점 변경 시 대시보드도 갱신
-  if (subView.value === 'dashboard') {
-    await store.loadSummary()
+  try {
+    const tasks: Promise<void>[] = []
+    if (branchId && year && month) {
+      tasks.push(store.selectBranchPeriod(branchId, year, month))
+    }
+    if (subView.value === 'dashboard') {
+      tasks.push(store.loadSummary())
+    }
+    await Promise.all(tasks)
+  } catch (e) {
+    console.error('[CafeView] 데이터 로드 실패:', e)
   }
 })
 

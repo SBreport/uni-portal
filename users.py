@@ -6,9 +6,10 @@
 import sqlite3
 import os
 
+from shared.db import get_conn as _shared_get_conn, SYSTEM_DB
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "data")
-DB_PATH = os.path.join(DB_DIR, "system.db")
+DB_PATH = SYSTEM_DB
 
 # 마이그레이션: equipment.db에서 users 테이블을 system.db로 복사
 def _migrate_users_if_needed():
@@ -39,8 +40,8 @@ def _migrate_users_if_needed():
                         (r["username"], r["password_hash"], r["role"], r["branch_id"], r["memo"] if "memo" in r.keys() else "")
                     )
                 old_conn.close()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[WARN] users 마이그레이션 실패: {e}")
         conn.commit()
         conn.close()
 
@@ -48,9 +49,7 @@ _migrate_users_if_needed()
 
 
 def _get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _shared_get_conn(SYSTEM_DB)
 
 
 def load_users():
@@ -59,17 +58,19 @@ def load_users():
 
     try:
         conn = _get_conn()
-        c = conn.cursor()
-        c.execute("SELECT username, password_hash, role, branch_id, memo FROM users ORDER BY username")
-        for row in c.fetchall():
-            users.append({
-                "username": row["username"],
-                "password_hash": row["password_hash"],
-                "role": row["role"],
-                "branch_id": row["branch_id"],
-                "memo": row["memo"] if "memo" in row.keys() else "",
-            })
-        conn.close()
+        try:
+            c = conn.cursor()
+            c.execute("SELECT username, password_hash, role, branch_id, memo FROM users ORDER BY username")
+            for row in c.fetchall():
+                users.append({
+                    "username": row["username"],
+                    "password_hash": row["password_hash"],
+                    "role": row["role"],
+                    "branch_id": row["branch_id"],
+                    "memo": row["memo"] if "memo" in row.keys() else "",
+                })
+        finally:
+            conn.close()
     except Exception:
         pass
 
@@ -108,14 +109,16 @@ def add_user(username, password_hash, role, branch_id=None, memo=""):
 
     try:
         conn = _get_conn()
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO users (username, password_hash, role, branch_id, memo) VALUES (?, ?, ?, ?, ?)",
-            (username, password_hash, role, branch_id, memo),
-        )
-        conn.commit()
-        conn.close()
-        return True, f"'{username}' 사용자가 추가되었습니다."
+        try:
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO users (username, password_hash, role, branch_id, memo) VALUES (?, ?, ?, ?, ?)",
+                (username, password_hash, role, branch_id, memo),
+            )
+            conn.commit()
+            return True, f"'{username}' 사용자가 추가되었습니다."
+        finally:
+            conn.close()
     except Exception as e:
         return False, f"추가 실패: {e}"
 
@@ -130,14 +133,15 @@ def remove_user(username):
 
     try:
         conn = _get_conn()
-        c = conn.cursor()
-        c.execute("DELETE FROM users WHERE username = ?", (username,))
-        if c.rowcount == 0:
+        try:
+            c = conn.cursor()
+            c.execute("DELETE FROM users WHERE username = ?", (username,))
+            if c.rowcount == 0:
+                return False, f"'{username}' 을(를) 찾을 수 없습니다."
+            conn.commit()
+            return True, f"'{username}' 사용자가 삭제되었습니다."
+        finally:
             conn.close()
-            return False, f"'{username}' 을(를) 찾을 수 없습니다."
-        conn.commit()
-        conn.close()
-        return True, f"'{username}' 사용자가 삭제되었습니다."
     except Exception as e:
         return False, f"삭제 실패: {e}"
 
@@ -146,14 +150,15 @@ def update_user_role(username, new_role):
     """사용자 역할을 변경한다."""
     try:
         conn = _get_conn()
-        c = conn.cursor()
-        c.execute("UPDATE users SET role = ? WHERE username = ?", (new_role, username))
-        if c.rowcount == 0:
+        try:
+            c = conn.cursor()
+            c.execute("UPDATE users SET role = ? WHERE username = ?", (new_role, username))
+            if c.rowcount == 0:
+                return False, f"'{username}' 을(를) 찾을 수 없습니다."
+            conn.commit()
+            return True, f"'{username}' 역할이 변경되었습니다."
+        finally:
             conn.close()
-            return False, f"'{username}' 을(를) 찾을 수 없습니다."
-        conn.commit()
-        conn.close()
-        return True, f"'{username}' 역할이 변경되었습니다."
     except Exception as e:
         return False, f"역할 변경 실패: {e}"
 
@@ -162,14 +167,15 @@ def update_user_password(username, new_password_hash):
     """사용자 비밀번호를 변경한다."""
     try:
         conn = _get_conn()
-        c = conn.cursor()
-        c.execute("UPDATE users SET password_hash = ? WHERE username = ?", (new_password_hash, username))
-        if c.rowcount == 0:
+        try:
+            c = conn.cursor()
+            c.execute("UPDATE users SET password_hash = ? WHERE username = ?", (new_password_hash, username))
+            if c.rowcount == 0:
+                return False, f"'{username}' 을(를) 찾을 수 없습니다."
+            conn.commit()
+            return True, f"'{username}' 비밀번호가 변경되었습니다."
+        finally:
             conn.close()
-            return False, f"'{username}' 을(를) 찾을 수 없습니다."
-        conn.commit()
-        conn.close()
-        return True, f"'{username}' 비밀번호가 변경되었습니다."
     except Exception as e:
         return False, f"비밀번호 변경 실패: {e}"
 
@@ -178,14 +184,15 @@ def update_user_memo(username, memo):
     """사용자 비고를 변경한다."""
     try:
         conn = _get_conn()
-        c = conn.cursor()
-        c.execute("UPDATE users SET memo = ? WHERE username = ?", (memo, username))
-        if c.rowcount == 0:
+        try:
+            c = conn.cursor()
+            c.execute("UPDATE users SET memo = ? WHERE username = ?", (memo, username))
+            if c.rowcount == 0:
+                return False, f"'{username}' 을(를) 찾을 수 없습니다."
+            conn.commit()
+            return True, f"'{username}' 비고가 변경되었습니다."
+        finally:
             conn.close()
-            return False, f"'{username}' 을(를) 찾을 수 없습니다."
-        conn.commit()
-        conn.close()
-        return True, f"'{username}' 비고가 변경되었습니다."
     except Exception as e:
         return False, f"비고 변경 실패: {e}"
 
@@ -194,12 +201,14 @@ def ensure_memo_column():
     """기존 DB에 memo 컬럼이 없으면 추가한다."""
     try:
         conn = _get_conn()
-        c = conn.cursor()
-        c.execute("PRAGMA table_info(users)")
-        cols = [row["name"] for row in c.fetchall()]
-        if "memo" not in cols:
-            c.execute("ALTER TABLE users ADD COLUMN memo TEXT DEFAULT ''")
-            conn.commit()
-        conn.close()
+        try:
+            c = conn.cursor()
+            c.execute("PRAGMA table_info(users)")
+            cols = [row["name"] for row in c.fetchall()]
+            if "memo" not in cols:
+                c.execute("ALTER TABLE users ADD COLUMN memo TEXT DEFAULT ''")
+                conn.commit()
+        finally:
+            conn.close()
     except Exception:
         pass

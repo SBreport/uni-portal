@@ -8,7 +8,9 @@ import { h } from 'vue'
 const store = useEventsStore()
 const col = createColumnHelper<any>()
 
-onMounted(() => store.loadAll())
+onMounted(async () => {
+  try { await store.loadAll() } catch (e) { console.error('[EventsView] 로드 실패:', e) }
+})
 
 function priceCell(info: CellContext<any, any>) {
   const v = info.getValue()
@@ -66,13 +68,13 @@ function handlePriceInput(field: 'min' | 'max', e: Event) {
 
     <!-- 필터 바 -->
     <div class="flex items-center gap-2.5 mb-4 flex-wrap">
-      <select v-model="store.filterBranch" @change="store.loadAll()"
+      <select v-model="store.filterBranch"
         class="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white">
         <option value="">전체 지점</option>
         <option v-for="b in store.branches" :key="b.id" :value="b.name">{{ b.name }}</option>
       </select>
 
-      <select v-model="store.filterCategory" @change="store.loadAll()"
+      <select v-model="store.filterCategory"
         class="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white">
         <option value="">전체 카테고리</option>
         <option v-for="c in store.categories" :key="c.id" :value="c.name">{{ c.name }}</option>

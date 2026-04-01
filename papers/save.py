@@ -15,6 +15,7 @@ import json
 import sqlite3
 import hashlib
 from datetime import datetime
+from shared.db import now_str
 
 # 프로젝트 루트 기준 경로
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -110,7 +111,7 @@ def save_paper(json_path: str):
     papers = data if isinstance(data, list) else [data]
 
     conn = get_conn()
-    now = datetime.now().isoformat()
+    now = now_str()
     created = 0
 
     for p in papers:

@@ -10,17 +10,11 @@ import os
 from datetime import datetime
 
 from events.parser import ParsedEvent
-
-DB_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-DB_PATH = os.path.join(DB_DIR, "equipment.db")
+from shared.db import get_conn, EQUIPMENT_DB
 
 
 def _get_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=30000")
-    conn.row_factory = sqlite3.Row
-    return conn
+    return get_conn(EQUIPMENT_DB)
 
 
 # ============================================================
@@ -292,112 +286,116 @@ def load_current_events() -> tuple:
     current_year = now.year
 
     conn = _get_conn()
-    base = _event_query()
-    order = " ORDER BY er.sort_order, eb.name, ec.sort_order, ei.row_order"
+    try:
+        base = _event_query()
+        order = " ORDER BY er.sort_order, eb.name, ec.sort_order, ei.row_order"
 
-    # 1차: 현재 날짜 기준 격월 기간
-    rows = _query_rows(conn,
-        base + " WHERE ep.year = ? AND ep.start_month = ? AND ei.is_active = 1" + order,
-        (current_year, current_start_month),
-    )
-    if rows:
-        conn.close()
-        return rows, False
+        # 1차: 현재 날짜 기준 격월 기간
+        rows = _query_rows(conn,
+            base + " WHERE ep.year = ? AND ep.start_month = ? AND ei.is_active = 1" + order,
+            (current_year, current_start_month),
+        )
+        if rows:
+            return rows, False
 
-    # 2차: 직전 격월 기간
-    prev_idx = _bm_idx - 1
-    prev_year = current_year
-    if prev_idx < 0:
-        prev_idx = 5
-        prev_year -= 1
-    prev_start = _pm[prev_idx]
-    rows = _query_rows(conn,
-        base + " WHERE ep.year = ? AND ep.start_month = ? AND ei.is_active = 1" + order,
-        (prev_year, prev_start),
-    )
-    if rows:
-        conn.close()
+        # 2차: 직전 격월 기간
+        prev_idx = _bm_idx - 1
+        prev_year = current_year
+        if prev_idx < 0:
+            prev_idx = 5
+            prev_year -= 1
+        prev_start = _pm[prev_idx]
+        rows = _query_rows(conn,
+            base + " WHERE ep.year = ? AND ep.start_month = ? AND ei.is_active = 1" + order,
+            (prev_year, prev_start),
+        )
+        if rows:
+            return rows, True
+
+        # 3차: is_current=1 최종 fallback
+        rows = _query_rows(conn,
+            base + " WHERE ep.is_current = 1 AND ei.is_active = 1" + order,
+        )
         return rows, True
-
-    # 3차: is_current=1 최종 fallback
-    rows = _query_rows(conn,
-        base + " WHERE ep.is_current = 1 AND ei.is_active = 1" + order,
-    )
-    conn.close()
-    return rows, True
+    finally:
+        conn.close()
 
 
 def load_evt_branches() -> list[dict]:
     """이벤트 지점 목록 (ㄱㄴㄷ 순)."""
     conn = _get_conn()
-    c = conn.cursor()
-    c.execute("""
-        SELECT eb.id, eb.name, eb.short_name, er.name AS region
-        FROM evt_branches eb
-        JOIN evt_regions er ON eb.region_id = er.id
-        WHERE eb.is_active = 1
-        ORDER BY eb.name
-    """)
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return rows
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT eb.id, eb.name, eb.short_name, er.name AS region
+            FROM evt_branches eb
+            JOIN evt_regions er ON eb.region_id = er.id
+            WHERE eb.is_active = 1
+            ORDER BY eb.name
+        """)
+        return [dict(r) for r in c.fetchall()]
+    finally:
+        conn.close()
 
 
 def load_evt_categories() -> list[dict]:
     """이벤트 카테고리 목록."""
     conn = _get_conn()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, name, display_name FROM evt_categories WHERE is_active = 1 ORDER BY sort_order"
-    )
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return rows
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, name, display_name FROM evt_categories WHERE is_active = 1 ORDER BY sort_order"
+        )
+        return [dict(r) for r in c.fetchall()]
+    finally:
+        conn.close()
 
 
 def load_evt_periods() -> list[dict]:
     """이벤트 기간 목록."""
     conn = _get_conn()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, label, year, start_month, end_month, is_current FROM evt_periods ORDER BY year DESC, start_month DESC"
-    )
-    rows = [dict(r) for r in c.fetchall()]
-    conn.close()
-    return rows
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, label, year, start_month, end_month, is_current FROM evt_periods ORDER BY year DESC, start_month DESC"
+        )
+        return [dict(r) for r in c.fetchall()]
+    finally:
+        conn.close()
 
 
 def load_price_history(branch_name: str = None, event_name: str = None) -> list:
     """기간별 가격 이력 조회."""
     conn = _get_conn()
-    query = """
-        SELECT
-            eb.name AS 지점명,
-            ep.label AS 기간,
-            ec.display_name AS 카테고리,
-            ei.raw_event_name AS 이벤트명,
-            ei.regular_price AS 정상가,
-            ei.event_price AS 이벤트가,
-            ei.discount_rate AS 할인율,
-            ep.starts_at
-        FROM evt_items ei
-        JOIN evt_branches eb ON ei.branch_id = eb.id
-        JOIN evt_categories ec ON ei.category_id = ec.id
-        JOIN evt_periods ep ON ei.event_period_id = ep.id
-        WHERE ei.is_active = 1
-    """
-    params = []
-    if branch_name:
-        query += " AND eb.name = ?"
-        params.append(branch_name)
-    if event_name:
-        query += " AND ei.raw_event_name LIKE ?"
-        params.append(f"%{event_name}%")
-    query += " ORDER BY ei.raw_event_name, ep.starts_at"
+    try:
+        query = """
+            SELECT
+                eb.name AS 지점명,
+                ep.label AS 기간,
+                ec.display_name AS 카테고리,
+                ei.raw_event_name AS 이벤트명,
+                ei.regular_price AS 정상가,
+                ei.event_price AS 이벤트가,
+                ei.discount_rate AS 할인율,
+                ep.starts_at
+            FROM evt_items ei
+            JOIN evt_branches eb ON ei.branch_id = eb.id
+            JOIN evt_categories ec ON ei.category_id = ec.id
+            JOIN evt_periods ep ON ei.event_period_id = ep.id
+            WHERE ei.is_active = 1
+        """
+        params = []
+        if branch_name:
+            query += " AND eb.name = ?"
+            params.append(branch_name)
+        if event_name:
+            query += " AND ei.raw_event_name LIKE ?"
+            params.append(f"%{event_name}%")
+        query += " ORDER BY ei.raw_event_name, ep.starts_at"
 
-    rows = _query_rows(conn, query, params)
-    conn.close()
-    return rows
+        return _query_rows(conn, query, params)
+    finally:
+        conn.close()
 
 
 def search_by_treatment(query: str, period_id: int = None) -> list:
@@ -452,27 +450,29 @@ def search_by_treatment(query: str, period_id: int = None) -> list:
     like_q = f"%{query}%"
     params = params_base + [like_q] + params_base + [like_q, like_q, like_q]
 
-    rows = _query_rows(conn, combined, params)
-    conn.close()
-    return rows
+    try:
+        return _query_rows(conn, combined, params)
+    finally:
+        conn.close()
 
 
 def load_treatment_list() -> list:
     """등록된 시술 마스터 목록 (장비 연동 대비)."""
     conn = _get_conn()
-    rows = _query_rows(conn, """
-        SELECT
-            et.id, et.name AS 시술명, et.brand AS 브랜드,
-            ec.display_name AS 카테고리, COUNT(eic.id) AS 사용횟수
-        FROM evt_treatments et
-        LEFT JOIN evt_categories ec ON et.category_id = ec.id
-        LEFT JOIN evt_item_components eic ON eic.treatment_id = et.id
-        WHERE et.is_active = 1
-        GROUP BY et.id, et.name, et.brand, ec.display_name
-        ORDER BY COUNT(eic.id) DESC, et.name
-    """)
-    conn.close()
-    return rows
+    try:
+        return _query_rows(conn, """
+            SELECT
+                et.id, et.name AS 시술명, et.brand AS 브랜드,
+                ec.display_name AS 카테고리, COUNT(eic.id) AS 사용횟수
+            FROM evt_treatments et
+            LEFT JOIN evt_categories ec ON et.category_id = ec.id
+            LEFT JOIN evt_item_components eic ON eic.treatment_id = et.id
+            WHERE et.is_active = 1
+            GROUP BY et.id, et.name, et.brand, ec.display_name
+            ORDER BY COUNT(eic.id) DESC, et.name
+        """)
+    finally:
+        conn.close()
 
 
 # ============================================================
@@ -482,34 +482,37 @@ def load_treatment_list() -> list:
 def load_treatment_dictionary() -> list:
     """시술 사전 전체 로드 (설명·검수 상태 포함)."""
     conn = _get_conn()
-    rows = _query_rows(conn, """
-        SELECT
-            et.id, et.name AS 시술명, et.brand AS 브랜드,
-            ec.display_name AS 카테고리, et.description AS 설명,
-            et.is_verified AS 검수완료, COUNT(eic.id) AS 이벤트사용수
-        FROM evt_treatments et
-        LEFT JOIN evt_categories ec ON et.category_id = ec.id
-        LEFT JOIN evt_item_components eic ON eic.treatment_id = et.id
-        WHERE et.is_active = 1
-        GROUP BY et.id, et.name, et.brand, ec.display_name, et.description, et.is_verified
-        ORDER BY ec.sort_order, et.name
-    """)
-    conn.close()
-    return rows
+    try:
+        return _query_rows(conn, """
+            SELECT
+                et.id, et.name AS 시술명, et.brand AS 브랜드,
+                ec.display_name AS 카테고리, et.description AS 설명,
+                et.is_verified AS 검수완료, COUNT(eic.id) AS 이벤트사용수
+            FROM evt_treatments et
+            LEFT JOIN evt_categories ec ON et.category_id = ec.id
+            LEFT JOIN evt_item_components eic ON eic.treatment_id = et.id
+            WHERE et.is_active = 1
+            GROUP BY et.id, et.name, et.brand, ec.display_name, et.description, et.is_verified
+            ORDER BY ec.sort_order, et.name
+        """)
+    finally:
+        conn.close()
 
 
 def update_treatment_info(treatment_id: int, description: str, is_verified: int) -> bool:
     """시술 설명 수정 + 검수 상태 업데이트."""
     try:
         conn = _get_conn()
-        c = conn.cursor()
-        c.execute(
-            "UPDATE evt_treatments SET description = ?, is_verified = ? WHERE id = ?",
-            (description, is_verified, treatment_id),
-        )
-        conn.commit()
-        conn.close()
-        return True
+        try:
+            c = conn.cursor()
+            c.execute(
+                "UPDATE evt_treatments SET description = ?, is_verified = ? WHERE id = ?",
+                (description, is_verified, treatment_id),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
     except Exception:
         return False
 
@@ -518,14 +521,16 @@ def add_treatment_entry(name: str, brand: str, category_id: int, description: st
     """시술 사전에 새 항목 추가."""
     try:
         conn = _get_conn()
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO evt_treatments (name, brand, category_id, description, is_verified) VALUES (?, ?, ?, ?, 0)",
-            (name, brand or None, category_id, description),
-        )
-        conn.commit()
-        conn.close()
-        return True
+        try:
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO evt_treatments (name, brand, category_id, description, is_verified) VALUES (?, ?, ?, ?, 0)",
+                (name, brand or None, category_id, description),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
     except Exception:
         return False
 
@@ -538,37 +543,40 @@ def get_treatment_descriptions(names: list[str]) -> dict:
     if not names:
         return {}
     conn = _get_conn()
-    c = conn.cursor()
-    result = {}
-    for name in names:
-        c.execute(
-            "SELECT name, description FROM evt_treatments WHERE ? LIKE '%' || name || '%' AND description IS NOT NULL ORDER BY LENGTH(name) DESC LIMIT 1",
-            (name,),
-        )
-        row = c.fetchone()
-        if row:
-            result[name] = {"treatment": row[0], "description": row[1]}
-    conn.close()
-    return result
+    try:
+        c = conn.cursor()
+        result = {}
+        for name in names:
+            c.execute(
+                "SELECT name, description FROM evt_treatments WHERE ? LIKE '%' || name || '%' AND description IS NOT NULL ORDER BY LENGTH(name) DESC LIMIT 1",
+                (name,),
+            )
+            row = c.fetchone()
+            if row:
+                result[name] = {"treatment": row[0], "description": row[1]}
+        return result
+    finally:
+        conn.close()
 
 
 def load_event_summary() -> list:
     """지점×카테고리별 이벤트 요약 통계."""
     conn = _get_conn()
-    rows = _query_rows(conn, """
-        SELECT
-            eb.name AS 지점명, er.name AS 지역,
-            ec.display_name AS 카테고리, COUNT(*) AS 이벤트수,
-            MIN(ei.event_price) AS 최저가, MAX(ei.event_price) AS 최고가,
-            ROUND(AVG(ei.discount_rate), 1) AS 평균할인율
-        FROM evt_items ei
-        JOIN evt_branches eb ON ei.branch_id = eb.id
-        JOIN evt_regions er ON eb.region_id = er.id
-        JOIN evt_categories ec ON ei.category_id = ec.id
-        JOIN evt_periods ep ON ei.event_period_id = ep.id
-        WHERE ep.is_current = 1 AND ei.is_active = 1
-        GROUP BY eb.name, er.name, ec.display_name
-        ORDER BY er.sort_order, eb.name, ec.sort_order
-    """)
-    conn.close()
-    return rows
+    try:
+        return _query_rows(conn, """
+            SELECT
+                eb.name AS 지점명, er.name AS 지역,
+                ec.display_name AS 카테고리, COUNT(*) AS 이벤트수,
+                MIN(ei.event_price) AS 최저가, MAX(ei.event_price) AS 최고가,
+                ROUND(AVG(ei.discount_rate), 1) AS 평균할인율
+            FROM evt_items ei
+            JOIN evt_branches eb ON ei.branch_id = eb.id
+            JOIN evt_regions er ON eb.region_id = er.id
+            JOIN evt_categories ec ON ei.category_id = ec.id
+            JOIN evt_periods ep ON ei.event_period_id = ep.id
+            WHERE ep.is_current = 1 AND ei.is_active = 1
+            GROUP BY eb.name, er.name, ec.display_name
+            ORDER BY er.sort_order, eb.name, ec.sort_order
+        """)
+    finally:
+        conn.close()

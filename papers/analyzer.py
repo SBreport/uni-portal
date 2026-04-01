@@ -31,6 +31,7 @@ if _PROJECT_ROOT_FOR_PATH not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT_FOR_PATH)
 from pathlib import Path
 from datetime import datetime
+from shared.db import now_str
 
 import fitz  # PyMuPDF
 import requests
@@ -651,7 +652,7 @@ def process_pdf(pdf_path: str, device_list: list[dict], treatment_list: list[dic
 def save_to_db(papers: list[dict]):
     """papers DB에 직접 저장."""
     conn = sqlite3.connect(DB_PATH)
-    now = datetime.now().isoformat()
+    now = now_str()
     created = 0
 
     for p in papers:

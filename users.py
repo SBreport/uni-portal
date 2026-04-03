@@ -5,6 +5,7 @@
 
 import sqlite3
 import os
+import json
 
 from shared.db import get_conn as _shared_get_conn, SYSTEM_DB
 
@@ -60,7 +61,7 @@ def load_users():
         conn = _get_conn()
         try:
             c = conn.cursor()
-            c.execute("SELECT username, password_hash, role, branch_id, memo FROM users ORDER BY username")
+            c.execute("SELECT username, password_hash, role, branch_id, memo, permissions FROM users ORDER BY username")
             for row in c.fetchall():
                 users.append({
                     "username": row["username"],
@@ -68,6 +69,7 @@ def load_users():
                     "role": row["role"],
                     "branch_id": row["branch_id"],
                     "memo": row["memo"] if "memo" in row.keys() else "",
+                    "permissions": row["permissions"] if "permissions" in row.keys() else "[]",
                 })
         finally:
             conn.close()
@@ -102,7 +104,7 @@ def get_user(username):
     return None
 
 
-def add_user(username, password_hash, role, branch_id=None, memo=""):
+def add_user(username, password_hash, role, branch_id=None, memo="", permissions="[]"):
     """사용자를 추가한다."""
     if get_user(username):
         return False, f"'{username}' 은(는) 이미 존재합니다."
@@ -112,8 +114,8 @@ def add_user(username, password_hash, role, branch_id=None, memo=""):
         try:
             c = conn.cursor()
             c.execute(
-                "INSERT INTO users (username, password_hash, role, branch_id, memo) VALUES (?, ?, ?, ?, ?)",
-                (username, password_hash, role, branch_id, memo),
+                "INSERT INTO users (username, password_hash, role, branch_id, memo, permissions) VALUES (?, ?, ?, ?, ?, ?)",
+                (username, password_hash, role, branch_id, memo, permissions),
             )
             conn.commit()
             return True, f"'{username}' 사용자가 추가되었습니다."
@@ -212,3 +214,56 @@ def ensure_memo_column():
             conn.close()
     except Exception:
         pass
+
+
+def ensure_permissions_column():
+    """기존 DB에 permissions 컬럼이 없으면 추가한다."""
+    try:
+        conn = _get_conn()
+        try:
+            c = conn.cursor()
+            c.execute("PRAGMA table_info(users)")
+            cols = [row["name"] for row in c.fetchall()]
+            if "permissions" not in cols:
+                c.execute("ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT '[]'")
+                conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+ensure_permissions_column()
+
+
+def update_user_permissions(username, permissions_json):
+    """사용자 권한 태그를 변경한다."""
+    try:
+        conn = _get_conn()
+        try:
+            c = conn.cursor()
+            c.execute("UPDATE users SET permissions = ? WHERE username = ?", (permissions_json, username))
+            if c.rowcount == 0:
+                return False, f"'{username}' 을(를) 찾을 수 없습니다."
+            conn.commit()
+            return True, f"'{username}' 권한이 변경되었습니다."
+        finally:
+            conn.close()
+    except Exception as e:
+        return False, f"권한 변경 실패: {e}"
+
+
+def get_user_permissions(username):
+    """사용자 권한 태그 목록을 반환한다."""
+    try:
+        conn = _get_conn()
+        try:
+            c = conn.cursor()
+            c.execute("SELECT permissions FROM users WHERE username = ?", (username,))
+            row = c.fetchone()
+            if row and row["permissions"]:
+                return json.loads(row["permissions"])
+            return []
+        finally:
+            conn.close()
+    except Exception:
+        return []

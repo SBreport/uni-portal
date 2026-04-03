@@ -39,6 +39,7 @@ async def get_current_user(
         "username": payload["sub"],
         "role": payload["role"],
         "branch_id": payload.get("branch_id"),
+        "permissions": payload.get("permissions", []),
     }
 
 
@@ -52,6 +53,22 @@ def require_role(min_role: str):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"'{min_role}' 이상의 권한이 필요합니다.",
+            )
+        return user
+
+    return _check
+
+
+def require_permission(permission: str):
+    """특정 권한 태그 요구 의존성 팩토리."""
+
+    async def _check(user: Annotated[dict, Depends(get_current_user)]) -> dict:
+        if user["role"] == "admin":
+            return user  # admin은 모든 권한 자동 부여
+        if permission not in user.get("permissions", []):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"'{permission}' 권한이 필요합니다.",
             )
         return user
 

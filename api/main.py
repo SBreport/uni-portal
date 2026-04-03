@@ -31,10 +31,16 @@ if PROJECT_ROOT not in sys.path:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """앱 시작 시 DB 테이블 보장."""
+    """앱 시작 시 DB 테이블 보장 + 스케줄러 시작."""
     from init_db import init_db
     init_db()
+
+    from api.scheduler import setup_scheduler, scheduler
+    setup_scheduler()
+
     yield
+
+    scheduler.shutdown()
 
 
 app = FastAPI(
@@ -54,7 +60,7 @@ app.add_middleware(
 )
 
 # 라우터 등록
-from api.routers import auth, users, cafe, equipment, events, papers, blog, place, webpage
+from api.routers import auth, users, cafe, equipment, events, papers, blog, place, webpage, treatment_catalog, complaints
 
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
@@ -65,6 +71,8 @@ app.include_router(papers.router)
 app.include_router(blog.router)
 app.include_router(place.router)
 app.include_router(webpage.router)
+app.include_router(treatment_catalog.router)
+app.include_router(complaints.router)
 
 
 @app.get("/health")

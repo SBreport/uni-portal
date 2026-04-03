@@ -35,6 +35,11 @@ const router = createRouter({
       name: 'papers',
       component: () => import('@/views/PapersView.vue'),
     },
+    {
+      path: '/crossref',
+      name: 'crossref',
+      component: () => import('@/views/CrossReferenceView.vue'),
+    },
     // ── 마케팅 하위 ──
     {
       path: '/cafe',
@@ -64,6 +69,12 @@ const router = createRouter({
       name: 'webpage',
       component: () => import('@/views/WebpageView.vue'),
     },
+    // ── 민원 ──
+    {
+      path: '/complaints',
+      name: 'complaints',
+      component: () => import('@/views/ComplaintsView.vue'),
+    },
     // ── 보고서 ──
     {
       path: '/reports',
@@ -88,6 +99,13 @@ router.beforeEach((to) => {
   if (to.meta.adminOnly) {
     const role = localStorage.getItem('role')
     if (role !== 'admin') return { name: 'home' }
+  }
+  // 권한 태그 체크
+  if (to.meta.requiredPermission) {
+    const role = localStorage.getItem('role')
+    if (role === 'admin') return true
+    const perms: string[] = JSON.parse(localStorage.getItem('permissions') || '[]')
+    if (!perms.includes(to.meta.requiredPermission as string)) return { name: 'home' }
   }
   return true
 })

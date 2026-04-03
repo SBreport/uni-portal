@@ -9,8 +9,15 @@ export const useAuthStore = defineStore('auth', () => {
   const branchId = ref<number | null>(
     localStorage.getItem('branch_id') ? Number(localStorage.getItem('branch_id')) : null
   )
+  const permissionTags = ref<string[]>(
+    JSON.parse(localStorage.getItem('permissions') || '[]')
+  )
 
   const isAuthenticated = computed(() => !!token.value)
+
+  function hasPermission(perm: string): boolean {
+    return role.value === 'admin' || permissionTags.value.includes(perm)
+  }
 
   const permissions = computed(() => {
     const r = role.value
@@ -36,9 +43,11 @@ export const useAuthStore = defineStore('auth', () => {
     username.value = data.username
     role.value = data.role
     branchId.value = data.branch_id
+    permissionTags.value = data.permissions || []
     localStorage.setItem('token', data.access_token)
     localStorage.setItem('username', data.username)
     localStorage.setItem('role', data.role)
+    localStorage.setItem('permissions', JSON.stringify(data.permissions || []))
     if (data.branch_id != null) {
       localStorage.setItem('branch_id', String(data.branch_id))
     }
@@ -49,11 +58,13 @@ export const useAuthStore = defineStore('auth', () => {
     username.value = ''
     role.value = ''
     branchId.value = null
+    permissionTags.value = []
     localStorage.removeItem('token')
     localStorage.removeItem('username')
     localStorage.removeItem('role')
     localStorage.removeItem('branch_id')
+    localStorage.removeItem('permissions')
   }
 
-  return { token, username, role, branchId, isAuthenticated, permissions, roleLabel, login, logout }
+  return { token, username, role, branchId, permissionTags, isAuthenticated, permissions, hasPermission, roleLabel, login, logout }
 })

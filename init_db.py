@@ -571,6 +571,109 @@ def init_db():
     """)
 
     # ============================================================
+    # 시술 카탈로그 (treatment_catalog)
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS treatment_catalog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_type TEXT NOT NULL CHECK(item_type IN ('device','material','method')),
+        category TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        sub_option TEXT,
+        display_name TEXT NOT NULL,
+        device_id INTEGER REFERENCES device_info(id),
+        description TEXT DEFAULT '',
+        sort_order INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tc_category ON treatment_catalog(category)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tc_device ON treatment_catalog(device_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tc_item ON treatment_catalog(item_name)")
+
+    # ============================================================
+    # 플레이스 일별 데이터 (place_daily)
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS place_daily (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        branch_id INTEGER NOT NULL,
+        branch_name TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        is_exposed INTEGER DEFAULT 0,
+        rank INTEGER,
+        source TEXT DEFAULT 'sheets',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(date, branch_id, keyword)
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_place_daily_date ON place_daily(date)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_place_daily_branch ON place_daily(branch_id)")
+
+    # ============================================================
+    # 웹페이지 일별 데이터 (webpage_daily)
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS webpage_daily (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        branch_id INTEGER NOT NULL,
+        branch_name TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        is_exposed INTEGER DEFAULT 0,
+        rank INTEGER,
+        executor TEXT DEFAULT '',
+        source TEXT DEFAULT 'sheets',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(date, branch_id, keyword)
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_webpage_daily_date ON webpage_daily(date)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_webpage_daily_branch ON webpage_daily(branch_id)")
+
+    # ============================================================
+    # 민원 (complaints)
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS complaints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        branch_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT DEFAULT '',
+        category TEXT DEFAULT '',
+        severity TEXT DEFAULT 'normal',
+        status TEXT DEFAULT 'received',
+        reported_by TEXT DEFAULT '',
+        assigned_to TEXT DEFAULT '',
+        resolution TEXT DEFAULT '',
+        resolved_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_complaints_branch ON complaints(branch_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status)")
+
+    # ============================================================
+    # 민원 상태 이력 (complaint_logs)
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS complaint_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        complaint_id INTEGER NOT NULL REFERENCES complaints(id),
+        old_status TEXT NOT NULL,
+        new_status TEXT NOT NULL,
+        changed_by TEXT DEFAULT '',
+        note TEXT DEFAULT '',
+        changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_complaint_logs_cid ON complaint_logs(complaint_id)")
+
+    # ============================================================
     # 마이그레이션: 기존 DB에 새 컬럼 추가 (이미 있으면 무시)
     # ============================================================
     migrations = [

@@ -8,11 +8,13 @@ import sys
 import subprocess
 import os
 import time as _time
-from typing import Optional
+from typing import Annotated, Optional
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from datetime import datetime
+
+from api.deps import require_role
 
 from api.models import PaperCreate, PaperUpdate
 from papers.queries import (
@@ -23,6 +25,7 @@ from papers.queries import (
 )
 
 router = APIRouter(prefix="/papers", tags=["papers"])
+_editor = require_role("editor")
 
 # PaperCreate에 없는 키 목록 (paper_analyzer.py 출력에 포함되는 메타 키)
 _EXTRA_KEYS = {
@@ -277,3 +280,60 @@ async def upload_json(file: UploadFile = File(...)):
         "message": f"{inserted}건 등록, {len(duplicates)}건 중복 건너뜀"
             + (f", {len(errors)}건 오류" if errors else ""),
     }
+
+
+# ── 논문-블로그 연동 ──
+@router.get("/{paper_id}/blog-links")
+def get_blog_links(paper_id: int):
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        rows = conn.execute("""
+            SELECT pbl.*, bp.title as bp_title, bp.keyword as blog_keyword,
+                   bp.published_url as bp_url, bp.blog_channel as bp_channel
+            FROM paper_blog_links pbl
+            LEFT JOIN blog_posts bp ON pbl.blog_post_id = bp.id
+            WHERE pbl.paper_id = ?
+            ORDER BY pbl.created_at DESC
+        """, (paper_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.post("/{paper_id}/blog-links")
+def add_blog_link(paper_id: int, blog_post_id: int, user: Annotated[dict, Depends(_editor)]):
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        bp = conn.execute(
+            "SELECT title, published_url, blog_channel FROM blog_posts WHERE id = ?",
+            (blog_post_id,),
+        ).fetchone()
+        conn.execute("""
+            INSERT OR IGNORE INTO paper_blog_links
+            (paper_id, blog_post_id, blog_url, blog_title, blog_channel)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            paper_id,
+            blog_post_id,
+            bp["published_url"] if bp else "",
+            bp["title"] if bp else "",
+            bp["blog_channel"] if bp else "",
+        ))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+@router.delete("/{paper_id}/blog-links/{link_id}")
+def remove_blog_link(paper_id: int, link_id: int, user: Annotated[dict, Depends(_editor)]):
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        conn.execute("DELETE FROM paper_blog_links WHERE id = ? AND paper_id = ?", (link_id, paper_id))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()

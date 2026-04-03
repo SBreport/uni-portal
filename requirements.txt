@@ -13,6 +13,9 @@ openpyxl
 gspread
 google-auth
 
+# 스케줄러
+apscheduler>=3.10.0
+
 # 시각화 (보고서용)
 plotly
 

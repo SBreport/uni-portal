@@ -1,7 +1,7 @@
 """Pydantic 스키마 — API 요청/응답 모델."""
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 
 # ── Auth ──
@@ -16,12 +16,14 @@ class TokenResponse(BaseModel):
     username: str
     role: str
     branch_id: Optional[int] = None
+    permissions: List[str] = []
 
 
 class UserInfo(BaseModel):
     username: str
     role: str
     branch_id: Optional[int] = None
+    permissions: List[str] = []
 
 
 # ── Users ──
@@ -31,6 +33,7 @@ class UserCreate(BaseModel):
     role: str = "viewer"
     branch_id: Optional[int] = None
     memo: str = ""
+    permissions: List[str] = []
 
 
 class UserUpdate(BaseModel):
@@ -38,6 +41,7 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     memo: Optional[str] = None
     branch_id: Optional[int] = None
+    permissions: Optional[List[str]] = None
 
 
 # ── Cafe ──

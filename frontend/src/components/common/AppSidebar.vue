@@ -40,9 +40,11 @@ const topItems: MenuItem[] = [
   { path: '/equipment', label: '보유장비', icon: 'E' },
   { path: '/events', label: '이벤트', icon: 'V' },
   { path: '/treatment-info', label: '시술정보', icon: 'T' },
+  { path: '/crossref', label: '크로스체크', icon: 'X' },
 ]
 
 const bottomItems: MenuItem[] = [
+  { path: '/complaints', label: '민원관리', icon: 'M' },
   { path: '/reports', label: '보고서', icon: 'R' },
   { path: '/admin', label: '관리자 모드', icon: 'A', adminOnly: true },
 ]

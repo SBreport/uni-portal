@@ -7,7 +7,7 @@ from api.auth_jwt import verify_password, create_access_token
 from api.deps import get_current_user
 from api.models import LoginRequest, TokenResponse, UserInfo
 
-from users import get_user
+from users import get_user, get_user_permissions
 
 router = APIRouter()
 
@@ -20,12 +20,14 @@ async def login(req: LoginRequest):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="ID 또는 비밀번호가 올바르지 않습니다.",
         )
-    token = create_access_token(user["username"], user["role"], user.get("branch_id"))
+    permissions = get_user_permissions(user["username"])
+    token = create_access_token(user["username"], user["role"], user.get("branch_id"), permissions)
     return TokenResponse(
         access_token=token,
         username=user["username"],
         role=user["role"],
         branch_id=user.get("branch_id"),
+        permissions=permissions,
     )
 
 

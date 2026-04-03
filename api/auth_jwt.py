@@ -31,12 +31,13 @@ def verify_password(plain: str, stored_hash: str) -> bool:
     return hash_password(plain) == stored_hash
 
 
-def create_access_token(username: str, role: str, branch_id: int | None) -> str:
+def create_access_token(username: str, role: str, branch_id: int | None, permissions: list[str] | None = None) -> str:
     """JWT 액세스 토큰 생성."""
     payload = {
         "sub": username,
         "role": role,
         "branch_id": branch_id,
+        "permissions": permissions or [],
         "exp": int(time.time()) + SESSION_TTL,
     }
     return jwt.encode(payload, _get_salt(), algorithm="HS256")

@@ -7,7 +7,7 @@ import os
 import sys
 import shutil
 import subprocess
-from typing import Optional
+from typing import Annotated, Optional
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
 from pydantic import BaseModel
 
@@ -20,6 +20,7 @@ from blog.post_queries import (
 )
 
 router = APIRouter(prefix="/blog", tags=["Blog"])
+_admin = require_role("admin")
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 UPLOAD_DIR = os.path.join(DB_DIR, "blog")
@@ -238,3 +239,18 @@ def import_blog_data(user: dict = Depends(require_role("admin"))):
         return {"message": "블로그 데이터 임포트 완료"}
     except Exception as e:
         raise HTTPException(500, f"임포트 실패: {str(e)}")
+
+
+# ── 스케줄러 상태/트리거 ──
+@router.get("/scheduler/status")
+async def scheduler_status(user: Annotated[dict, Depends(_admin)]):
+    from api.scheduler import get_scheduler_status
+    return get_scheduler_status()
+
+
+@router.post("/scheduler/trigger")
+async def scheduler_trigger(user: Annotated[dict, Depends(_admin)]):
+    from api.scheduler import _run_blog_sync
+    import asyncio
+    asyncio.create_task(_run_blog_sync())
+    return {"ok": True, "message": "sync triggered"}

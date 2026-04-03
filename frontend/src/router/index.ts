@@ -36,9 +36,9 @@ const router = createRouter({
       component: () => import('@/views/PapersView.vue'),
     },
     {
-      path: '/crossref',
-      name: 'crossref',
-      component: () => import('@/views/CrossReferenceView.vue'),
+      path: '/branch-info',
+      name: 'branch-info',
+      component: () => import('@/views/BranchInfoView.vue'),
     },
     // ── 마케팅 하위 ──
     {

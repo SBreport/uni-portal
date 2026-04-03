@@ -37,11 +37,11 @@ const marketingChildren = computed<MenuItem[]>(() => [
 // 최상위 메뉴 (마케팅 제외)
 const topItems: MenuItem[] = [
   { path: '/', label: 'HOME', icon: 'H' },
+  { path: '/branch-info', label: '지점 정보', icon: 'B' },
   { path: '/equipment', label: '보유장비', icon: 'E' },
   { path: '/events', label: '이벤트', icon: 'V' },
   { path: '/treatment-info', label: '시술정보', icon: 'T' },
   { path: '/complaints', label: '민원관리', icon: 'M' },
-  { path: '/crossref', label: '크로스체크', icon: 'X' },
 ]
 
 const bottomItems: MenuItem[] = [

@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import * as equipApi from '@/api/equipment'
 import PapersView from '@/views/PapersView.vue'
+import CrossReferenceView from '@/views/CrossReferenceView.vue'
+
+const route = useRoute()
 
 // ── 탭 ──
-const activeTab = ref<'dictionary' | 'papers'>('dictionary')
+const activeTab = ref<'dictionary' | 'papers' | 'catalog' | 'crossref'>('dictionary')
+
+// 쿼리 파라미터로 탭/검색어 전달 받기 (지점 정보에서 클릭 시)
+watch(() => route.query, (q) => {
+  if (q.tab === 'crossref') activeTab.value = 'crossref'
+}, { immediate: true })
 
 // ── 시술 사전 데이터 ──
 const devices = ref<any[]>([])
@@ -83,6 +92,8 @@ function editDevice(d: any) {
       <button v-for="tab in [
         { key: 'dictionary', label: '시술사전' },
         { key: 'papers', label: '시술논문' },
+        { key: 'catalog', label: '시술카탈로그' },
+        { key: 'crossref', label: '크로스체크' },
       ]" :key="tab.key"
         @click="activeTab = tab.key as any"
         :class="['pb-2 text-sm font-medium border-b-2 transition',
@@ -193,6 +204,26 @@ function editDevice(d: any) {
     <!-- ========== 시술논문 탭 ========== -->
     <div v-if="activeTab === 'papers'">
       <PapersView />
+    </div>
+
+    <!-- ========== 시술 카탈로그 탭 ========== -->
+    <div v-if="activeTab === 'catalog'">
+      <div class="max-w-3xl">
+        <p class="text-sm text-slate-400 mb-4">
+          시술/장비/재료 마스터 데이터. 카테고리별 항목과 세부 옵션을 관리합니다.
+        </p>
+        <div class="text-sm text-slate-500">
+          <a href="/api/treatment-catalog" target="_blank" class="text-blue-500 hover:underline">
+            API: /treatment-catalog
+          </a>
+          — 시술 카탈로그 CRUD (데이터 입력 후 여기에 표시됩니다)
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 크로스체크 탭 ========== -->
+    <div v-if="activeTab === 'crossref'">
+      <CrossReferenceView />
     </div>
   </div>
 </template>

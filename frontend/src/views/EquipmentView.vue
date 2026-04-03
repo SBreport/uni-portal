@@ -163,8 +163,8 @@ function formatPrice(n: number | null) {
                 <th class="text-left pl-3 pr-1 py-2 font-medium text-slate-500 whitespace-nowrap w-14">지점</th>
                 <th class="text-left px-1 py-2 font-medium text-slate-500 whitespace-nowrap w-16">카테고리</th>
                 <th class="text-left px-1 py-2 font-medium text-slate-500 whitespace-nowrap w-28">장비명</th>
-                <th class="text-center px-1 py-2 font-medium text-slate-500 w-8">qty</th>
-                <th class="text-center px-1 py-2 font-medium text-slate-500 w-6">📷</th>
+                <th class="text-center px-1 py-2 font-medium text-slate-500 w-8">수량</th>
+                <th class="text-center px-1 py-2 font-medium text-slate-500 w-6">사진</th>
                 <th class="text-left px-1 pr-2 py-2 font-medium text-slate-500 w-16">비고</th>
               </tr>
             </thead>

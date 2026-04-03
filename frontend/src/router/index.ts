@@ -87,6 +87,48 @@ const router = createRouter({
       name: 'admin',
       component: () => import('@/views/AdminView.vue'),
     },
+    // ── 작성자 전용 (/w/) ──
+    {
+      path: '/w',
+      component: () => import('@/views/layouts/WriterLayout.vue'),
+      meta: { requiredPermission: 'cafe_write' },
+      children: [
+        {
+          path: '',
+          name: 'writer-home',
+          component: () => import('@/views/CafeView.vue'),
+        },
+        {
+          path: 'cafe',
+          name: 'writer-cafe',
+          component: () => import('@/views/CafeView.vue'),
+        },
+        {
+          path: 'blog',
+          name: 'writer-blog',
+          component: () => import('@/views/BlogView.vue'),
+          props: { mode: 'uandi' },
+        },
+      ],
+    },
+    // ── 발행자 전용 (/p/) ──
+    {
+      path: '/p',
+      component: () => import('@/views/layouts/PublisherLayout.vue'),
+      meta: { requiredPermission: 'cafe_publish' },
+      children: [
+        {
+          path: '',
+          name: 'publisher-home',
+          component: () => import('@/views/CafeView.vue'),
+        },
+        {
+          path: 'cafe',
+          name: 'publisher-cafe',
+          component: () => import('@/views/CafeView.vue'),
+        },
+      ],
+    },
   ],
 })
 

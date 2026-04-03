@@ -60,7 +60,7 @@ app.add_middleware(
 )
 
 # 라우터 등록
-from api.routers import auth, users, cafe, equipment, events, papers, blog, place, webpage, treatment_catalog, complaints
+from api.routers import auth, users, cafe, equipment, events, papers, blog, place, webpage, treatment_catalog, complaints, reports
 
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
@@ -73,6 +73,7 @@ app.include_router(place.router)
 app.include_router(webpage.router)
 app.include_router(treatment_catalog.router)
 app.include_router(complaints.router)
+app.include_router(reports.router)
 
 
 @app.get("/health")

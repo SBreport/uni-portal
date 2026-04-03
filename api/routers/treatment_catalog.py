@@ -55,6 +55,12 @@ async def search_crossref(q: str = ""):
     return search_cross_reference(q)
 
 
+@router.get("/validation-report")
+async def validation_report(user: Annotated[dict, Depends(_editor)]):
+    from treatment.validation import get_validation_report
+    return get_validation_report()
+
+
 @router.get("/{item_id}")
 async def get_item(item_id: int):
     from treatment.db import get_catalog_item

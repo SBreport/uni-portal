@@ -51,6 +51,12 @@ async def get_trends(branch_id: int, keyword: Optional[str] = None):
         conn.close()
 
 
+@router.get("/rank-comparison")
+async def rank_comparison(branch_id: int, date: Optional[str] = None):
+    from place.rank_collector import get_rank_comparison
+    return get_rank_comparison(branch_id, date)
+
+
 @router.get("/months")
 def get_months(user: dict = Depends(get_current_user)):
     """사용 가능한 월별 시트 목록 반환."""

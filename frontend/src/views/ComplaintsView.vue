@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   getComplaints, getComplaint, createComplaint,
-  changeComplaintStatus, getComplaintLogs,
+  changeComplaintStatus, getComplaintLogs, getComplaintSummary,
   type Complaint, type ComplaintLog
 } from '@/api/complaints'
 import api from '@/api/client'
@@ -18,6 +18,7 @@ const branches = ref<{ id: number; name: string }[]>([])
 const selectedComplaint = ref<Complaint | null>(null)
 const logs = ref<ComplaintLog[]>([])
 const loading = ref(false)
+const summary = ref<Record<string, number>>({})
 
 // Filters
 const filterStatus = ref('')
@@ -80,6 +81,7 @@ async function handleCreate() {
   showCreate.value = false
   form.value = { branch_id: 0, title: '', content: '', category: '', severity: 'normal' }
   await loadComplaints()
+  await loadSummary()
 }
 
 async function handleStatusChange(newStatus: string) {
@@ -87,6 +89,7 @@ async function handleStatusChange(newStatus: string) {
   const note = prompt('상태 변경 메모 (선택사항):') || ''
   await changeComplaintStatus(selectedComplaint.value.id, newStatus, note)
   await loadComplaints()
+  await loadSummary()
   await selectComplaint({ ...selectedComplaint.value, status: newStatus })
 }
 
@@ -106,9 +109,17 @@ const nextStatuses = computed(() => {
   return transitions[selectedComplaint.value.status] || []
 })
 
+async function loadSummary() {
+  try {
+    const { data } = await getComplaintSummary()
+    summary.value = data
+  } catch { /* ignore */ }
+}
+
 onMounted(() => {
   loadBranches()
   loadComplaints()
+  loadSummary()
   if (isBranch.value && auth.branchId) {
     form.value.branch_id = auth.branchId
   }
@@ -125,6 +136,26 @@ watch([filterStatus, filterBranch], loadComplaints)
         @click="showCreate = true"
         class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
       >+ 민원 등록</button>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-4 gap-3 mb-5">
+      <div class="bg-yellow-50 rounded-lg p-3 text-center">
+        <div class="text-lg font-bold text-yellow-700">{{ summary.received || 0 }}</div>
+        <div class="text-xs text-yellow-600">접수</div>
+      </div>
+      <div class="bg-blue-50 rounded-lg p-3 text-center">
+        <div class="text-lg font-bold text-blue-700">{{ summary.processing || 0 }}</div>
+        <div class="text-xs text-blue-600">처리중</div>
+      </div>
+      <div class="bg-green-50 rounded-lg p-3 text-center">
+        <div class="text-lg font-bold text-green-700">{{ summary.resolved || 0 }}</div>
+        <div class="text-xs text-green-600">처리완료</div>
+      </div>
+      <div class="bg-slate-50 rounded-lg p-3 text-center">
+        <div class="text-lg font-bold text-slate-500">{{ summary.closed || 0 }}</div>
+        <div class="text-xs text-slate-400">종결</div>
+      </div>
     </div>
 
     <!-- Filters -->
@@ -175,11 +206,26 @@ watch([filterStatus, filterBranch], loadComplaints)
       <h3 class="text-lg font-bold text-slate-800 mb-3">{{ selectedComplaint.title }}</h3>
       <p class="text-sm text-slate-600 whitespace-pre-wrap mb-4">{{ selectedComplaint.content || '(내용 없음)' }}</p>
 
+      <!-- Workflow Stepper -->
+      <div class="flex items-center gap-1 mb-4">
+        <template v-for="(step, idx) in ['received', 'processing', 'resolved', 'closed']" :key="step">
+          <div :class="[
+            'flex items-center justify-center w-20 h-8 rounded-lg text-xs font-medium transition',
+            selectedComplaint.status === step
+              ? statusLabels[step]?.color + ' ring-2 ring-offset-1 ring-blue-400'
+              : ['received','processing','resolved','closed'].indexOf(selectedComplaint.status) > ['received','processing','resolved','closed'].indexOf(step)
+                ? 'bg-slate-200 text-slate-500'
+                : 'bg-slate-100 text-slate-300'
+          ]">{{ statusLabels[step]?.label }}</div>
+          <span v-if="idx < 3" class="text-slate-300 text-xs">&rarr;</span>
+        </template>
+      </div>
+
       <div class="grid grid-cols-2 gap-2 text-sm text-slate-500 mb-4">
-        <div>상태: <span :class="['px-2 py-0.5 rounded-full text-xs', statusLabels[selectedComplaint.status]?.color]">{{ statusLabels[selectedComplaint.status]?.label }}</span></div>
         <div>심각도: {{ severityLabels[selectedComplaint.severity] }}</div>
         <div>등록자: {{ selectedComplaint.reported_by }}</div>
         <div>담당자: {{ selectedComplaint.assigned_to || '-' }}</div>
+        <div>등록일: {{ formatDate(selectedComplaint.created_at) }}</div>
       </div>
 
       <!-- Status Actions -->
@@ -187,7 +233,13 @@ watch([filterStatus, filterBranch], loadComplaints)
         <button
           v-for="ns in nextStatuses" :key="ns"
           @click="handleStatusChange(ns)"
-          class="px-3 py-1 text-xs rounded-lg border hover:bg-slate-50"
+          :class="[
+            'px-3 py-1.5 text-xs rounded-lg font-medium transition',
+            ns === 'processing' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' :
+            ns === 'resolved' ? 'bg-green-100 text-green-700 hover:bg-green-200' :
+            ns === 'closed' ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' :
+            'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+          ]"
         >{{ statusLabels[ns]?.label }}(으)로 변경</button>
       </div>
 

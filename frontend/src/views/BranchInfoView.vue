@@ -77,27 +77,52 @@ onMounted(loadBranches)
 
     <!-- Branch selector (when no branch selected) -->
     <div v-if="!branchData">
-      <input
-        v-model="searchQuery"
-        type="text"
-        placeholder="지점명 검색..."
-        class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400"
-      />
+      <!-- 검색 -->
+      <div class="relative mb-5">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="지점명 검색..."
+          class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 pl-10"
+        />
+        <svg class="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <span v-if="searchQuery" class="absolute right-3.5 top-3 text-xs text-slate-400">
+          {{ filteredBranches.length }}개 지점
+        </span>
+      </div>
 
-      <div class="space-y-1">
+      <!-- 카드 그리드 -->
+      <div class="grid grid-cols-2 gap-3">
         <div
           v-for="b in filteredBranches" :key="b.branch_id"
           @click="selectBranch(b.branch_id)"
-          class="p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-blue-300 transition flex items-center justify-between"
+          class="p-4 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-blue-400 hover:shadow-sm transition group"
         >
-          <span class="font-medium text-slate-700 text-sm">{{ b.branch_name }}</span>
-          <div class="flex gap-3 text-xs text-slate-400">
-            <span>장비 {{ b.equipment_count }}</span>
-            <span>이벤트 {{ b.event_count }}</span>
-            <span v-if="b.open_complaints" class="text-orange-500">민원 {{ b.open_complaints }}</span>
+          <div class="font-semibold text-slate-800 text-sm mb-3 group-hover:text-blue-600 transition">
+            {{ b.branch_name }}
+          </div>
+          <div class="flex gap-4 text-xs">
+            <div class="text-center">
+              <div class="text-base font-bold text-blue-600">{{ b.equipment_count }}</div>
+              <div class="text-slate-400">장비</div>
+            </div>
+            <div class="text-center">
+              <div class="text-base font-bold text-purple-600">{{ b.event_count }}</div>
+              <div class="text-slate-400">이벤트</div>
+            </div>
+            <div v-if="b.open_complaints" class="text-center">
+              <div class="text-base font-bold text-orange-500">{{ b.open_complaints }}</div>
+              <div class="text-orange-400">민원</div>
+            </div>
           </div>
         </div>
       </div>
+
+      <p v-if="!filteredBranches.length && searchQuery" class="text-center text-sm text-slate-400 py-8">
+        '{{ searchQuery }}' 검색 결과가 없습니다.
+      </p>
     </div>
 
     <!-- Branch detail -->

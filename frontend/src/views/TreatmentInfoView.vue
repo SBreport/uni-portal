@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import * as equipApi from '@/api/equipment'
 import api from '@/api/client'
 import PapersView from '@/views/PapersView.vue'
+import EncyclopediaView from '@/components/treatment/EncyclopediaView.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,7 +13,7 @@ const auth = useAuthStore()
 const isInternal = computed(() => auth.role === 'admin' || auth.role === 'editor')
 
 // ── 탭: 시술카탈로그 / 시술논문 ──
-const activeTab = ref<'catalog' | 'papers'>('catalog')
+const activeTab = ref<'encyclopedia' | 'catalog' | 'papers'>('encyclopedia')
 
 // ── 카탈로그 뷰 모드: list(목록) / detail(크로스체크 상세) ──
 const viewMode = ref<'list' | 'detail'>('list')
@@ -194,7 +195,8 @@ onUnmounted(() => {
     <!-- 서브 탭 -->
     <div class="flex gap-4 mb-5 border-b border-slate-200">
       <button v-for="tab in [
-        { key: 'catalog', label: '시술정보' },
+        { key: 'encyclopedia', label: '시술백과' },
+        { key: 'catalog', label: '시술카탈로그' },
         { key: 'papers', label: '시술논문' },
       ]" :key="tab.key"
         @click="activeTab = tab.key as any; viewMode = 'list'"
@@ -202,6 +204,9 @@ onUnmounted(() => {
           activeTab === tab.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600']"
       >{{ tab.label }}</button>
     </div>
+
+    <!-- ========== 시술백과 탭 ========== -->
+    <EncyclopediaView v-if="activeTab === 'encyclopedia'" />
 
     <!-- ========== 시술카탈로그 탭 ========== -->
     <div v-if="activeTab === 'catalog'">

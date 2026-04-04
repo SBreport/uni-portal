@@ -1,8 +1,10 @@
 """순위 체크 라우터 — SB체커 기능 (admin/editor 전용)."""
 
 import json
+import sqlite3
+import tempfile
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from api.deps import get_current_user, require_role
@@ -151,3 +153,112 @@ async def get_comparison(
     """실행사 vs SB체커 비교."""
     from checker.place_rank import get_comparison
     return get_comparison(branch_id, date)
+
+
+# ── SB_CHECKER DB 임포트 ──
+
+@router.post("/import-sb-db")
+async def import_sb_db(
+    user: Annotated[dict, Depends(require_role("admin"))],
+    file: UploadFile = File(...),
+):
+    """SB_CHECKER data.db 업로드 → keywords를 rank_check_keywords로 마이그레이션.
+
+    SB_CHECKER DB 스키마:
+      - customers: id, name (지점명)
+      - keywords: id, customerId, customerName, keyword, searchKeyword,
+                  placeId, executor, guaranteedRank, contractStatus, memo
+    """
+    from shared.db import get_conn, EQUIPMENT_DB
+
+    # 업로드 파일을 임시 파일로 저장
+    content = await file.read()
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        # SB_CHECKER DB 열기
+        sb_conn = sqlite3.connect(tmp_path)
+        sb_conn.row_factory = sqlite3.Row
+
+        # keywords 테이블 읽기 (active만)
+        sb_keywords = sb_conn.execute("""
+            SELECT k.*, c.name as customer_name_joined
+            FROM keywords k
+            LEFT JOIN customers c ON k.customerId = c.id
+            WHERE k.contractStatus = 'active'
+            ORDER BY k.customerName, k.keyword
+        """).fetchall()
+        sb_keywords = [dict(r) for r in sb_keywords]
+        sb_conn.close()
+
+        # uni-portal의 evt_branches에서 지점명 → branch_id 매핑
+        conn = get_conn(EQUIPMENT_DB)
+        try:
+            branches = conn.execute("SELECT id, name FROM evt_branches").fetchall()
+            branch_map = {r["name"]: r["id"] for r in branches}
+            # short_name도 매핑 (e.g., "선릉" → "선릉유앤아이")
+            branch_by_short = {}
+            for r in branches:
+                short = r["name"].replace("유앤아이", "")
+                branch_by_short[short] = r["id"]
+                branch_by_short[r["name"]] = r["id"]
+
+            imported = 0
+            skipped = 0
+            unmatched = []
+
+            for kw in sb_keywords:
+                customer_name = kw.get("customerName") or kw.get("customer_name_joined") or ""
+                keyword = kw.get("keyword", "")
+                place_id = str(kw.get("placeId", "")).replace(".0", "").strip()
+                search_keyword = kw.get("searchKeyword") or ""
+                guaranteed_rank = kw.get("guaranteedRank") or 5
+                memo = kw.get("memo") or kw.get("executor") or ""
+
+                if not keyword or not place_id:
+                    skipped += 1
+                    continue
+
+                # 지점명 매핑
+                branch_id = branch_map.get(customer_name) or branch_by_short.get(customer_name)
+                if not branch_id:
+                    # "유앤아이" 붙여서 재시도
+                    branch_id = branch_map.get(customer_name + "유앤아이")
+
+                if not branch_id:
+                    skipped += 1
+                    unmatched.append(customer_name)
+                    continue
+
+                # branch_name 확정
+                branch_name = customer_name if customer_name in branch_map else customer_name + "유앤아이"
+                if branch_name not in branch_map:
+                    # branch_by_short에서 찾은 경우
+                    for name, bid in branch_map.items():
+                        if bid == branch_id:
+                            branch_name = name
+                            break
+
+                conn.execute("""
+                    INSERT OR IGNORE INTO rank_check_keywords
+                    (branch_id, branch_name, keyword, search_keyword, place_id, guaranteed_rank, memo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (branch_id, branch_name, keyword, search_keyword, place_id, guaranteed_rank, memo))
+                imported += 1
+
+            conn.commit()
+
+            return {
+                "ok": True,
+                "imported": imported,
+                "skipped": skipped,
+                "total_in_sb": len(sb_keywords),
+                "unmatched_branches": list(set(unmatched)),
+            }
+        finally:
+            conn.close()
+    finally:
+        import os
+        os.unlink(tmp_path)

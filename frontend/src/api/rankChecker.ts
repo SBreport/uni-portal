@@ -33,3 +33,13 @@ export const getHistory = (branchId: number, days?: number) =>
 
 export const getComparison = (branchId: number, date?: string) =>
   api.get(`/rank-checker/comparison/${branchId}`, { params: date ? { date } : {} })
+
+// SB_CHECKER DB 임포트
+export const importSbDb = (file: File) => {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post('/rank-checker/import-sb-db', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
+}

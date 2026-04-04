@@ -34,6 +34,10 @@ const form = ref({
   memo: '',
 })
 
+// SB DB 임포트
+const importing = ref(false)
+const importResult = ref<any>(null)
+
 // 수정 모드
 const editingId = ref<number | null>(null)
 const editForm = ref<Record<string, any>>({})
@@ -272,6 +276,31 @@ const groupedHistory = computed(() => {
   return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a))
 })
 
+// ── SB DB 임포트 ──
+async function handleImportSbDb(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (!confirm('SB_CHECKER data.db에서 키워드를 가져옵니다.')) {
+    input.value = ''
+    return
+  }
+  importing.value = true
+  importResult.value = null
+  error.value = ''
+  try {
+    const { data } = await rcApi.importSbDb(file)
+    importResult.value = data
+    flashSuccess(`임포트 완료: ${data.imported}건 추가, ${data.skipped}건 스킵`)
+    await loadKeywords()
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || '임포트 실패'
+  } finally {
+    importing.value = false
+    input.value = ''
+  }
+}
+
 // ── 유틸 ──
 function flashSuccess(msg: string) {
   successMsg.value = msg
@@ -309,7 +338,23 @@ onMounted(loadKeywords)
           class="px-3 py-1.5 text-xs font-medium bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50 transition">
           {{ checking ? '체크 ��...' : '전체 순위 체크 실행' }}
         </button>
+        <label class="px-3 py-1.5 text-xs font-medium bg-slate-600 text-white rounded hover:bg-slate-700 transition cursor-pointer"
+          :class="{ 'opacity-50 pointer-events-none': importing }">
+          {{ importing ? '임포트 중...' : 'SB DB 임포트' }}
+          <input type="file" accept=".db" class="hidden" @change="handleImportSbDb" />
+        </label>
         <span v-if="keywords.length" class="text-xs text-slate-400 ml-2">{{ keywords.length }}개 키워드</span>
+      </div>
+
+      <!-- 임포트 결과 -->
+      <div v-if="importResult" class="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+        <div class="font-medium text-slate-700 mb-1">임포트 결과</div>
+        <div class="text-slate-500">
+          SB DB: {{ importResult.total_in_sb }}건 / 추가: {{ importResult.imported }}건 / 스킵: {{ importResult.skipped }}건
+        </div>
+        <div v-if="importResult.unmatched_branches?.length" class="mt-1 text-amber-600">
+          미매칭 지점: {{ importResult.unmatched_branches.join(', ') }}
+        </div>
       </div>
 
       <!-- 실시간 로그 -->

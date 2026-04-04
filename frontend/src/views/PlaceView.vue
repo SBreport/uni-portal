@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { getPlaceRankingDaily, syncPlaceToDB } from '@/api/place'
+import { getPlaceRankingDaily, syncPlaceToDB, getPlaceLastSync } from '@/api/place'
 import { getComparison } from '@/api/rankChecker'
 
 const auth = useAuthStore()
@@ -62,6 +62,7 @@ const loading = ref(true)
 const error = ref('')
 const data = ref<PlaceData | null>(null)
 const syncing = ref(false)
+const lastSync = ref<string | null>(null)
 
 // 날짜 선택 (기본: 오늘)
 const today = new Date()
@@ -263,6 +264,7 @@ async function handleSync() {
     const { data: res } = await syncPlaceToDB()
     alert(`동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved}건 저장`)
     await loadData()
+    await loadLastSync()
   } catch (e: any) {
     error.value = e.response?.data?.detail || '동기화 실패'
   } finally {
@@ -270,9 +272,16 @@ async function handleSync() {
   }
 }
 
+async function loadLastSync() {
+  try {
+    const { data: res } = await getPlaceLastSync()
+    lastSync.value = res.synced_at || null
+  } catch { /* ignore */ }
+}
+
 watch(selectedDate, () => loadData())
 
-onMounted(() => loadData())
+onMounted(() => { loadData(); loadLastSync() })
 </script>
 
 <template>
@@ -295,11 +304,12 @@ onMounted(() => loadData())
           class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 transition text-xs">&gt;</button>
       </div>
 
-      <!-- 동기화 버튼 (admin) -->
+      <!-- 동기화 버튼 (admin) + 마지막 동기화 -->
       <button v-if="isAdmin" @click="handleSync" :disabled="syncing"
         class="text-xs px-3 py-1 rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-50 shrink-0">
         {{ syncing ? '동기화 중...' : '시트 → DB 동기화' }}
       </button>
+      <span v-if="lastSync" class="text-[10px] text-slate-400 shrink-0">최종 동기화: {{ lastSync }}</span>
       <!-- 성공/실패/미달 큰 숫자 -->
       <template v-if="data">
         <div class="flex items-center gap-2 shrink-0">

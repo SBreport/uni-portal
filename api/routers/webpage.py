@@ -87,6 +87,22 @@ async def sync_webpage_to_db(user: dict = Depends(require_role("admin"))):
     return sync_all_to_db()
 
 
+@router.get("/last-sync")
+async def get_last_sync(user: dict = Depends(get_current_user)):
+    """웹페이지 마지막 동기화 시각."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        row = conn.execute(
+            "SELECT synced_at, added, detail FROM sync_log WHERE sync_type = 'webpage_sheets_to_db' ORDER BY synced_at DESC LIMIT 1"
+        ).fetchone()
+        if row:
+            return {"synced_at": row["synced_at"], "records": row["added"], "detail": row["detail"]}
+        return {"synced_at": None}
+    finally:
+        conn.close()
+
+
 @router.get("/ranking-daily")
 async def get_ranking_daily(
     date: str = Query(..., description="조회 날짜 (YYYY-MM-DD)"),

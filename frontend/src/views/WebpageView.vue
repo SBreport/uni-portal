@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { getWebpageRankingDaily, syncWebpageToDB } from '@/api/webpage'
+import { getWebpageRankingDaily, syncWebpageToDB, getWebpageLastSync } from '@/api/webpage'
 
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
@@ -55,6 +55,7 @@ const loading = ref(true)
 const error = ref('')
 const data = ref<WebpageData | null>(null)
 const syncing = ref(false)
+const lastSync = ref<string | null>(null)
 
 const today = new Date()
 const selectedDate = ref(today.toISOString().slice(0, 10))
@@ -222,6 +223,7 @@ async function handleSync() {
     const { data: res } = await syncWebpageToDB()
     alert(`동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved}건 저장`)
     await loadData()
+    await loadLastSync()
   } catch (e: any) {
     error.value = e.response?.data?.detail || '동기화 실패'
   } finally {
@@ -229,9 +231,16 @@ async function handleSync() {
   }
 }
 
+async function loadLastSync() {
+  try {
+    const { data: res } = await getWebpageLastSync()
+    lastSync.value = res.synced_at || null
+  } catch { /* ignore */ }
+}
+
 watch(selectedDate, () => loadData())
 
-onMounted(() => loadData())
+onMounted(() => { loadData(); loadLastSync() })
 </script>
 
 <template>
@@ -257,6 +266,7 @@ onMounted(() => loadData())
         class="text-xs px-3 py-1 rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-50 shrink-0">
         {{ syncing ? '동기화 중...' : '시트 → DB 동기화' }}
       </button>
+      <span v-if="lastSync" class="text-[10px] text-slate-400 shrink-0">최종 동기화: {{ lastSync }}</span>
       <!-- 노출/미노출/미달 큰 숫자 -->
       <template v-if="data">
         <div class="flex items-center gap-2 shrink-0">

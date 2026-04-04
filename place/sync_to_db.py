@@ -69,6 +69,14 @@ def sync_all_to_db() -> dict:
             "sheets_processed": sheets_processed,
             "records_saved": total_inserted,
         }
+        # 동기화 이력 기록
+        from datetime import datetime
+        conn.execute("""
+            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at)
+            VALUES (?, ?, 0, 0, ?, ?)
+        """, ("place_sheets_to_db", total_inserted, f"{sheets_processed}개 시트",
+              datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
         logger.info(f"[place_sync] 완료: {result}")
         return result
     except Exception as e:

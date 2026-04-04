@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { getPlaceMonths, getPlaceRanking, getPlaceRankingDB, syncPlaceToDB } from '@/api/place'
+import { getComparison } from '@/api/rankChecker'
 
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
@@ -14,6 +15,7 @@ interface DailyData {
 
 interface BranchRanking {
   branch: string
+  branch_id: number
   keyword: string
   nosul_count: number
   today_rank: number | null
@@ -77,6 +79,32 @@ function goPrev() { if (canPrev.value) monthIndex.value++ }
 function goNext() { if (canNext.value) monthIndex.value-- }
 
 const isAdmin = computed(() => auth.role === 'admin')
+const isEditor = computed(() => ['admin', 'editor'].includes(auth.role))
+
+// ── SB체커 토글 ──
+const expandedBranch = ref<string | null>(null)
+const comparisonData = ref<any>(null)
+const comparisonLoading = ref(false)
+
+async function toggleBranch(b: BranchRanking) {
+  if (!isEditor.value) return
+  if (expandedBranch.value === b.branch) {
+    expandedBranch.value = null
+    comparisonData.value = null
+    return
+  }
+  expandedBranch.value = b.branch
+  comparisonLoading.value = true
+  comparisonData.value = null
+  try {
+    const { data: res } = await getComparison(b.branch_id)
+    comparisonData.value = res
+  } catch {
+    comparisonData.value = { comparisons: [], mismatch_count: 0 }
+  } finally {
+    comparisonLoading.value = false
+  }
+}
 
 // 검색 + 정렬
 const searchQuery = ref('')
@@ -428,35 +456,92 @@ onMounted(async () => {
                   <tr v-if="filteredBranches.length === 0">
                     <td :colspan="isBranch ? 9 : 10" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
-                  <tr v-for="b in filteredBranches" :key="b.branch"
-                    class="border-b border-slate-100 hover:bg-blue-50/30 transition-colors">
-                    <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap">{{ shortName(b.branch) }}</td>
-                    <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
-                    <td class="py-[5px] text-center whitespace-nowrap" :class="rankClass(b.today_rank)">
-                      {{ b.today_rank ? b.today_rank + '위' : '-' }}
-                    </td>
-                    <td class="py-[5px] text-center whitespace-nowrap">
-                      <span class="inline-flex gap-0.5">
-                        <span v-for="(r, i) in recentRanks(b)" :key="i"
-                          class="text-[11px] font-medium tabular-nums"
-                          :class="r.rank === null ? 'text-slate-300' : r.rank <= 5 ? 'text-emerald-600' : 'text-red-500'"
-                        >{{ r.rank ?? '-' }}<span v-if="i < recentRanks(b).length - 1" class="text-slate-200 mx-px">·</span></span>
-                      </span>
-                    </td>
-                    <td class="py-[5px] text-center text-slate-500 tabular-nums">{{ b.streak > 0 ? b.streak + '일' : '-' }}</td>
-                    <td class="py-[5px] text-center text-blue-500 tabular-nums">{{ b.month_success_count > 0 ? b.month_success_count + '일' : '-' }}</td>
-                    <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
-                    <td class="py-[5px] text-center font-semibold tabular-nums"
-                      :class="b.nosul_count >= 23 ? 'text-red-500' : b.nosul_count >= 15 ? 'text-amber-500' : 'text-slate-600'">
-                      {{ b.nosul_count }}
-                    </td>
-                    <td class="py-[5px] text-center">
-                      <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusBadge(b.status).cls">
-                        {{ statusBadge(b.status).text }}
-                      </span>
-                    </td>
-                    <td v-if="!isBranch" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
-                  </tr>
+                  <template v-for="b in filteredBranches" :key="b.branch">
+                    <tr @click="isEditor && toggleBranch(b)"
+                      :class="['border-b border-slate-100 hover:bg-blue-50/30 transition-colors',
+                        isEditor ? 'cursor-pointer' : '',
+                        expandedBranch === b.branch ? 'bg-blue-50/50' : '']">
+                      <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap">
+                        <span v-if="isEditor" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>{{ shortName(b.branch) }}
+                      </td>
+                      <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
+                      <td class="py-[5px] text-center whitespace-nowrap" :class="rankClass(b.today_rank)">
+                        {{ b.today_rank ? b.today_rank + '위' : '-' }}
+                      </td>
+                      <td class="py-[5px] text-center whitespace-nowrap">
+                        <span class="inline-flex gap-0.5">
+                          <span v-for="(r, i) in recentRanks(b)" :key="i"
+                            class="text-[11px] font-medium tabular-nums"
+                            :class="r.rank === null ? 'text-slate-300' : r.rank <= 5 ? 'text-emerald-600' : 'text-red-500'"
+                          >{{ r.rank ?? '-' }}<span v-if="i < recentRanks(b).length - 1" class="text-slate-200 mx-px">·</span></span>
+                        </span>
+                      </td>
+                      <td class="py-[5px] text-center text-slate-500 tabular-nums">{{ b.streak > 0 ? b.streak + '일' : '-' }}</td>
+                      <td class="py-[5px] text-center text-blue-500 tabular-nums">{{ b.month_success_count > 0 ? b.month_success_count + '일' : '-' }}</td>
+                      <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
+                      <td class="py-[5px] text-center font-semibold tabular-nums"
+                        :class="b.nosul_count >= 23 ? 'text-red-500' : b.nosul_count >= 15 ? 'text-amber-500' : 'text-slate-600'">
+                        {{ b.nosul_count }}
+                      </td>
+                      <td class="py-[5px] text-center">
+                        <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusBadge(b.status).cls">
+                          {{ statusBadge(b.status).text }}
+                        </span>
+                      </td>
+                      <td v-if="!isBranch" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
+                    </tr>
+                    <!-- SB체커 비교 하위 행 -->
+                    <tr v-if="expandedBranch === b.branch && isEditor" class="bg-amber-50/50">
+                      <td :colspan="isBranch ? 9 : 10" class="px-3 py-2">
+                        <div v-if="comparisonLoading" class="text-xs text-slate-400 py-2 text-center">비교 데이터 로딩 중...</div>
+                        <div v-else-if="comparisonData && comparisonData.comparisons.length > 0">
+                          <div class="flex items-center gap-2 mb-1.5">
+                            <span class="text-[10px] font-bold text-amber-700">SB체커 비교</span>
+                            <span class="text-[10px] text-slate-400">{{ comparisonData.date }}</span>
+                            <span v-if="comparisonData.mismatch_count > 0"
+                              class="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded font-medium">
+                              불일치 {{ comparisonData.mismatch_count }}건
+                            </span>
+                          </div>
+                          <table class="w-full text-[11px]">
+                            <thead>
+                              <tr class="text-slate-400">
+                                <th class="text-left px-2 py-1 font-medium">키워드</th>
+                                <th class="text-center px-2 py-1 font-medium">SB순위</th>
+                                <th class="text-center px-2 py-1 font-medium">SB노출</th>
+                                <th class="text-center px-2 py-1 font-medium">실행사순위</th>
+                                <th class="text-center px-2 py-1 font-medium">실행사노출</th>
+                                <th class="text-center px-2 py-1 font-medium">일치</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="c in comparisonData.comparisons" :key="c.keyword"
+                                :class="c.mismatch ? 'bg-red-50/80' : ''">
+                                <td class="px-2 py-1 text-slate-700 font-medium">{{ c.keyword }}</td>
+                                <td class="px-2 py-1 text-center" :class="c.checker?.rank && c.checker.rank <= (c.checker.guaranteed_rank || 5) ? 'text-emerald-600 font-semibold' : 'text-red-500'">
+                                  {{ c.checker?.rank ? c.checker.rank + '위' : '-' }}
+                                </td>
+                                <td class="px-2 py-1 text-center" :class="c.checker?.is_exposed ? 'text-emerald-600' : 'text-red-400'">
+                                  {{ c.checker ? (c.checker.is_exposed ? 'O' : 'X') : '-' }}
+                                </td>
+                                <td class="px-2 py-1 text-center" :class="c.agency?.rank && c.agency.rank <= 5 ? 'text-emerald-600 font-semibold' : c.agency?.rank ? 'text-red-500' : 'text-slate-300'">
+                                  {{ c.agency?.rank ? c.agency.rank + '위' : '-' }}
+                                </td>
+                                <td class="px-2 py-1 text-center" :class="c.agency?.is_exposed ? 'text-emerald-600' : 'text-red-400'">
+                                  {{ c.agency ? (c.agency.is_exposed ? 'O' : 'X') : '-' }}
+                                </td>
+                                <td class="px-2 py-1 text-center font-medium"
+                                  :class="c.mismatch ? 'text-red-600' : !c.checker || !c.agency ? 'text-slate-300' : 'text-emerald-600'">
+                                  {{ c.mismatch ? '불일치' : !c.checker ? '(신규)' : !c.agency ? '(없음)' : '일치' }}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                        <div v-else class="text-xs text-slate-400 py-2 text-center">비교 데이터가 없습니다 (키워드 미등록 또는 체크 미실행)</div>
+                      </td>
+                    </tr>
+                  </template>
                 </tbody>
               </table>
             </div>

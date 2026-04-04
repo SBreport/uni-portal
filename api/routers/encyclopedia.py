@@ -1,10 +1,11 @@
-"""시술 백과사전 API — 목적별/부위별/장비별 조회."""
+"""시술 백과사전 API — 목적별/부위별/장비별 조회 + 동기화 관리."""
 
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
-from api.deps import get_current_user
+from api.deps import get_current_user, require_role
 
 router = APIRouter(prefix="/encyclopedia", tags=["Encyclopedia"])
+_admin = require_role("admin")
 
 
 @router.get("/purposes")
@@ -324,3 +325,80 @@ async def get_by_equipment(
         }
     finally:
         conn.close()
+
+
+# ── 백과사전 관리 (admin) ──
+
+@router.post("/refresh")
+async def refresh_encyclopedia(user=Depends(_admin)):
+    """태그 재추출 + 신규/삭제 감지 + 자동 추천. 이벤트 동기화 후 호출."""
+    from treatment.extract_tags import run_extraction
+    from treatment.sync_diff import detect_diff_and_recommend
+
+    extract_result = run_extraction()
+    diff_result = detect_diff_and_recommend()
+
+    return {
+        "extract": extract_result,
+        "diff": diff_result,
+    }
+
+
+@router.get("/pending")
+async def get_pending(user=Depends(_admin)):
+    """승인 대기 중인 항목 목록."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        rows = conn.execute("""
+            SELECT * FROM encyclopedia_pending
+            WHERE status = 'pending'
+            ORDER BY action, created_at DESC
+        """).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@router.get("/pending/summary")
+async def get_pending_summary(user=Depends(get_current_user)):
+    """승인 대기 요약 (배지 표시용)."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        row = conn.execute("""
+            SELECT
+                SUM(CASE WHEN action = 'new' THEN 1 ELSE 0 END) as new_cnt,
+                SUM(CASE WHEN action = 'removed' THEN 1 ELSE 0 END) as removed_cnt,
+                SUM(CASE WHEN action = 'recommend' THEN 1 ELSE 0 END) as recommend_cnt
+            FROM encyclopedia_pending WHERE status = 'pending'
+        """).fetchone()
+        return {
+            "new": row[0] or 0,
+            "removed": row[1] or 0,
+            "recommend": row[2] or 0,
+            "total": (row[0] or 0) + (row[1] or 0) + (row[2] or 0),
+        }
+    finally:
+        conn.close()
+
+
+@router.post("/pending/{pending_id}/approve")
+async def approve(pending_id: int, user=Depends(_admin)):
+    """개별 항목 승인."""
+    from treatment.sync_diff import approve_pending
+    return approve_pending(pending_id)
+
+
+@router.post("/pending/{pending_id}/dismiss")
+async def dismiss(pending_id: int, user=Depends(_admin)):
+    """개별 항목 무시."""
+    from treatment.sync_diff import dismiss_pending
+    return dismiss_pending(pending_id)
+
+
+@router.post("/pending/approve-all")
+async def approve_all(user=Depends(_admin)):
+    """추천 태그 전체 일괄 승인."""
+    from treatment.sync_diff import approve_all_recommended
+    return approve_all_recommended()

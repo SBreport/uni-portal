@@ -12,3 +12,13 @@ export const getByBodyPart = (part: string) =>
 
 export const getByEquipment = (name: string) =>
   api.get('/encyclopedia/by-equipment', { params: { name } })
+
+// 관리
+export const refreshEncyclopedia = () =>
+  api.post('/encyclopedia/refresh', {}, { timeout: 120000 })
+
+export const getPending = () => api.get('/encyclopedia/pending')
+export const getPendingSummary = () => api.get('/encyclopedia/pending/summary')
+export const approvePending = (id: number) => api.post(`/encyclopedia/pending/${id}/approve`)
+export const dismissPending = (id: number) => api.post(`/encyclopedia/pending/${id}/dismiss`)
+export const approveAll = () => api.post('/encyclopedia/pending/approve-all')

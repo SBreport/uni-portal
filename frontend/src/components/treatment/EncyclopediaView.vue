@@ -159,52 +159,6 @@ onMounted(() => { loadLists(); loadPendingSummary() })
 
 <template>
   <div>
-    <!-- 관리자 패널 -->
-    <div v-if="isAdmin" class="mb-4 flex items-center gap-2 flex-wrap">
-      <button @click="handleRefresh" :disabled="refreshing"
-        class="px-3 py-1.5 text-xs font-medium bg-slate-600 text-white rounded hover:bg-slate-700 disabled:opacity-50 transition">
-        {{ refreshing ? '갱신 중...' : '백과사전 갱신' }}
-      </button>
-      <button v-if="pendingSummary.total > 0" @click="loadPending"
-        class="px-3 py-1.5 text-xs font-medium bg-amber-500 text-white rounded hover:bg-amber-600 transition">
-        대기 항목 {{ pendingSummary.total }}건
-      </button>
-      <span v-if="refreshResult" class="text-[11px] text-slate-400">
-        추출 {{ refreshResult.extract?.total_tags?.toLocaleString() }}태그 |
-        신규 {{ refreshResult.diff?.new_items }}건 |
-        삭제 {{ refreshResult.diff?.removed_items }}건 |
-        추천 {{ refreshResult.diff?.untagged_recommended }}건
-      </span>
-    </div>
-
-    <!-- pending 목록 (모달 대신 인라인) -->
-    <div v-if="showPending && pendingItems.length > 0" class="mb-4 border border-amber-200 rounded-lg overflow-hidden">
-      <div class="flex items-center justify-between px-3 py-2 bg-amber-50 border-b border-amber-200">
-        <span class="text-xs font-bold text-amber-700">대기 항목 ({{ pendingItems.length }}건)</span>
-        <div class="flex gap-2">
-          <button @click="handleApproveAll" :disabled="approving"
-            class="text-[10px] px-2 py-0.5 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50">
-            {{ approving ? '처리 중...' : '추천 전체 승인' }}
-          </button>
-          <button @click="showPending = false" class="text-[10px] text-slate-400 hover:underline">닫기</button>
-        </div>
-      </div>
-      <div class="max-h-64 overflow-y-auto">
-        <div v-for="p in pendingItems" :key="p.id"
-          class="flex items-center gap-2 px-3 py-1.5 border-b border-amber-50 text-xs hover:bg-amber-50/50">
-          <span class="w-12 shrink-0 font-medium"
-            :class="{ 'text-green-600': p.action === 'new', 'text-red-500': p.action === 'removed', 'text-blue-600': p.action === 'recommend' }">
-            {{ p.action === 'new' ? '신규' : p.action === 'removed' ? '삭제' : '추천' }}
-          </span>
-          <span class="flex-1 text-slate-700 truncate">{{ p.source_name }}</span>
-          <span v-if="p.raw_category" class="text-[10px] text-slate-400 shrink-0">{{ p.raw_category }}</span>
-          <span v-if="p.recommended_tags" class="text-[10px] text-blue-500 shrink-0 max-w-48 truncate">{{ p.recommended_tags }}</span>
-          <button @click="handleApprove(p.id)" class="text-[10px] text-green-600 hover:underline shrink-0">승인</button>
-          <button @click="handleDismiss(p.id)" class="text-[10px] text-slate-400 hover:underline shrink-0">무시</button>
-        </div>
-      </div>
-    </div>
-
     <!-- 목록 모드 -->
     <template v-if="mode === 'list'">
       <!-- 탭 -->

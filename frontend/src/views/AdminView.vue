@@ -4,8 +4,9 @@ import * as equipApi from '@/api/equipment'
 import UserManagement from '@/components/admin/UserManagement.vue'
 import SyncSettings from '@/components/admin/SyncSettings.vue'
 import RankChecker from '@/components/admin/RankChecker.vue'
+import EncyclopediaAdmin from '@/components/admin/EncyclopediaAdmin.vue'
 
-const activeTab = ref<'users' | 'sync' | 'rank-checker'>('users')
+const activeTab = ref<'users' | 'sync' | 'rank-checker' | 'encyclopedia'>('users')
 const branches = ref<{ id: number; name: string }[]>([])
 
 async function loadBranches() { branches.value = (await equipApi.getBranches()).data }
@@ -21,6 +22,7 @@ onMounted(loadBranches)
         { key: 'users', label: '사용자' },
         { key: 'sync', label: '데이터 동기화' },
         { key: 'rank-checker', label: 'SB체커' },
+        { key: 'encyclopedia', label: '백과사전 관리' },
       ]" :key="tab.key"
         @click="activeTab = tab.key as any"
         :class="['pb-2 text-sm font-medium border-b-2 transition',
@@ -31,5 +33,6 @@ onMounted(loadBranches)
     <UserManagement v-if="activeTab === 'users'" :branches="branches" />
     <SyncSettings v-if="activeTab === 'sync'" :branches="branches" />
     <RankChecker v-if="activeTab === 'rank-checker'" :branches="branches" />
+    <EncyclopediaAdmin v-if="activeTab === 'encyclopedia'" />
   </div>
 </template>

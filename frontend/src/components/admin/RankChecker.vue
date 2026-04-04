@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import * as rcApi from '@/api/rankChecker'
 
 const props = defineProps<{ branches: { id: number; name: string }[] }>()
@@ -10,9 +10,12 @@ const loading = ref(false)
 const error = ref('')
 const successMsg = ref('')
 
-// 체크 실행
+// 체크 실행 (SSE 스트리밍)
 const checking = ref(false)
 const checkResult = ref<any>(null)
+const streamLogs = ref<{ time: string; text: string; type: string }[]>([])
+const streamProgress = ref({ checked: 0, total: 0, branches: 0, totalBranches: 0 })
+const logContainer = ref<HTMLElement | null>(null)
 
 // 이력
 const historyBranchId = ref<number | null>(null)
@@ -138,20 +141,96 @@ async function removeKeyword(kw: any) {
   }
 }
 
-// ��─ 순위 체��� 실행 ──
-async function runCheckAll() {
-  if (!confirm('전체 지점 순위 체크를 실행합니다. 시간이 걸릴 수 있습니다.')) return
+// ── 순위 체크 실행 (SSE 스트리밍) ──
+function addLog(text: string, type: string = 'info') {
+  const now = new Date()
+  const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
+  streamLogs.value.push({ time, text, type })
+  nextTick(() => {
+    if (logContainer.value) logContainer.value.scrollTop = logContainer.value.scrollHeight
+  })
+}
+
+function runCheckAll() {
+  if (!confirm('전체 지점 순위 체크를 실행합니다.')) return
   checking.value = true
   checkResult.value = null
+  streamLogs.value = []
+  streamProgress.value = { checked: 0, total: 0, branches: 0, totalBranches: 0 }
   error.value = ''
-  try {
-    const { data } = await rcApi.checkAll()
-    checkResult.value = data
-    flashSuccess(`체크 완료: ${data.branches}개 지점, ${data.total_checked}건`)
-  } catch (e: any) {
-    error.value = e.response?.data?.detail || '체크 실행 실패'
-  } finally {
-    checking.value = false
+
+  const token = localStorage.getItem('token')
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+  const url = `${baseUrl}/rank-checker/check-all-stream`
+
+  addLog('전체 순위 체크 시작...', 'info')
+
+  fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+    .then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      function read(): Promise<void> {
+        return reader.read().then(({ done, value }) => {
+          if (done) {
+            checking.value = false
+            return
+          }
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            try {
+              const evt = JSON.parse(line.slice(6))
+              handleStreamEvent(evt)
+            } catch { /* skip */ }
+          }
+          return read()
+        })
+      }
+      return read()
+    })
+    .catch(e => {
+      error.value = `스트리밍 오류: ${e.message}`
+      addLog(`오류: ${e.message}`, 'error')
+      checking.value = false
+    })
+}
+
+function handleStreamEvent(evt: any) {
+  switch (evt.type) {
+    case 'start':
+      streamProgress.value.total = evt.total_keywords
+      streamProgress.value.totalBranches = evt.total_branches
+      addLog(`${evt.total_branches}개 지점, ${evt.total_keywords}개 키워드 체크 시작`, 'info')
+      break
+    case 'checking':
+      streamProgress.value.checked = evt.checked
+      addLog(`${evt.branch_name} > ${evt.keyword} 체크 중...`, 'checking')
+      break
+    case 'result': {
+      streamProgress.value.checked = evt.checked
+      const rank = evt.rank ? `${evt.rank}위` : '미노출'
+      const icon = evt.is_exposed ? 'O' : 'X'
+      addLog(`${evt.branch_name} > ${evt.keyword} → ${rank} ${icon}`, evt.is_exposed ? 'success' : 'fail')
+      break
+    }
+    case 'branch_done':
+      streamProgress.value.branches = evt.branch_idx
+      addLog(`── ${evt.branch_name} 완료 (${evt.branch_idx}/${evt.total_branches}) ──`, 'branch')
+      break
+    case 'done':
+      addLog(`전체 완료: ${evt.total_branches}개 지점, ${evt.total_checked}건 체크`, 'done')
+      checking.value = false
+      flashSuccess(`체크 완료: ${evt.total_branches}개 지점, ${evt.total_checked}건`)
+      break
+    case 'error':
+      addLog(`오류: ${evt.branch_name} > ${evt.keyword} — ${evt.error}`, 'error')
+      break
   }
 }
 
@@ -233,16 +312,36 @@ onMounted(loadKeywords)
         <span v-if="keywords.length" class="text-xs text-slate-400 ml-2">{{ keywords.length }}개 키워드</span>
       </div>
 
-      <!-- 체크 결과 -->
-      <div v-if="checkResult" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-        <div class="text-xs font-medium text-blue-700 mb-2">체크 결��</div>
-        <div class="grid grid-cols-4 gap-2 text-xs">
-          <div v-for="r in checkResult.results" :key="r.keyword"
-            class="flex items-center gap-1.5 px-2 py-1 rounded"
-            :class="r.is_exposed ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'">
-            <span class="font-medium">{{ r.keyword }}</span>
-            <span>{{ r.rank ? r.rank + '위' : '미노출' }}</span>
+      <!-- 실시간 로그 -->
+      <div v-if="streamLogs.length > 0" class="mb-4 border border-slate-300 rounded-lg overflow-hidden">
+        <!-- 진행률 바 -->
+        <div v-if="checking || streamProgress.checked > 0" class="px-3 py-2 bg-slate-800 text-white flex items-center gap-3">
+          <span class="text-xs font-mono">
+            {{ checking ? '실행 중...' : '완료' }}
+            ({{ streamProgress.branches }}/{{ streamProgress.totalBranches }}지점,
+             {{ streamProgress.checked }}/{{ streamProgress.total }}키워드)
+          </span>
+          <div class="flex-1 h-1.5 bg-slate-600 rounded-full overflow-hidden">
+            <div class="h-full bg-amber-400 rounded-full transition-all duration-300"
+              :style="{ width: (streamProgress.total > 0 ? (streamProgress.checked / streamProgress.total) * 100 : 0) + '%' }"></div>
           </div>
+          <span class="text-xs font-mono text-amber-300">
+            {{ streamProgress.total > 0 ? Math.round((streamProgress.checked / streamProgress.total) * 100) : 0 }}%
+          </span>
+        </div>
+        <!-- 로그 출력 -->
+        <div ref="logContainer" class="bg-slate-900 p-3 max-h-64 overflow-y-auto font-mono text-[11px] leading-5">
+          <div v-for="(log, i) in streamLogs" :key="i"
+            :class="{
+              'text-slate-400': log.type === 'info' || log.type === 'checking',
+              'text-green-400': log.type === 'success',
+              'text-red-400': log.type === 'fail' || log.type === 'error',
+              'text-amber-300 font-bold': log.type === 'branch',
+              'text-cyan-300 font-bold': log.type === 'done',
+            }">
+            <span class="text-slate-600 mr-2">{{ log.time }}</span>{{ log.text }}
+          </div>
+          <div v-if="checking" class="text-slate-500 animate-pulse">_</div>
         </div>
       </div>
 

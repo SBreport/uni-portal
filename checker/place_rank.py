@@ -158,6 +158,126 @@ def run_check_all() -> dict:
     return {"ok": True, "branches": len(branches), "total_checked": total_checked, "results": all_results}
 
 
+def run_check_all_stream():
+    """전 지점 순위 체크 — 키워드마다 yield하는 제너레이터.
+
+    Yields:
+        dict: 각 단계의 상태 메시지.
+            type="start"    → 전체 시작 정보
+            type="checking"  → 키워드 체크 시작
+            type="result"    → 키워드 체크 결과
+            type="branch_done" → 지점 완료
+            type="done"      → 전체 완료
+            type="error"     → 오류
+    """
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        branches = conn.execute(
+            "SELECT DISTINCT branch_id, branch_name FROM rank_check_keywords WHERE is_active = 1"
+        ).fetchall()
+        branches = [dict(b) for b in branches]
+    finally:
+        conn.close()
+
+    # 키워드 총 개수
+    conn2 = get_conn(EQUIPMENT_DB)
+    try:
+        total_keywords = conn2.execute(
+            "SELECT COUNT(*) FROM rank_check_keywords WHERE is_active = 1"
+        ).fetchone()[0]
+    finally:
+        conn2.close()
+
+    yield {
+        "type": "start",
+        "total_branches": len(branches),
+        "total_keywords": total_keywords,
+    }
+
+    checked = 0
+    branch_idx = 0
+
+    for b in branches:
+        branch_idx += 1
+        bid = b["branch_id"]
+        bname = b["branch_name"]
+
+        conn3 = get_conn(EQUIPMENT_DB)
+        try:
+            keywords = conn3.execute(
+                "SELECT * FROM rank_check_keywords WHERE branch_id = ? AND is_active = 1",
+                (bid,)
+            ).fetchall()
+            keywords = [dict(kw) for kw in keywords]
+        finally:
+            conn3.close()
+
+        for kw in keywords:
+            checked += 1
+            search_kw = kw["search_keyword"] or kw["keyword"]
+
+            yield {
+                "type": "checking",
+                "branch_idx": branch_idx,
+                "branch_name": bname,
+                "keyword": kw["keyword"],
+                "checked": checked,
+                "total_keywords": total_keywords,
+            }
+
+            try:
+                rank = check_place_rank(search_kw, kw["place_id"])
+                is_exposed = 1 if rank and rank <= (kw["guaranteed_rank"] or 5) else 0
+
+                today = date.today().isoformat()
+                conn4 = get_conn(EQUIPMENT_DB)
+                try:
+                    conn4.execute("""
+                        INSERT OR REPLACE INTO rank_checks
+                        (date, keyword_id, branch_id, branch_name, keyword, rank, is_exposed, checked_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (today, kw["id"], bid, bname, kw["keyword"], rank, is_exposed,
+                          datetime.now().isoformat()))
+                    conn4.commit()
+                finally:
+                    conn4.close()
+
+                yield {
+                    "type": "result",
+                    "branch_name": bname,
+                    "keyword": kw["keyword"],
+                    "rank": rank,
+                    "is_exposed": is_exposed,
+                    "guaranteed_rank": kw["guaranteed_rank"],
+                    "checked": checked,
+                    "total_keywords": total_keywords,
+                }
+            except Exception as e:
+                yield {
+                    "type": "error",
+                    "branch_name": bname,
+                    "keyword": kw["keyword"],
+                    "error": str(e),
+                    "checked": checked,
+                    "total_keywords": total_keywords,
+                }
+
+            time.sleep(0.5)
+
+        yield {
+            "type": "branch_done",
+            "branch_idx": branch_idx,
+            "branch_name": bname,
+            "total_branches": len(branches),
+        }
+
+    yield {
+        "type": "done",
+        "total_branches": len(branches),
+        "total_checked": checked,
+    }
+
+
 def get_branch_rank_history(branch_id: int, days: int = 30) -> list[dict]:
     """지점의 순위 체크 이력."""
     conn = get_conn(EQUIPMENT_DB)

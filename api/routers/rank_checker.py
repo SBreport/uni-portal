@@ -1,7 +1,9 @@
 """순위 체크 라우터 — SB체커 기능 (admin/editor 전용)."""
 
+import json
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from api.deps import get_current_user, require_role
 
@@ -113,6 +115,22 @@ async def check_all(user: Annotated[dict, Depends(_editor)]):
     """전 지점 순위 체크 실행."""
     from checker.place_rank import run_check_all
     return run_check_all()
+
+
+@router.get("/check-all-stream")
+async def check_all_stream(user: Annotated[dict, Depends(_editor)]):
+    """전 지점 순위 체크 — SSE 스트리밍."""
+    from checker.place_rank import run_check_all_stream
+
+    def event_generator():
+        for event in run_check_all_stream():
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── 결과 조회 ──

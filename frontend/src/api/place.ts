@@ -14,3 +14,6 @@ export const syncPlaceToDB = () =>
 
 export const getPlaceDaily = (params?: { branch_id?: number; date_from?: string; date_to?: string }) =>
   api.get('/place/daily', { params })
+
+export const getPlaceRankingDaily = (date: string) =>
+  api.get('/place/ranking-daily', { params: { date } })

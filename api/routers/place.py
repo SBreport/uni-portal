@@ -93,6 +93,107 @@ async def sync_place_to_db(user: dict = Depends(require_role("admin"))):
     return sync_all_to_db()
 
 
+@router.get("/ranking-daily")
+async def get_ranking_daily(
+    date: str = Query(..., description="조회 날짜 (YYYY-MM-DD)"),
+    user: dict = Depends(get_current_user),
+):
+    """특정 날짜 기준 전 지점 상위노출 데이터 (최근5일·연속일 포함)."""
+    from datetime import datetime, timedelta
+    from shared.db import get_conn, EQUIPMENT_DB
+
+    target = datetime.strptime(date, "%Y-%m-%d").date()
+    # 최근 5일 + streak 계산을 위해 30일치 로드
+    range_from = (target - timedelta(days=30)).isoformat()
+    range_to = target.isoformat()
+
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        rows = conn.execute("""
+            SELECT date, branch_id, branch_name, keyword, is_exposed, rank
+            FROM place_daily
+            WHERE date >= ? AND date <= ?
+            ORDER BY branch_name, date
+        """, (range_from, range_to)).fetchall()
+
+        # 지점별 그룹핑
+        branches: dict = {}
+        for r in rows:
+            bname = r["branch_name"]
+            if bname not in branches:
+                branches[bname] = {
+                    "branch": bname,
+                    "branch_id": r["branch_id"],
+                    "keyword": r["keyword"],
+                    "history": {},  # date → {is_exposed, rank}
+                }
+            branches[bname]["history"][r["date"]] = {
+                "is_exposed": r["is_exposed"],
+                "rank": r["rank"],
+            }
+
+        result = []
+        for bname, bdata in branches.items():
+            hist = bdata["history"]
+            today_data = hist.get(date)
+
+            # 최근 5일 (target 포함 이전 5일)
+            recent = []
+            for i in range(5, 0, -1):
+                d = (target - timedelta(days=i)).isoformat()
+                h = hist.get(d)
+                recent.append({
+                    "day": int(d.split("-")[2]),
+                    "rank": h["rank"] if h else None,
+                })
+
+            # 연속 노출일 (target부터 역방향)
+            streak = 0
+            for i in range(0, 31):
+                d = (target - timedelta(days=i)).isoformat()
+                h = hist.get(d)
+                if h and h["is_exposed"]:
+                    streak += 1
+                else:
+                    break
+
+            # 해당 월 누적 노출일
+            month_prefix = date[:7]  # "2026-04"
+            month_exposed = sum(1 for d, h in hist.items() if d.startswith(month_prefix) and h["is_exposed"])
+            month_days = sum(1 for d in hist if d.startswith(month_prefix))
+
+            today_rank = today_data["rank"] if today_data else None
+            today_exposed = bool(today_data["is_exposed"]) if today_data else False
+
+            result.append({
+                "branch": bname,
+                "branch_id": bdata["branch_id"],
+                "keyword": bdata["keyword"],
+                "today_rank": today_rank,
+                "today_success": today_exposed,
+                "streak": streak,
+                "nosul_count": month_exposed,
+                "month_success_count": month_exposed,
+                "work_days": month_days,
+                "status": "active" if today_exposed else ("fail" if today_data else "미달"),
+                "daily": recent,
+            })
+
+        return {
+            "date": date,
+            "branches": result,
+            "summary": {
+                "total": len(result),
+                "success_today": sum(1 for b in result if b["today_success"]),
+                "fail_today": sum(1 for b in result if b["status"] == "fail"),
+                "midal": sum(1 for b in result if b["status"] == "미달"),
+            },
+            "source": "db",
+        }
+    finally:
+        conn.close()
+
+
 @router.get("/ranking-db")
 async def get_ranking_from_db(
     year: int = Query(...),

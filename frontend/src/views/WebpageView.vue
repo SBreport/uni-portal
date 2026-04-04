@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { getWebpageMonths, getWebpageRanking, getWebpageRankingDB, syncWebpageToDB } from '@/api/webpage'
+import { getWebpageRankingDaily, syncWebpageToDB } from '@/api/webpage'
 
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
@@ -25,10 +25,7 @@ interface BranchRanking {
 }
 
 interface WebpageData {
-  year: number
-  month: number
-  days: number
-  today_index: number
+  date: string
   branches: BranchRanking[]
   summary: { total: number; success_today: number; fail_today: number; midal: number }
 }
@@ -56,20 +53,22 @@ const AGENCIES = ['채움AD'] as const
 
 const loading = ref(true)
 const error = ref('')
-const months = ref<string[]>([])
-const monthIndex = ref(0)
 const data = ref<WebpageData | null>(null)
 const syncing = ref(false)
-const useDB = ref(true)
-const selectedYear = ref(new Date().getFullYear())
-const selectedMonthNum = ref(new Date().getMonth() + 1)
 
-const selectedMonth = computed(() => months.value[monthIndex.value] ?? '')
-const canPrev = computed(() => monthIndex.value < months.value.length - 1)
-const canNext = computed(() => monthIndex.value > 0)
+const today = new Date()
+const selectedDate = ref(today.toISOString().slice(0, 10))
 
-function goPrev() { if (canPrev.value) monthIndex.value++ }
-function goNext() { if (canNext.value) monthIndex.value-- }
+function goDay(offset: number) {
+  const d = new Date(selectedDate.value)
+  d.setDate(d.getDate() + offset)
+  selectedDate.value = d.toISOString().slice(0, 10)
+}
+
+const displayDate = computed(() => {
+  const d = new Date(selectedDate.value)
+  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()} (${['일','월','화','수','목','금','토'][d.getDay()]})`
+})
 
 const isAdmin = computed(() => auth.role === 'admin')
 
@@ -173,10 +172,7 @@ function pct(count: number, total: number): string {
 }
 
 function recentDays(b: BranchRanking): { day: number; exposed: number; mark: string }[] {
-  if (!data.value) return []
-  const ti = data.value.today_index
-  const start = Math.max(0, ti - 5)
-  return b.daily.slice(start, ti).map(d => ({ day: d.day, exposed: d.exposed, mark: d.mark }))
+  return b.daily || []
 }
 
 function barWidth(count: number): number {
@@ -204,36 +200,13 @@ function shortName(branch: string): string {
   return branch.replace('유앤아이의원 ', '').replace('유앤아이의원', '').replace('유앤아이 ', '').replace('점', '')
 }
 
-async function loadMonths() {
-  try {
-    const { data: res } = await getWebpageMonths()
-    months.value = res
-    monthIndex.value = 0
-  } catch (e: any) {
-    error.value = e.response?.data?.detail || '월 목록을 불러올 수 없습니다'
-  }
-}
-
 async function loadData() {
   loading.value = true
   error.value = ''
   try {
-    if (useDB.value) {
-      const { data: res } = await getWebpageRankingDB(selectedYear.value, selectedMonthNum.value)
-      data.value = res
-    } else {
-      if (!selectedMonth.value) return
-      const { data: res } = await getWebpageRanking(selectedMonth.value)
-      data.value = res
-    }
+    const { data: res } = await getWebpageRankingDaily(selectedDate.value)
+    data.value = res
   } catch (e: any) {
-    if (useDB.value) {
-      useDB.value = false
-      error.value = 'DB 데이터 없음 — 구글시트에서 불러옵니다. 동기화 버튼을 눌러 DB에 저장하세요.'
-      await loadMonths()
-      await loadData()
-      return
-    }
     error.value = e.response?.data?.detail || '데이터를 불러올 수 없습니다'
     data.value = null
   } finally {
@@ -248,7 +221,6 @@ async function handleSync() {
   try {
     const { data: res } = await syncWebpageToDB()
     alert(`동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved}건 저장`)
-    useDB.value = true
     await loadData()
   } catch (e: any) {
     error.value = e.response?.data?.detail || '동기화 실패'
@@ -257,13 +229,9 @@ async function handleSync() {
   }
 }
 
-watch(selectedMonth, () => { if (!useDB.value) loadData() })
-watch([selectedYear, selectedMonthNum], () => { if (useDB.value) loadData() })
+watch(selectedDate, () => loadData())
 
-onMounted(async () => {
-  await loadData()
-  if (!useDB.value) await loadMonths()
-})
+onMounted(() => loadData())
 </script>
 
 <template>
@@ -273,26 +241,17 @@ onMounted(async () => {
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 pt-3 pb-2 shrink-0">
       <h2 class="text-lg font-bold text-slate-800 shrink-0">웹페이지</h2>
 
-      <template v-if="useDB">
-        <div class="flex items-center gap-1 shrink-0">
-          <select v-model="selectedYear" class="text-sm border rounded px-2 py-1">
-            <option :value="2025">2025</option>
-            <option :value="2026">2026</option>
-          </select>
-          <select v-model="selectedMonthNum" class="text-sm border rounded px-2 py-1">
-            <option v-for="m in 12" :key="m" :value="m">{{ m }}월</option>
-          </select>
-        </div>
-      </template>
-      <template v-else>
-        <div class="flex items-center gap-1 shrink-0">
-          <button @click="goPrev" :disabled="!canPrev"
-            class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition text-xs">&lt;</button>
-          <span class="px-2 text-sm font-medium text-slate-700 min-w-[80px] text-center">{{ selectedMonth }}</span>
-          <button @click="goNext" :disabled="!canNext"
-            class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition text-xs">&gt;</button>
-        </div>
-      </template>
+      <div class="flex items-center gap-1 shrink-0">
+        <button @click="goDay(-1)"
+          class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 transition text-xs">&lt;</button>
+        <label class="relative cursor-pointer">
+          <span class="px-2 text-sm font-medium text-slate-700 min-w-[120px] text-center">{{ displayDate }}</span>
+          <input type="date" v-model="selectedDate"
+            class="absolute inset-0 opacity-0 cursor-pointer" />
+        </label>
+        <button @click="goDay(1)"
+          class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 transition text-xs">&gt;</button>
+      </div>
 
       <button v-if="isAdmin" @click="handleSync" :disabled="syncing"
         class="text-xs px-3 py-1 rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-50 shrink-0">

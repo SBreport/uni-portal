@@ -14,3 +14,6 @@ export const syncWebpageToDB = () =>
 
 export const getWebpageDaily = (params?: { branch_id?: number; date_from?: string; date_to?: string }) =>
   api.get('/webpage/daily', { params })
+
+export const getWebpageRankingDaily = (date: string) =>
+  api.get('/webpage/ranking-daily', { params: { date } })

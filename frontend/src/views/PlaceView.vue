@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { getPlaceMonths, getPlaceRanking } from '@/api/place'
+import { getPlaceMonths, getPlaceRanking, getPlaceRankingDB, syncPlaceToDB } from '@/api/place'
 
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
@@ -64,6 +64,10 @@ const error = ref('')
 const months = ref<string[]>([])
 const monthIndex = ref(0)
 const data = ref<PlaceData | null>(null)
+const syncing = ref(false)
+const useDB = ref(true) // DB 모드 기본 사용
+const selectedYear = ref(new Date().getFullYear())
+const selectedMonthNum = ref(new Date().getMonth() + 1)
 
 const selectedMonth = computed(() => months.value[monthIndex.value] ?? '')
 const canPrev = computed(() => monthIndex.value < months.value.length - 1)
@@ -71,6 +75,8 @@ const canNext = computed(() => monthIndex.value > 0)
 
 function goPrev() { if (canPrev.value) monthIndex.value++ }
 function goNext() { if (canNext.value) monthIndex.value-- }
+
+const isAdmin = computed(() => auth.role === 'admin')
 
 // 검색 + 정렬
 const searchQuery = ref('')
@@ -221,13 +227,28 @@ async function loadMonths() {
 }
 
 async function loadData() {
-  if (!selectedMonth.value) return
   loading.value = true
   error.value = ''
   try {
-    const { data: res } = await getPlaceRanking(selectedMonth.value)
-    data.value = res
+    if (useDB.value) {
+      // DB 모드: 년/월로 직접 조회 (빠름)
+      const { data: res } = await getPlaceRankingDB(selectedYear.value, selectedMonthNum.value)
+      data.value = res
+    } else {
+      // 시트 모드: 기존 방식 (폴백)
+      if (!selectedMonth.value) return
+      const { data: res } = await getPlaceRanking(selectedMonth.value)
+      data.value = res
+    }
   } catch (e: any) {
+    // DB 모드 실패 시 시트 모드로 폴백
+    if (useDB.value) {
+      useDB.value = false
+      error.value = 'DB 데이터 없음 — 구글시트에서 불러옵니다. 동기화 버튼을 눌러 DB에 저장하세요.'
+      await loadMonths()
+      await loadData()
+      return
+    }
     error.value = e.response?.data?.detail || '데이터를 불러올 수 없습니다'
     data.value = null
   } finally {
@@ -235,28 +256,70 @@ async function loadData() {
   }
 }
 
-watch(selectedMonth, () => loadData())
+async function handleSync() {
+  if (!confirm('구글시트 데이터를 DB에 동기화합니다. 시간이 걸릴 수 있습니다.')) return
+  syncing.value = true
+  error.value = ''
+  try {
+    const { data: res } = await syncPlaceToDB()
+    alert(`동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved}건 저장`)
+    useDB.value = true
+    await loadData()
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || '동기화 실패'
+  } finally {
+    syncing.value = false
+  }
+}
+
+watch(selectedMonth, () => { if (!useDB.value) loadData() })
+watch([selectedYear, selectedMonthNum], () => { if (useDB.value) loadData() })
 
 onMounted(async () => {
-  await loadMonths()
+  // DB 모드 먼저 시도
   await loadData()
+  // 시트 모드 폴백 시 months 필요
+  if (!useDB.value) {
+    await loadMonths()
+  }
 })
 </script>
 
 <template>
   <div class="place-page flex flex-col overflow-hidden" style="height: calc(100vh - 48px)">
 
-    <!-- ─── ROW 1: 타이틀 + 월 + 오늘 요약 숫자 ─── -->
+    <!-- ─── ROW 1: 타이틀 + 년/월 + 동기화 + 오늘 요약 숫자 ─── -->
     <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 pt-3 pb-2 shrink-0">
       <h2 class="text-lg font-bold text-slate-800 shrink-0">상위노출</h2>
-      <!-- 월 네비 -->
-      <div class="flex items-center gap-1 shrink-0">
-        <button @click="goPrev" :disabled="!canPrev"
-          class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition text-xs">&lt;</button>
-        <span class="px-2 text-sm font-medium text-slate-700 min-w-[80px] text-center">{{ selectedMonth }}</span>
-        <button @click="goNext" :disabled="!canNext"
-          class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition text-xs">&gt;</button>
-      </div>
+
+      <!-- DB 모드: 년/월 드롭다운 -->
+      <template v-if="useDB">
+        <div class="flex items-center gap-1 shrink-0">
+          <select v-model="selectedYear" class="text-sm border rounded px-2 py-1">
+            <option :value="2025">2025</option>
+            <option :value="2026">2026</option>
+          </select>
+          <select v-model="selectedMonthNum" class="text-sm border rounded px-2 py-1">
+            <option v-for="m in 12" :key="m" :value="m">{{ m }}월</option>
+          </select>
+        </div>
+      </template>
+      <!-- 시트 모드: 기존 네비 -->
+      <template v-else>
+        <div class="flex items-center gap-1 shrink-0">
+          <button @click="goPrev" :disabled="!canPrev"
+            class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition text-xs">&lt;</button>
+          <span class="px-2 text-sm font-medium text-slate-700 min-w-[80px] text-center">{{ selectedMonth }}</span>
+          <button @click="goNext" :disabled="!canNext"
+            class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30 transition text-xs">&gt;</button>
+        </div>
+      </template>
+
+      <!-- 동기화 버튼 (admin) -->
+      <button v-if="isAdmin" @click="handleSync" :disabled="syncing"
+        class="text-xs px-3 py-1 rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-50 shrink-0">
+        {{ syncing ? '동기화 중...' : '시트 → DB 동기화' }}
+      </button>
       <!-- 성공/실패/미달 큰 숫자 -->
       <template v-if="data">
         <div class="flex items-center gap-2 shrink-0">

@@ -58,3 +58,4 @@ frontend/dist/
 # API
 api/requirements.txt.bak
 .gstack/
+SB_CHECKER/

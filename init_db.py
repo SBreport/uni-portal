@@ -635,6 +635,47 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_webpage_daily_branch ON webpage_daily(branch_id)")
 
     # ============================================================
+    # SB 순위 체크 키워드 (rank_check_keywords)
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS rank_check_keywords (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        branch_id INTEGER NOT NULL,
+        branch_name TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        search_keyword TEXT DEFAULT '',
+        place_id TEXT NOT NULL,
+        guaranteed_rank INTEGER DEFAULT 5,
+        is_active INTEGER DEFAULT 1,
+        memo TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(branch_id, keyword)
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_rck_branch ON rank_check_keywords(branch_id)")
+
+    # ============================================================
+    # SB 순위 체크 결과 (rank_checks)
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS rank_checks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        keyword_id INTEGER NOT NULL REFERENCES rank_check_keywords(id),
+        branch_id INTEGER NOT NULL,
+        branch_name TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        rank INTEGER,
+        is_exposed INTEGER DEFAULT 0,
+        checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(date, keyword_id)
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_rc_date ON rank_checks(date)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_rc_branch ON rank_checks(branch_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_rc_keyword ON rank_checks(keyword_id)")
+
+    # ============================================================
     # 민원 (complaints)
     # ============================================================
     c.execute("""

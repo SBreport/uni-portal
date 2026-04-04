@@ -10,6 +10,7 @@ from events.db import (
     load_current_events, load_evt_branches, load_evt_categories, load_evt_periods,
     load_price_history, search_by_treatment, load_event_summary,
     load_treatment_dictionary, update_treatment_info, add_treatment_entry,
+    create_event_item, update_event_item, delete_event_item,
 )
 
 router = APIRouter()
@@ -94,6 +95,58 @@ async def create_treatment(
     ok = add_treatment_entry(req.name, req.brand, req.category_id, req.description)
     if not ok:
         raise HTTPException(status_code=409, detail="이미 존재하는 시술입니다.")
+    return {"ok": True}
+
+
+# ── 이벤트 항목 CRUD (웹) ──
+from pydantic import BaseModel as _BaseModel
+
+
+class EventItemCreate(_BaseModel):
+    period_id: int
+    branch_id: int
+    category_id: int
+    raw_event_name: str
+    display_name: str = ""
+    event_price: Optional[int] = None
+    regular_price: Optional[int] = None
+    session_count: Optional[int] = None
+    notes: str = ""
+
+
+class EventItemUpdate(_BaseModel):
+    display_name: Optional[str] = None
+    event_price: Optional[int] = None
+    regular_price: Optional[int] = None
+    session_count: Optional[int] = None
+    notes: Optional[str] = None
+    category_id: Optional[int] = None
+
+
+@router.post("/items")
+async def create_item(req: EventItemCreate, user: Annotated[dict, Depends(_editor)]):
+    """이벤트 항목 개별 생성."""
+    item_id = create_event_item(
+        req.period_id, req.branch_id, req.category_id, req.raw_event_name,
+        req.display_name, req.event_price, req.regular_price, req.session_count, 0, req.notes,
+    )
+    return {"ok": True, "id": item_id}
+
+
+@router.patch("/items/{item_id}")
+async def patch_item(item_id: int, req: EventItemUpdate, user: Annotated[dict, Depends(_editor)]):
+    """이벤트 항목 수정."""
+    fields = {k: v for k, v in req.model_dump().items() if v is not None}
+    ok = update_event_item(item_id, **fields)
+    if not ok:
+        raise HTTPException(404, "이벤트를 찾을 수 없습니다.")
+    return {"ok": True}
+
+
+@router.delete("/items/{item_id}")
+async def remove_item(item_id: int, user: Annotated[dict, Depends(_editor)]):
+    """이벤트 항목 삭제."""
+    delete_event_item(item_id)
     return {"ok": True}
 
 

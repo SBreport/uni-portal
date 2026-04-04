@@ -1,86 +1,190 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import * as equipApi from '@/api/equipment'
+import api from '@/api/client'
 import PapersView from '@/views/PapersView.vue'
-import CrossReferenceView from '@/views/CrossReferenceView.vue'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+const isInternal = computed(() => auth.role === 'admin' || auth.role === 'editor')
 
-// ── 탭 ──
-const activeTab = ref<'dictionary' | 'papers' | 'catalog' | 'crossref'>('dictionary')
+// ── 탭: 시술카탈로그 / 시술논문 ──
+const activeTab = ref<'catalog' | 'papers'>('catalog')
 
-// 쿼리 파라미터로 탭/검색어 전달 받기 (지점 정보에서 클릭 시)
-watch(() => route.query, (q) => {
-  if (q.tab === 'crossref') activeTab.value = 'crossref'
-}, { immediate: true })
+// ── 카탈로그 뷰 모드: list(목록) / detail(크로스체크 상세) ──
+const viewMode = ref<'list' | 'detail'>('list')
 
-// ── 시술 사전 데이터 ──
-const devices = ref<any[]>([])
-const loading = ref(false)
-const searchQuery = ref('')
+// ── 카탈로그 데이터 ──
+const catalogItems = ref<any[]>([])
+const catalogCategories = ref<string[]>([])
+const catalogSearch = ref('')
+const catalogFilter = ref('')
+const catalogLoading = ref(false)
 
-const dictForm = ref({ name: '', category: '', aliases: '', summary: '', target: '', mechanism: '', note: '' })
-const dictMsg = ref('')
-const showForm = ref(false)
+// ── 크로스체크 상세 ──
+const selectedItem = ref<any>(null)
+const crossData = ref<any>(null)
+const loadingDetail = ref(false)
 
 // 필터링
-const filteredDevices = computed(() => {
-  if (!searchQuery.value.trim()) return devices.value
-  const q = searchQuery.value.toLowerCase()
-  return devices.value.filter(d =>
-    d.name?.toLowerCase().includes(q) ||
-    d.category?.toLowerCase().includes(q) ||
-    d.summary?.toLowerCase().includes(q) ||
-    d.aliases?.toLowerCase().includes(q)
-  )
-})
-
-// 카테고리 통계
-const categoryStats = computed(() => {
-  const map: Record<string, number> = {}
-  devices.value.forEach(d => {
-    const cat = d.category || '미분류'
-    map[cat] = (map[cat] || 0) + 1
-  })
-  return Object.entries(map).sort((a, b) => b[1] - a[1])
-})
-
-async function loadDevices() {
-  loading.value = true
-  try { devices.value = (await equipApi.getDeviceInfo()).data }
-  finally { loading.value = false }
-}
-onMounted(() => loadDevices())
-
-async function saveDevice() {
-  if (!dictForm.value.name.trim()) return
-  await equipApi.upsertDeviceInfo({ ...dictForm.value, is_verified: 1 })
-  dictMsg.value = `'${dictForm.value.name}' 저장 완료`
-  dictForm.value = { name: '', category: '', aliases: '', summary: '', target: '', mechanism: '', note: '' }
-  await loadDevices()
-  setTimeout(() => dictMsg.value = '', 3000)
-}
-
-async function deleteDevice(name: string) {
-  if (!confirm(`'${name}' 시술 정보를 삭제하시겠습니까?`)) return
-  await equipApi.deleteDeviceInfo(name)
-  await loadDevices()
-}
-
-
-function editDevice(d: any) {
-  dictForm.value = {
-    name: d.name || '',
-    category: d.category || '',
-    aliases: d.aliases || '',
-    summary: d.summary || '',
-    target: d.target || '',
-    mechanism: d.mechanism || '',
-    note: d.note || '',
+const filteredCatalog = computed(() => {
+  let items = catalogItems.value
+  if (catalogFilter.value) items = items.filter(i => i.category === catalogFilter.value)
+  if (catalogSearch.value) {
+    const q = catalogSearch.value.toLowerCase()
+    items = items.filter(i =>
+      i.item_name?.toLowerCase().includes(q) ||
+      i.display_name?.toLowerCase().includes(q) ||
+      i.sub_option?.toLowerCase().includes(q)
+    )
   }
-  showForm.value = true
+  return items
+})
+
+// 카테고리별 그룹
+const catalogGrouped = computed(() => {
+  const map: Record<string, any[]> = {}
+  for (const item of filteredCatalog.value) {
+    const cat = item.category || '미분류'
+    if (!map[cat]) map[cat] = []
+    map[cat].push(item)
+  }
+  return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]))
+})
+
+// 카테고리별 → 아이템명별 → 세부옵션 그룹핑
+// "보톡스" → [{name: "보톡스", subs: ["턱","침샘","이마"...], items: [...]}]
+const catalogCards = computed(() => {
+  const result: Array<{
+    category: string
+    mainType: string
+    groups: Array<{ name: string; subs: string[]; items: any[] }>
+  }> = []
+
+  for (const [cat, items] of catalogGrouped.value) {
+    // 아이템명별 그룹
+    const nameMap: Record<string, { subs: string[]; items: any[] }> = {}
+    let mainType = ''
+    for (const item of items) {
+      if (!mainType) mainType = item.item_type
+      const name = item.item_name
+      if (!nameMap[name]) nameMap[name] = { subs: [], items: [] }
+      if (item.sub_option) nameMap[name].subs.push(item.sub_option)
+      nameMap[name].items.push(item)
+    }
+
+    const groups = Object.entries(nameMap).map(([name, data]) => ({
+      name,
+      subs: data.subs,
+      items: data.items,
+    }))
+
+    result.push({ category: cat, mainType, groups })
+  }
+  return result
+})
+
+async function loadCatalog() {
+  catalogLoading.value = true
+  try {
+    const [itemsRes, catsRes] = await Promise.all([
+      api.get('/treatment-catalog'),
+      api.get('/treatment-catalog/categories'),
+    ])
+    catalogItems.value = itemsRes.data
+    catalogCategories.value = catsRes.data
+  } finally {
+    catalogLoading.value = false
+  }
 }
+
+// 카탈로그 항목 클릭 → 크로스체크 상세
+async function selectCatalogItem(item: any) {
+  selectedItem.value = item
+  viewMode.value = 'detail'
+  // 히스토리에 상세 상태 추가 (브라우저 뒤로가기 대응)
+  history.pushState({ treatmentDetail: true }, '')
+  loadingDetail.value = true
+  try {
+    // catalog ID가 있으면 catalog 기반, 없으면 이름 기반
+    if (item.id) {
+      const { data } = await api.get(`/treatment-catalog/${item.id}/crossref`)
+      crossData.value = data
+    } else {
+      const { data } = await api.get('/treatment-catalog/crossref-by-name', { params: { q: item.display_name || item.item_name } })
+      crossData.value = data
+    }
+  } finally {
+    loadingDetail.value = false
+  }
+}
+
+// 이름으로 직접 크로스체크 (지점정보에서 연결)
+async function searchByName(query: string) {
+  selectedItem.value = { display_name: query, item_type: 'search' }
+  viewMode.value = 'detail'
+  history.pushState({ treatmentDetail: true }, '')
+  loadingDetail.value = true
+  try {
+    const { data } = await api.get('/treatment-catalog/crossref-by-name', { params: { q: query } })
+    crossData.value = data
+  } finally {
+    loadingDetail.value = false
+  }
+}
+
+function goBackToList() {
+  viewMode.value = 'list'
+  selectedItem.value = null
+  crossData.value = null
+  externalHandled.value = false
+  // URL에 쿼리가 남아있으면 제거
+  if (route.query.q) {
+    router.replace({ path: route.path })
+  }
+}
+
+function formatPrice(p: number | null) {
+  if (!p) return '-'
+  return (p / 10000).toFixed(0) + '만원'
+}
+
+const typeLabels: Record<string, { label: string; color: string }> = {
+  device: { label: '장비', color: 'bg-purple-100 text-purple-700' },
+  material: { label: '재료', color: 'bg-amber-100 text-amber-700' },
+  method: { label: '시술법', color: 'bg-teal-100 text-teal-700' },
+}
+
+// 외부 진입 처리 완료 플래그
+const externalHandled = ref(false)
+
+// 브라우저 뒤로가기(popstate) 감지 — 상세 모드면 목록으로 복귀
+function handlePopState() {
+  if (viewMode.value === 'detail') {
+    viewMode.value = 'list'
+    selectedItem.value = null
+    crossData.value = null
+  }
+}
+
+onMounted(async () => {
+  window.addEventListener('popstate', handlePopState)
+  loadCatalog()
+  // 외부에서 쿼리 파라미터로 진입 (지점정보 → 크로스체크)
+  if (route.query.q && !externalHandled.value) {
+    const q = route.query.q as string
+    externalHandled.value = true
+    await searchByName(q)
+    router.replace({ path: route.path })
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('popstate', handlePopState)
+})
 </script>
 
 <template>
@@ -90,140 +194,180 @@ function editDevice(d: any) {
     <!-- 서브 탭 -->
     <div class="flex gap-4 mb-5 border-b border-slate-200">
       <button v-for="tab in [
-        { key: 'dictionary', label: '시술사전' },
+        { key: 'catalog', label: '시술정보' },
         { key: 'papers', label: '시술논문' },
-        { key: 'catalog', label: '시술카탈로그' },
-        { key: 'crossref', label: '크로스체크' },
       ]" :key="tab.key"
-        @click="activeTab = tab.key as any"
+        @click="activeTab = tab.key as any; viewMode = 'list'"
         :class="['pb-2 text-sm font-medium border-b-2 transition',
           activeTab === tab.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600']"
       >{{ tab.label }}</button>
     </div>
 
-    <!-- ========== 시술사전 탭 ========== -->
-    <div v-if="activeTab === 'dictionary'">
-      <div class="flex items-center justify-end mb-4">
-        <button @click="showForm = !showForm"
-          class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
-          {{ showForm ? '폼 닫기' : '+ 시술 추가' }}
-        </button>
-      </div>
+    <!-- ========== 시술카탈로그 탭 ========== -->
+    <div v-if="activeTab === 'catalog'">
 
-      <!-- 알림 -->
-      <div v-if="dictMsg" class="mb-3 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700">{{ dictMsg }}</div>
+      <!-- 목록 모드 -->
+      <div v-if="viewMode === 'list'" class="max-w-2xl">
+        <!-- 검색 + 필터 -->
+        <div class="flex gap-3 mb-4">
+          <input
+            v-model="catalogSearch"
+            type="text"
+            placeholder="시술명 검색..."
+            class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+          <select v-model="catalogFilter" class="text-sm border rounded-lg px-3 py-2">
+            <option value="">전체 카테고리</option>
+            <option v-for="c in catalogCategories" :key="c" :value="c">{{ c }}</option>
+          </select>
+        </div>
 
-      <!-- KPI -->
-      <div class="grid grid-cols-4 gap-3 mb-4">
-        <div class="bg-white border border-slate-200 rounded-lg px-4 py-3 text-center">
-          <p class="text-2xl font-bold text-slate-800">{{ devices.length }}</p>
-          <p class="text-xs text-slate-400">전체 시술</p>
-        </div>
-        <div class="bg-white border border-slate-200 rounded-lg px-4 py-3 text-center">
-          <p class="text-2xl font-bold text-emerald-600">{{ devices.filter(d => d.is_verified).length }}</p>
-          <p class="text-xs text-slate-400">검증 완료</p>
-        </div>
-        <div class="bg-white border border-slate-200 rounded-lg px-4 py-3 text-center">
-          <p class="text-2xl font-bold text-amber-600">{{ devices.filter(d => !d.is_verified).length }}</p>
-          <p class="text-xs text-slate-400">미검증</p>
-        </div>
-        <div class="bg-white border border-slate-200 rounded-lg px-4 py-3 text-center">
-          <p class="text-2xl font-bold text-blue-600">{{ categoryStats.length }}</p>
-          <p class="text-xs text-slate-400">카테고리 수</p>
-        </div>
-      </div>
-
-      <!-- 추가/수정 폼 -->
-      <div v-if="showForm" class="bg-white border border-slate-200 rounded-lg p-4 mb-4">
-        <h3 class="text-sm font-bold text-slate-700 mb-3">시술 정보 {{ dictForm.name ? '수정' : '추가' }}</h3>
-        <div class="space-y-2">
-          <div class="grid grid-cols-3 gap-2">
-            <input v-model="dictForm.name" placeholder="시술명 (필수)" class="px-3 py-1.5 border border-slate-300 rounded text-sm" />
-            <input v-model="dictForm.category" placeholder="카테고리" class="px-3 py-1.5 border border-slate-300 rounded text-sm" />
-            <input v-model="dictForm.aliases" placeholder="별칭 (쉼표 구분)" class="px-3 py-1.5 border border-slate-300 rounded text-sm" />
+        <!-- 카테고리별 카드 -->
+        <div v-for="card in catalogCards" :key="card.category" class="mb-4">
+          <div class="bg-white rounded-xl border border-slate-200 p-4">
+            <!-- 카테고리 헤더 -->
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="text-sm font-bold text-slate-800">{{ card.category }}</h4>
+              <span :class="['text-xs px-2 py-0.5 rounded-full', typeLabels[card.mainType]?.color]">
+                {{ typeLabels[card.mainType]?.label }}
+              </span>
+            </div>
+            <!-- 아이템 나열 (클릭 가능한 태그) -->
+            <div class="flex flex-wrap gap-1.5">
+              <template v-for="group in card.groups" :key="group.name">
+                <template v-if="group.subs.length">
+                  <!-- 세부옵션 있음: 메인 태그 + 서브 태그들 -->
+                  <span class="flex items-center gap-0.5">
+                    <span
+                      @click="selectCatalogItem(group.items[0])"
+                      class="px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium hover:bg-blue-100 hover:text-blue-700 cursor-pointer transition"
+                    >{{ group.name }}</span>
+                    <span
+                      v-for="(sub, idx) in group.subs" :key="sub"
+                      @click="selectCatalogItem(group.items[idx])"
+                      class="px-1.5 py-1 bg-slate-50 text-slate-500 rounded text-xs hover:bg-blue-50 hover:text-blue-600 cursor-pointer transition"
+                    >{{ sub }}</span>
+                  </span>
+                </template>
+                <template v-else>
+                  <!-- 세부옵션 없음: 단일 태그 -->
+                  <span
+                    @click="selectCatalogItem(group.items[0])"
+                    class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-medium hover:bg-blue-100 hover:text-blue-700 cursor-pointer transition"
+                  >{{ group.name }}</span>
+                </template>
+              </template>
+            </div>
           </div>
-          <textarea v-model="dictForm.summary" placeholder="한줄 설명" rows="2" class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" />
-          <div class="grid grid-cols-2 gap-2">
-            <input v-model="dictForm.target" placeholder="적용 부위" class="px-3 py-1.5 border border-slate-300 rounded text-sm" />
-            <input v-model="dictForm.note" placeholder="참고" class="px-3 py-1.5 border border-slate-300 rounded text-sm" />
-          </div>
-          <textarea v-model="dictForm.mechanism" placeholder="작용 원리" rows="2" class="w-full px-3 py-1.5 border border-slate-300 rounded text-sm" />
-          <div class="flex gap-2">
-            <button @click="saveDevice" class="px-4 py-2 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700">저장</button>
-            <button @click="showForm = false; dictForm = { name: '', category: '', aliases: '', summary: '', target: '', mechanism: '', note: '' }"
-              class="px-4 py-2 border border-slate-200 text-sm rounded hover:bg-slate-50">취소</button>
-          </div>
         </div>
-      </div>
 
-      <!-- 검색 -->
-      <div class="mb-3">
-        <input v-model="searchQuery" placeholder="시술명, 카테고리, 별칭으로 검색..."
-          class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
-
-      <!-- 테이블 -->
-      <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div class="overflow-auto" style="max-height: 500px">
-          <table class="w-full text-sm">
-            <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-              <tr>
-                <th class="text-left px-3 py-2 font-medium text-slate-500">시술명</th>
-                <th class="text-left px-3 py-2 font-medium text-slate-500">카테고리</th>
-                <th class="text-left px-3 py-2 font-medium text-slate-500">설명</th>
-                <th class="text-left px-3 py-2 font-medium text-slate-500">별칭</th>
-                <th class="text-center px-3 py-2 font-medium text-slate-500">보유수</th>
-                <th class="text-center px-3 py-2 font-medium text-slate-500">검증</th>
-                <th class="text-right px-3 py-2 font-medium text-slate-500"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="d in filteredDevices" :key="d.name" class="border-b border-slate-100 hover:bg-slate-50">
-                <td class="px-3 py-1.5 font-medium">{{ d.name }}</td>
-                <td class="px-3 py-1.5">
-                  <span class="px-2 py-0.5 bg-slate-100 rounded text-xs text-slate-600">{{ d.category || '-' }}</span>
-                </td>
-                <td class="px-3 py-1.5 text-slate-400 text-xs truncate max-w-xs">{{ d.summary || '-' }}</td>
-                <td class="px-3 py-1.5 text-slate-400 text-xs truncate max-w-[160px]">{{ d.aliases || '-' }}</td>
-                <td class="px-3 py-1.5 text-center">{{ d.usage_count }}</td>
-                <td class="px-3 py-1.5 text-center">{{ d.is_verified ? '✅' : '' }}</td>
-                <td class="px-3 py-1.5 text-right space-x-2">
-                  <button @click="editDevice(d)" class="text-blue-500 hover:text-blue-700 text-xs">수정</button>
-                  <button @click="deleteDevice(d.name)" class="text-red-400 hover:text-red-600 text-xs">삭제</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="px-3 py-2 text-xs text-slate-400">
-          {{ searchQuery ? `검색 결과: ${filteredDevices.length}건` : `총 ${devices.length}건` }}
+        <p v-if="!catalogCards.length && !catalogLoading" class="text-center text-sm text-slate-400 py-8">
+          {{ catalogSearch || catalogFilter ? '검색 결과가 없습니다.' : '등록된 카탈로그가 없습니다.' }}
         </p>
+        <div v-if="catalogLoading" class="text-center py-8 text-sm text-slate-400">로딩 중...</div>
+      </div>
+
+      <!-- 상세 모드 (크로스체크) -->
+      <div v-if="viewMode === 'detail'" class="max-w-3xl">
+        <button @click="goBackToList" class="text-sm text-blue-600 hover:underline mb-4">&larr; 목록으로</button>
+
+        <div v-if="loadingDetail" class="text-center py-12 text-sm text-slate-400">로딩 중...</div>
+
+        <div v-if="crossData && !loadingDetail">
+          <!-- 시술 상세 카드 (카탈로그 정보 + device_info 통합) -->
+          <div class="p-5 bg-white rounded-xl border border-slate-200 mb-4">
+            <!-- 제목 + 유형 배지 -->
+            <div class="flex items-center gap-3 mb-3">
+              <h3 class="text-lg font-bold text-slate-800">
+                {{ crossData.catalog?.display_name || crossData.query || selectedItem?.display_name || '검색 결과' }}
+              </h3>
+              <span v-if="crossData.catalog?.item_type || selectedItem?.item_type"
+                :class="['text-xs px-2 py-0.5 rounded-full', typeLabels[crossData.catalog?.item_type || selectedItem?.item_type]?.color]">
+                {{ typeLabels[crossData.catalog?.item_type || selectedItem?.item_type]?.label }}
+              </span>
+            </div>
+
+            <!-- 카탈로그 기본 정보 -->
+            <div class="text-sm text-slate-500 space-y-1 mb-3">
+              <p v-if="crossData.catalog?.category">카테고리: <span class="text-slate-700">{{ crossData.catalog.category }}</span></p>
+              <p v-if="crossData.catalog?.sub_option">세부: <span class="text-slate-700">{{ crossData.catalog.sub_option }}</span></p>
+              <p v-if="crossData.catalog?.description">설명: <span class="text-slate-700">{{ crossData.catalog.description }}</span></p>
+            </div>
+
+            <!-- device_info 상세 (있으면 표시) -->
+            <div v-if="crossData.device_info" class="border-t border-slate-100 pt-3 text-sm text-slate-600 space-y-1">
+              <p v-if="crossData.device_info.summary"><span class="text-slate-400">요약:</span> {{ crossData.device_info.summary }}</p>
+              <p v-if="crossData.device_info.target"><span class="text-slate-400">적용 부위:</span> {{ crossData.device_info.target }}</p>
+              <p v-if="crossData.device_info.mechanism"><span class="text-slate-400">작용 원리:</span> {{ crossData.device_info.mechanism }}</p>
+              <p v-if="crossData.device_info.aliases"><span class="text-slate-400">별칭:</span> {{ crossData.device_info.aliases }}</p>
+            </div>
+
+            <!-- 보유 지점 -->
+            <div v-if="crossData.equipment_branches?.length" class="border-t border-slate-100 pt-3 mt-3">
+              <span class="text-xs text-slate-400">보유 지점 ({{ crossData.equipment_branches.length }}개):</span>
+              <div class="flex flex-wrap gap-1 mt-1">
+                <span v-for="eq in crossData.equipment_branches.slice(0, 15)" :key="eq.id"
+                  class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{{ eq.branch_name || eq.name }}</span>
+                <span v-if="crossData.equipment_branches.length > 15" class="text-xs text-slate-400">+{{ crossData.equipment_branches.length - 15 }}개</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Events -->
+          <div v-if="crossData.events?.length" class="p-4 bg-white rounded-xl border border-slate-200 mb-4">
+            <h4 class="text-sm font-semibold text-slate-700 mb-2">관련 이벤트 ({{ crossData.events.length }}건)</h4>
+            <div class="space-y-2">
+              <div v-for="ev in crossData.events" :key="ev.id" class="flex items-center justify-between text-sm">
+                <div>
+                  <span class="text-slate-700">{{ ev.display_name || ev.raw_event_name }}</span>
+                  <span class="text-xs text-slate-400 ml-2">{{ ev.branch_name }}</span>
+                </div>
+                <div class="text-right">
+                  <span class="font-medium text-blue-600">{{ formatPrice(ev.event_price) }}</span>
+                  <span v-if="ev.regular_price" class="text-xs text-slate-400 line-through ml-1">{{ formatPrice(ev.regular_price) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Papers -->
+          <div v-if="crossData.papers?.length" class="p-4 bg-white rounded-xl border border-slate-200 mb-4">
+            <h4 class="text-sm font-semibold text-slate-700 mb-2">관련 논문 ({{ crossData.papers.length }}건)</h4>
+            <div class="space-y-2">
+              <div v-for="p in crossData.papers" :key="p.id" class="text-sm">
+                <div class="font-medium text-slate-700">{{ p.title_ko || p.title }}</div>
+                <div class="text-xs text-slate-400">
+                  {{ p.authors }} | {{ p.journal }} {{ p.pub_year }}
+                  <span v-if="p.evidence_level" class="ml-2">근거수준 Lv.{{ p.evidence_level }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Blog Posts -->
+          <div v-if="crossData.blog_posts?.length" class="p-4 bg-white rounded-xl border border-slate-200 mb-4">
+            <h4 class="text-sm font-semibold text-slate-700 mb-2">관련 블로그 ({{ crossData.blog_posts.length }}건)</h4>
+            <div class="space-y-2">
+              <div v-for="bp in crossData.blog_posts" :key="bp.id" class="text-sm flex items-center gap-3">
+                <a v-if="bp.published_url" :href="bp.published_url" target="_blank" class="text-blue-500 hover:underline shrink-0">링크</a>
+                <span class="text-slate-700 min-w-0 truncate">{{ bp.title || '(제목 없음)' }}</span>
+                <span v-if="isInternal && bp.author" class="text-xs text-slate-400 shrink-0">{{ bp.author }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- No data -->
+          <div v-if="!crossData.device_info && !crossData.events?.length && !crossData.papers?.length && !crossData.blog_posts?.length"
+            class="p-6 bg-white rounded-xl border border-slate-200 text-center text-sm text-slate-400">
+            연결된 정보가 없습니다. 데이터가 축적되면 여기에 표시됩니다.
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- ========== 시술논문 탭 ========== -->
     <div v-if="activeTab === 'papers'">
       <PapersView />
-    </div>
-
-    <!-- ========== 시술 카탈로그 탭 ========== -->
-    <div v-if="activeTab === 'catalog'">
-      <div class="max-w-3xl">
-        <p class="text-sm text-slate-400 mb-4">
-          시술/장비/재료 마스터 데이터. 카테고리별 항목과 세부 옵션을 관리합니다.
-        </p>
-        <div class="text-sm text-slate-500">
-          <a href="/api/treatment-catalog" target="_blank" class="text-blue-500 hover:underline">
-            API: /treatment-catalog
-          </a>
-          — 시술 카탈로그 CRUD (데이터 입력 후 여기에 표시됩니다)
-        </div>
-      </div>
-    </div>
-
-    <!-- ========== 크로스체크 탭 ========== -->
-    <div v-if="activeTab === 'crossref'">
-      <CrossReferenceView />
     </div>
   </div>
 </template>

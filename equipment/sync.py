@@ -147,7 +147,8 @@ def sync_from_sheets():
     for _, row in df.iterrows():
         branch_name = str(row["지점명"]).strip()
         category_name = str(row.get("카테고리", "")).strip()
-        device_name = str(row.get("기기명", "")).strip()
+        from equipment.db import normalize_device_name
+        device_name = normalize_device_name(str(row.get("기기명", "")))
         quantity = int(row.get("수량", 1))
         note = str(row.get("비고", "")).strip()
         photo_raw = str(row.get("사진", "")).strip()

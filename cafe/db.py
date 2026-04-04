@@ -227,6 +227,13 @@ def upsert_article(branch_period_id: int, article_order: int, **kwargs) -> int:
 def update_article(article_id: int, **kwargs):
     """원고 필드 업데이트 (title, body, keyword, category, equipment_name, photo_ref)."""
     allowed = {"title", "body", "keyword", "category", "equipment_name", "photo_ref"}
+    # equipment_name 정제
+    if "equipment_name" in kwargs and kwargs["equipment_name"]:
+        try:
+            from equipment.db import normalize_device_name
+            kwargs["equipment_name"] = normalize_device_name(kwargs["equipment_name"])
+        except Exception:
+            pass
     updates = {k: v for k, v in kwargs.items() if k in allowed}
     if not updates:
         return

@@ -55,6 +55,15 @@ async def search_crossref(q: str = ""):
     return search_cross_reference(q)
 
 
+@router.get("/crossref-by-name")
+async def crossref_by_name(q: str = ""):
+    """장비/시술명으로 직접 크로스체크 (treatment_catalog 없이도 동작)."""
+    from treatment.crossref import get_crossref_by_name
+    if not q:
+        return {"query": "", "device_info": None, "equipment_branches": [], "events": [], "papers": [], "blog_posts": [], "catalog": None}
+    return get_crossref_by_name(q)
+
+
 @router.get("/validation-report")
 async def validation_report(user: Annotated[dict, Depends(_editor)]):
     from treatment.validation import get_validation_report

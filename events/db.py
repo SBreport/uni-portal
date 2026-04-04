@@ -209,6 +209,75 @@ def insert_events(
     return inserted
 
 
+def create_event_item(period_id, branch_id, category_id, raw_event_name,
+                      display_name="", event_price=None, regular_price=None,
+                      session_count=None, is_package=0, notes=""):
+    """이벤트 항목 개별 생성 (웹 CRUD용). 장비명 정제 적용."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    from equipment.db import normalize_device_name
+
+    # 이벤트명에 포함된 장비명 정제
+    clean_name = normalize_device_name(raw_event_name)
+    clean_display = normalize_device_name(display_name) if display_name else clean_name
+
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        discount = None
+        if regular_price and event_price and regular_price > 0:
+            discount = round((1 - event_price / regular_price) * 100, 1)
+        c = conn.execute(
+            """INSERT INTO evt_items
+                (event_period_id, branch_id, category_id,
+                 raw_event_name, display_name, session_count,
+                 is_package, regular_price, event_price, discount_rate, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (period_id, branch_id, category_id,
+             clean_name, clean_display,
+             session_count, is_package, regular_price, event_price, discount, notes),
+        )
+        conn.commit()
+        return c.lastrowid
+    finally:
+        conn.close()
+
+
+def update_event_item(item_id, **fields):
+    """이벤트 항목 수정 (웹 CRUD용)."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    if not fields:
+        return False
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        sets = []
+        params = []
+        for k, v in fields.items():
+            if v is not None:
+                sets.append(f"{k} = ?")
+                params.append(v)
+        if not sets:
+            return False
+        sets.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(item_id)
+        conn.execute(f"UPDATE evt_items SET {', '.join(sets)} WHERE id = ?", params)
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def delete_event_item(item_id):
+    """이벤트 항목 삭제 (관련 components도 함께)."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        conn.execute("DELETE FROM evt_item_components WHERE event_item_id = ?", (item_id,))
+        conn.execute("DELETE FROM evt_items WHERE id = ?", (item_id,))
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 def create_ingestion_log(conn, period_id: int) -> int:
     """수집 로그 레코드 생성."""
     c = conn.cursor()

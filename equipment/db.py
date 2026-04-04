@@ -21,8 +21,29 @@ def clean_device_name(name):
     if not name:
         return ""
     name = str(name).strip()
-    cleaned = re.sub(r"^\d+\.?\s+", "", name)
+    # "1.울쎄라", "2. 올리지오", "3.써마지FLX" → 앞의 숫자+점+공백 제거
+    cleaned = re.sub(r"^\d+\.?\s*", "", name)
     return cleaned.strip()
+
+
+def normalize_device_name(name):
+    """장비명 정제 + matcher 매칭으로 정식 이름 반환.
+
+    모든 DB 입력 경로에서 이 함수를 호출하여 장비명 통일.
+    1단계: 숫자 접두사 제거 (1.울쎄라 → 울쎄라)
+    2단계: device_info matcher로 정식 이름 매칭 (울쎄라피프라임 → 울쎄라피 프라임)
+    """
+    cleaned = clean_device_name(name)
+    if not cleaned:
+        return cleaned
+    try:
+        from equipment.matcher import match_single
+        matched_id, matched_name = match_single(cleaned)
+        if matched_name:
+            return matched_name
+    except Exception:
+        pass
+    return cleaned
 
 
 def get_device_group(clean_name):
@@ -132,6 +153,35 @@ def update_equipment(eq_id, **fields):
             values,
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def create_equipment(branch_id, category_id, name, quantity=1, photo_status=0, note=""):
+    """장비 신규 등록. 이름 정제(숫자 제거) + matcher 매칭 적용."""
+    cleaned = normalize_device_name(name)
+    conn = _get_conn()
+    try:
+        c = conn.cursor()
+        c.execute(
+            """INSERT INTO equipment (branch_id, category_id, name, name_original, quantity, photo_status, note, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'web')""",
+            (branch_id, category_id, cleaned, name, quantity, photo_status, note),
+        )
+        conn.commit()
+        return c.lastrowid
+    finally:
+        conn.close()
+
+
+def delete_equipment(eq_id):
+    """장비 삭제."""
+    conn = _get_conn()
+    try:
+        c = conn.cursor()
+        c.execute("DELETE FROM equipment WHERE id = ?", (eq_id,))
+        conn.commit()
+        return c.rowcount > 0
     finally:
         conn.close()
 

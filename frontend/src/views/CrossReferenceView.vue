@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import api from '@/api/client'
 
 const route = useRoute()
+const auth = useAuthStore()
+const isInternal = computed(() => auth.role === 'admin' || auth.role === 'editor')
+const router = useRouter()
+
+// 외부에서 진입했는지 (지점정보 → 크로스체크)
+const cameFromExternal = ref(false)
 
 // All catalog items (loaded on mount)
 const allItems = ref<any[]>([])
@@ -73,9 +80,23 @@ async function selectItem(item: any) {
   }
 }
 
+async function searchByName(query: string) {
+  selectedItem.value = { display_name: query, item_type: 'search' }
+  loadingDetail.value = true
+  try {
+    const { data } = await api.get('/treatment-catalog/crossref-by-name', { params: { q: query } })
+    crossData.value = data
+  } finally {
+    loadingDetail.value = false
+  }
+}
+
 function goBack() {
+  // 항상 크로스체크 자체 목록으로 복귀
   selectedItem.value = null
   crossData.value = null
+  searchQuery.value = ''
+  cameFromExternal.value = false
 }
 
 const typeLabels: Record<string, { label: string; color: string }> = {
@@ -91,9 +112,12 @@ function formatPrice(p: number | null) {
 
 onMounted(() => {
   loadAll()
-  // 외부에서 쿼리 파라미터로 검색어 전달받기
+  // 외부에서 쿼리 파라미터로 검색어 전달받기 → 바로 크로스체크 실행
   if (route.query.q) {
-    searchQuery.value = route.query.q as string
+    const q = route.query.q as string
+    searchQuery.value = q
+    cameFromExternal.value = true
+    searchByName(q)
   }
 })
 </script>
@@ -187,14 +211,19 @@ onMounted(() => {
         <!-- Header -->
         <div class="p-4 bg-white rounded-xl border border-slate-200 mb-4">
           <div class="flex items-center gap-3 mb-2">
-            <h3 class="text-lg font-bold text-slate-800">{{ crossData.catalog.display_name }}</h3>
-            <span :class="['text-xs px-2 py-0.5 rounded-full', typeLabels[crossData.catalog.item_type]?.color]">
+            <h3 class="text-lg font-bold text-slate-800">
+              {{ crossData.catalog?.display_name || crossData.query || selectedItem?.display_name || '검색 결과' }}
+            </h3>
+            <span v-if="crossData.catalog?.item_type" :class="['text-xs px-2 py-0.5 rounded-full', typeLabels[crossData.catalog.item_type]?.color]">
               {{ typeLabels[crossData.catalog.item_type]?.label }}
             </span>
           </div>
-          <div class="text-sm text-slate-500">
+          <div v-if="crossData.catalog" class="text-sm text-slate-500">
             카테고리: {{ crossData.catalog.category }}
             <span v-if="crossData.catalog.description" class="ml-4">{{ crossData.catalog.description }}</span>
+          </div>
+          <div v-else-if="crossData.device_info" class="text-sm text-slate-500">
+            {{ crossData.device_info.category }} | {{ crossData.device_info.summary || '' }}
           </div>
         </div>
 
@@ -256,12 +285,10 @@ onMounted(() => {
         <div v-if="crossData.blog_posts.length" class="p-4 bg-white rounded-xl border border-slate-200 mb-4">
           <h4 class="text-sm font-semibold text-slate-700 mb-2">관련 블로그 ({{ crossData.blog_posts.length }}건)</h4>
           <div class="space-y-2">
-            <div v-for="bp in crossData.blog_posts" :key="bp.id" class="text-sm flex items-center justify-between">
-              <div>
-                <span class="text-slate-700">{{ bp.title }}</span>
-                <span class="text-xs text-slate-400 ml-2">{{ bp.author }}</span>
-              </div>
-              <a v-if="bp.published_url" :href="bp.published_url" target="_blank" class="text-xs text-blue-500 hover:underline">링크</a>
+            <div v-for="bp in crossData.blog_posts" :key="bp.id" class="text-sm flex items-center gap-3">
+              <a v-if="bp.published_url" :href="bp.published_url" target="_blank" class="text-blue-500 hover:underline shrink-0">링크</a>
+              <span class="text-slate-700 min-w-0 truncate">{{ bp.title || '(제목 없음)' }}</span>
+              <span v-if="isInternal && bp.author" class="text-xs text-slate-400 shrink-0">{{ bp.author }}</span>
             </div>
           </div>
         </div>

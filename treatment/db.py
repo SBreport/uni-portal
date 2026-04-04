@@ -36,17 +36,26 @@ def get_catalog_item(item_id):
 def create_catalog_item(data: dict):
     conn = get_conn(EQUIPMENT_DB)
     try:
+        # 장비명 정제
+        from equipment.db import normalize_device_name
+        item_name = normalize_device_name(data["item_name"])
+        display_name = data["display_name"]
+        if data.get("sub_option"):
+            display_name = f"{item_name} {data['sub_option']}"
+        else:
+            display_name = normalize_device_name(display_name)
+
         # Auto device_id matching for device type
         device_id = data.get("device_id")
         if data.get("item_type") == "device" and not device_id:
-            device_id = auto_match_device(data["item_name"])
+            device_id = auto_match_device(item_name)
 
         c = conn.execute(
             """INSERT INTO treatment_catalog
                (item_type, category, item_name, sub_option, display_name, device_id, description, sort_order)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (data["item_type"], data["category"], data["item_name"],
-             data.get("sub_option"), data["display_name"],
+            (data["item_type"], data["category"], item_name,
+             data.get("sub_option"), display_name,
              device_id, data.get("description", ""), data.get("sort_order", 0))
         )
         conn.commit()

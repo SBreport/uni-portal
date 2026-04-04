@@ -4,12 +4,14 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse
 
+from pydantic import BaseModel
 from api.deps import get_current_user, require_role
 from api.models import EquipmentUpdate, PhotoChangeItem, DeviceInfoUpsert
 
 from equipment.db import (
     load_data, get_branches, get_categories,
     update_equipment, save_photo_changes,
+    create_equipment, delete_equipment,
     get_all_device_info, search_device_info, find_matching_devices,
     upsert_device_info, delete_device_info,
 )
@@ -61,6 +63,21 @@ async def get_category_list(user: Annotated[dict, Depends(get_current_user)]):
     return get_categories()
 
 
+class EquipmentCreate(BaseModel):
+    branch_id: int
+    category_id: int
+    name: str
+    quantity: int = 1
+    note: str = ""
+
+
+@router.post("")
+async def post_equipment(req: EquipmentCreate, user: Annotated[dict, Depends(_editor)]):
+    """장비 신규 등록."""
+    eq_id = create_equipment(req.branch_id, req.category_id, req.name, req.quantity, 0, req.note)
+    return {"ok": True, "id": eq_id}
+
+
 @router.patch("/{eq_id}")
 async def patch_equipment(
     eq_id: int,
@@ -70,6 +87,15 @@ async def patch_equipment(
     updates = {k: v for k, v in req.model_dump().items() if v is not None}
     if updates:
         update_equipment(eq_id, **updates)
+    return {"ok": True}
+
+
+@router.delete("/{eq_id}")
+async def remove_equipment(eq_id: int, user: Annotated[dict, Depends(_editor)]):
+    """장비 삭제."""
+    ok = delete_equipment(eq_id)
+    if not ok:
+        raise HTTPException(404, "장비를 찾을 수 없습니다.")
     return {"ok": True}
 
 

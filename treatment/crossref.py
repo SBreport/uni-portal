@@ -96,3 +96,85 @@ def search_cross_reference(query: str) -> list[dict]:
         return [dict(r) for r in items]
     finally:
         conn.close()
+
+
+def get_crossref_by_name(query: str) -> dict:
+    """장비/시술명으로 직접 크로스체크 (treatment_catalog 없이도 동작).
+
+    지점정보에서 장비명 클릭 → 여기로 연결.
+    device_info, equipment, evt_items, papers, blog_posts를 직접 검색.
+    """
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        q = query.strip()
+        result = {
+            "query": q,
+            "device_info": None,
+            "equipment_branches": [],
+            "events": [],
+            "papers": [],
+            "blog_posts": [],
+            "catalog": None,
+        }
+
+        # 1. device_info 매칭
+        dev = conn.execute(
+            "SELECT * FROM device_info WHERE name LIKE ? OR aliases LIKE ? LIMIT 1",
+            (f"%{q}%", f"%{q}%")
+        ).fetchone()
+        if dev:
+            result["device_info"] = dict(dev)
+
+            # 보유 지점
+            equips = conn.execute("""
+                SELECT e.*, b.name as branch_name
+                FROM equipment e
+                LEFT JOIN branches b ON e.branch_id = b.id
+                WHERE e.name LIKE ?
+                ORDER BY b.name
+            """, (f"%{q}%",)).fetchall()
+            result["equipment_branches"] = [dict(r) for r in equips]
+
+            # 논문
+            papers = conn.execute("""
+                SELECT p.id, p.title, p.title_ko, p.authors, p.journal, p.pub_year,
+                       p.evidence_level, p.study_type, p.one_line_summary
+                FROM papers p
+                WHERE p.device_info_id = ?
+                ORDER BY p.pub_year DESC
+            """, (dev["id"],)).fetchall()
+            result["papers"] = [dict(r) for r in papers]
+
+        # 2. 이벤트 검색
+        events = conn.execute("""
+            SELECT ei.id, ei.raw_event_name, ei.display_name, ei.event_price, ei.regular_price,
+                   eb.name as branch_name, ep.year, ep.start_month, ep.end_month
+            FROM evt_items ei
+            LEFT JOIN evt_branches eb ON ei.branch_id = eb.id
+            LEFT JOIN evt_periods ep ON ei.event_period_id = ep.id
+            WHERE ei.raw_event_name LIKE ? OR ei.display_name LIKE ?
+            ORDER BY ep.year DESC, ep.start_month DESC LIMIT 20
+        """, (f"%{q}%", f"%{q}%")).fetchall()
+        result["events"] = [dict(r) for r in events]
+
+        # 3. 블로그
+        blogs = conn.execute("""
+            SELECT id, title, keyword, blog_channel, platform, published_url,
+                   author, published_at, status
+            FROM blog_posts
+            WHERE keyword LIKE ? OR title LIKE ?
+            ORDER BY published_at DESC LIMIT 10
+        """, (f"%{q}%", f"%{q}%")).fetchall()
+        result["blog_posts"] = [dict(r) for r in blogs]
+
+        # 4. treatment_catalog에도 있으면 포함
+        cat = conn.execute(
+            "SELECT * FROM treatment_catalog WHERE is_active = 1 AND (item_name LIKE ? OR display_name LIKE ?) LIMIT 1",
+            (f"%{q}%", f"%{q}%")
+        ).fetchone()
+        if cat:
+            result["catalog"] = dict(cat)
+
+        return result
+    finally:
+        conn.close()

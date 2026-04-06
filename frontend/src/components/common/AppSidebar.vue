@@ -72,6 +72,14 @@ const visibleMarketingChildren = computed(() =>
 const topItems: MenuItem[] = [
   { path: '/', label: 'HOME', icon: 'H' },
   {
+    path: '/explorer',
+    label: '탐색기',
+    icon: 'S',
+    color: 'bg-blue-100 text-blue-500',
+    colorActive: 'bg-blue-500 text-white',
+    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
+  },
+  {
     path: '/branch-info',
     label: '지점 정보',
     icon: 'B',

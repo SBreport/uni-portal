@@ -45,6 +45,11 @@ const router = createRouter({
       component: () => import('@/views/PapersView.vue'),
     },
     {
+      path: '/explorer',
+      name: 'explorer',
+      component: () => import('@/views/ExplorerView.vue'),
+    },
+    {
       path: '/branch-info',
       name: 'branch-info',
       component: () => import('@/views/BranchInfoView.vue'),

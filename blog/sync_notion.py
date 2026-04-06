@@ -193,17 +193,17 @@ def get_last_sync_time(conn) -> str:
     return row[0] if row and row[0] else ""
 
 
-def incremental_sync(token: str, db_id: str, dry_run: bool = False) -> dict:
-    """증분 동기화: 마지막 동기화 이후 수정된 페이지만 처리."""
+def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: bool = False) -> dict:
+    """증분 동기화: 마지막 동기화 이후 수정된 페이지만 처리. force_full=True면 전체."""
     conn = sqlite3.connect(os.path.abspath(DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
 
-    since = get_last_sync_time(conn)
-    sync_type = "incremental" if since else "full"
+    since = None if force_full else get_last_sync_time(conn)
+    sync_type = "full" if force_full or not since else "incremental"
 
     # 1. Notion에서 변경된 페이지 가져오기
-    pages = fetch_notion_pages(token, db_id, since=since if since else None)
+    pages = fetch_notion_pages(token, db_id, since=since)
 
     if not pages:
         conn.close()
@@ -402,10 +402,6 @@ if __name__ == "__main__":
     if args.fix_titles:
         result = fix_titles(args.token, args.db_id, dry_run=args.dry_run)
     else:
-        if args.full:
-            # full이면 since를 무시
-            result = incremental_sync(args.token, args.db_id, dry_run=args.dry_run)
-        else:
-            result = incremental_sync(args.token, args.db_id, dry_run=args.dry_run)
+        result = incremental_sync(args.token, args.db_id, dry_run=args.dry_run, force_full=args.full)
 
     print(result)

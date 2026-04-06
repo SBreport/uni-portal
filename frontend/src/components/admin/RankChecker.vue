@@ -271,7 +271,7 @@ const groupedHistory = computed(() => {
   const groups: Record<string, any[]> = {}
   for (const h of history.value) {
     if (!groups[h.date]) groups[h.date] = []
-    groups[h.date].push(h)
+    groups[h.date]!.push(h)
   }
   return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a))
 })

@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useBranchStore } from '@/stores/branches'
 import api from '@/api/client'
 
 const auth = useAuthStore()
+const branchStore = useBranchStore()
 const isBranch = computed(() => auth.role === 'branch')
 const isInternal = computed(() => auth.role === 'admin' || auth.role === 'editor')
 
 // State
-const branches = ref<any[]>([])
+const branches = computed(() => branchStore.branches)
 const selectedBranch = ref<number | null>(null)
 const selectedYear = ref(new Date().getFullYear())
 const selectedMonth = ref(new Date().getMonth() + 1)
@@ -32,17 +34,6 @@ const sectionIcons: Record<string, string> = {
   place: 'P',
   webpage: 'W',
   complaints: 'M',
-}
-
-async function loadBranches() {
-  try {
-    const { data } = await api.get('/events/branches')
-    branches.value = data
-    if (isBranch.value && auth.branchId) {
-      selectedBranch.value = auth.branchId
-      await loadBranchReport(auth.branchId)
-    }
-  } catch { /* ignore */ }
 }
 
 async function loadSummary() {
@@ -84,8 +75,12 @@ watch([selectedYear, selectedMonth], () => {
   if (selectedBranch.value) loadBranchReport(selectedBranch.value)
 })
 
-onMounted(() => {
-  loadBranches()
+onMounted(async () => {
+  await branchStore.loadBranches()
+  if (isBranch.value && auth.branchId) {
+    selectedBranch.value = auth.branchId
+    await loadBranchReport(auth.branchId)
+  }
   if (!isBranch.value) loadSummary()
 })
 </script>

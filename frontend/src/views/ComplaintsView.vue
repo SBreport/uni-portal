@@ -1,20 +1,25 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useBranchStore } from '@/stores/branches'
+import EmptyState from '@/components/common/EmptyState.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
 import {
   getComplaints, getComplaint, createComplaint,
   changeComplaintStatus, getComplaintLogs, getComplaintSummary,
   type Complaint, type ComplaintLog
 } from '@/api/complaints'
-import api from '@/api/client'
 
 const auth = useAuthStore()
+const branchStore = useBranchStore()
 const isBranch = computed(() => auth.role === 'branch')
 const isAdmin = computed(() => auth.role === 'admin' || auth.role === 'editor')
 
+// branches alias for template compatibility
+const branches = computed(() => branchStore.branches)
+
 // State
 const complaints = ref<Complaint[]>([])
-const branches = ref<{ id: number; name: string }[]>([])
 const selectedComplaint = ref<Complaint | null>(null)
 const logs = ref<ComplaintLog[]>([])
 const loading = ref(false)
@@ -47,13 +52,6 @@ const severityLabels: Record<string, string> = {
   normal: '보통',
   high: '높음',
   critical: '긴급',
-}
-
-async function loadBranches() {
-  try {
-    const { data } = await api.get('/events/branches')
-    branches.value = data
-  } catch { /* ignore */ }
 }
 
 async function loadComplaints() {
@@ -117,7 +115,7 @@ async function loadSummary() {
 }
 
 onMounted(() => {
-  loadBranches()
+  branchStore.loadBranches()
   loadComplaints()
   loadSummary()
   if (isBranch.value && auth.branchId) {
@@ -126,6 +124,14 @@ onMounted(() => {
 })
 
 watch([filterStatus, filterBranch], loadComplaints)
+
+const branchOptions = computed(() => branches.value.map(b => ({ value: String(b.id), label: b.name })))
+const statusOptions = [
+  { value: 'received', label: '접수' },
+  { value: 'processing', label: '처리중' },
+  { value: 'resolved', label: '처리완료' },
+  { value: 'closed', label: '종결' },
+]
 </script>
 
 <template>
@@ -164,13 +170,7 @@ watch([filterStatus, filterBranch], loadComplaints)
         <option value="">전체 지점</option>
         <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
       </select>
-      <select v-model="filterStatus" class="text-sm border rounded-lg px-3 py-1.5">
-        <option value="">전체 상태</option>
-        <option value="received">접수</option>
-        <option value="processing">처리중</option>
-        <option value="resolved">처리완료</option>
-        <option value="closed">종결</option>
-      </select>
+      <FilterSelect v-model="filterStatus" :options="statusOptions" placeholder="전체 상태" />
     </div>
 
     <!-- List -->
@@ -196,9 +196,7 @@ watch([filterStatus, filterBranch], loadComplaints)
           <span v-if="c.assigned_to">담당: {{ c.assigned_to }}</span>
         </div>
       </div>
-      <p v-if="!complaints.length && !loading" class="text-sm text-slate-400 text-center py-8">
-        등록된 민원이 없습니다.
-      </p>
+      <EmptyState v-if="!complaints.length && !loading" message="등록된 민원이 없습니다." />
     </div>
 
     <!-- Detail Panel -->

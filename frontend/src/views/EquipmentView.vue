@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useEquipmentStore } from '@/stores/equipment'
 import { useAuthStore } from '@/stores/auth'
 import * as equipApi from '@/api/equipment'
 import * as papersApi from '@/api/papers'
 import { usePanelResize } from '@/composables/useResizePanel'
 import { useAsyncAction } from '@/composables/useAsyncAction'
+import FilterSelect from '@/components/common/FilterSelect.vue'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const store = useEquipmentStore()
 const auth = useAuthStore()
@@ -104,6 +107,9 @@ async function openDetail(row: any) {
 
 const canEdit = ['admin', 'editor', 'branch'].includes(auth.role)
 
+const branchOptions = computed(() => store.branches.map(b => ({ value: b.name, label: b.name })))
+const categoryOptions = computed(() => store.categories.map(c => ({ value: c.name, label: c.name })))
+
 function handleSearch() {
   store.loadEquipment()
 }
@@ -132,17 +138,19 @@ function formatPrice(n: number | null) {
 
     <!-- 필터 바 -->
     <div class="flex items-center gap-3 mb-3 flex-wrap">
-      <select v-model="store.filterBranch" @change="handleSearch"
-        class="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white">
-        <option value="">전체 지점</option>
-        <option v-for="b in store.branches" :key="b.id" :value="b.name">{{ b.name }}</option>
-      </select>
+      <FilterSelect
+        v-model="store.filterBranch"
+        :options="branchOptions"
+        placeholder="전체 지점"
+        @update:model-value="handleSearch"
+      />
 
-      <select v-model="store.filterCategory" @change="handleSearch"
-        class="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white">
-        <option value="">전체 카테고리</option>
-        <option v-for="c in store.categories" :key="c.id" :value="c.name">{{ c.name }}</option>
-      </select>
+      <FilterSelect
+        v-model="store.filterCategory"
+        :options="categoryOptions"
+        placeholder="전체 카테고리"
+        @update:model-value="handleSearch"
+      />
 
       <input v-model="store.filterSearch" placeholder="장비명 검색 (Enter)"
         class="px-3 py-1.5 border border-slate-300 rounded-md text-sm w-48 focus:outline-none focus:ring-1 focus:ring-blue-400"
@@ -260,10 +268,7 @@ function formatPrice(n: number | null) {
 
           <!-- 로딩 -->
           <div v-if="detailLoading" class="flex-1 flex items-center justify-center">
-            <div class="text-center">
-              <div class="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-              <p class="text-xs text-slate-400">정보를 불러오는 중...</p>
-            </div>
+            <LoadingSpinner message="정보를 불러오는 중..." />
           </div>
 
           <!-- 콘텐츠 -->

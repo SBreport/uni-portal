@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api/client'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 const auth = useAuthStore()
 
@@ -84,7 +85,7 @@ function formatDate(iso: string) {
 
     <!-- 로딩 -->
     <div v-if="loading" class="flex items-center justify-center h-64">
-      <p class="text-slate-400">불러오는 중...</p>
+      <LoadingSpinner />
     </div>
 
     <template v-else-if="data">

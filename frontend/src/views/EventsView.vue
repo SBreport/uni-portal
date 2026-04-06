@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useEventsStore } from '@/stores/events'
 import DataTable from '@/components/common/DataTable.vue'
+import FilterSelect from '@/components/common/FilterSelect.vue'
 import { createColumnHelper, type CellContext } from '@tanstack/vue-table'
 import { h } from 'vue'
 
@@ -57,6 +58,9 @@ function handlePriceInput(field: 'min' | 'max', e: Event) {
   if (field === 'min') store.filterPriceMin = num
   else store.filterPriceMax = num
 }
+
+const branchOptions = computed(() => store.branches.map((b: any) => ({ value: b.name, label: b.name })))
+const categoryOptions = computed(() => store.categories.map((c: any) => ({ value: c.name, label: c.name })))
 </script>
 
 <template>
@@ -68,17 +72,9 @@ function handlePriceInput(field: 'min' | 'max', e: Event) {
 
     <!-- 필터 바 -->
     <div class="flex items-center gap-2.5 mb-4 flex-wrap">
-      <select v-model="store.filterBranch"
-        class="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white">
-        <option value="">전체 지점</option>
-        <option v-for="b in store.branches" :key="b.id" :value="b.name">{{ b.name }}</option>
-      </select>
+      <FilterSelect v-model="store.filterBranch" :options="branchOptions" placeholder="전체 지점" />
 
-      <select v-model="store.filterCategory"
-        class="px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white">
-        <option value="">전체 카테고리</option>
-        <option v-for="c in store.categories" :key="c.id" :value="c.name">{{ c.name }}</option>
-      </select>
+      <FilterSelect v-model="store.filterCategory" :options="categoryOptions" placeholder="전체 카테고리" />
 
       <input v-model="store.filterSearch" placeholder="이벤트명 검색"
         class="px-3 py-1.5 border border-slate-300 rounded-md text-sm w-40 focus:outline-none focus:ring-1 focus:ring-blue-400" />

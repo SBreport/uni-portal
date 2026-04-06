@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, h } from 'vue'
 import * as usersApi from '@/api/users'
 import { useAuthStore } from '@/stores/auth'
+import DataTable from '@/components/common/DataTable.vue'
+import { createColumnHelper } from '@tanstack/vue-table'
 
 const props = defineProps<{ branches: { id: number; name: string }[] }>()
 const auth = useAuthStore()
@@ -29,6 +31,13 @@ const roles = [
   { value: 'admin', label: '관리자' },
 ]
 
+const roleBadgeClass: Record<string, string> = {
+  viewer: 'bg-slate-100 text-slate-600',
+  branch: 'bg-blue-100 text-blue-700',
+  editor: 'bg-amber-100 text-amber-700',
+  admin:  'bg-red-100 text-red-700',
+}
+
 const branchMap = computed(() => {
   const m = new Map<number, string>()
   props.branches.forEach(b => m.set(b.id, b.name))
@@ -54,7 +63,13 @@ async function handleDelete(username: string) {
   if (username === auth.username) return
   await usersApi.deleteUser(username); await loadUsers()
 }
-function startEdit(user: User) { editingUser.value = user.username; editRole.value = user.role; editPassword.value = ''; editMemo.value = user.memo || ''; editBranchId.value = user.branch_id }
+function startEdit(user: User) {
+  editingUser.value = user.username
+  editRole.value = user.role
+  editPassword.value = ''
+  editMemo.value = user.memo || ''
+  editBranchId.value = user.branch_id
+}
 async function handleUpdate() {
   if (!editingUser.value) return
   const u: Record<string, any> = {}
@@ -65,6 +80,116 @@ async function handleUpdate() {
   await usersApi.updateUser(editingUser.value, u); editingUser.value = null; await loadUsers()
 }
 
+// ── Column definitions ────────────────────────────────────────────
+const col = createColumnHelper<User>()
+
+const columns = computed(() => [
+  col.accessor('username', {
+    header: 'ID',
+    size: 112,
+    cell: (info) => h('span', { class: 'font-medium' }, info.getValue()),
+  }),
+
+  col.accessor('role', {
+    header: '역할',
+    size: 80,
+    cell: (info) => {
+      const user = info.row.original
+      if (editingUser.value === user.username) {
+        return h('select', {
+          value: editRole.value,
+          onChange: (e: Event) => { editRole.value = (e.target as HTMLSelectElement).value },
+          class: 'px-2 py-1 border border-slate-300 rounded text-xs',
+        }, roles.map(r => h('option', { value: r.value, selected: editRole.value === r.value }, r.label)))
+      }
+      const label = roles.find(r => r.value === info.getValue())?.label || info.getValue()
+      return h('span', {
+        class: `px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${roleBadgeClass[info.getValue()] || 'bg-slate-100 text-slate-600'}`,
+      }, label)
+    },
+  }),
+
+  col.accessor('branch_id', {
+    header: '지점',
+    size: 112,
+    cell: (info) => {
+      const user = info.row.original
+      if (editingUser.value === user.username) {
+        return h('select', {
+          value: editBranchId.value ?? '',
+          onChange: (e: Event) => {
+            const v = (e.target as HTMLSelectElement).value
+            editBranchId.value = v === '' ? null : Number(v)
+          },
+          class: 'px-2 py-1 border border-slate-300 rounded text-xs',
+        }, [
+          h('option', { value: '' }, '없음'),
+          ...props.branches.map(b => h('option', { value: b.id, selected: editBranchId.value === b.id }, b.name)),
+        ])
+      }
+      const bid = info.getValue()
+      return h('span', { class: 'text-sm text-slate-600' }, bid ? (branchMap.value.get(bid) || '-') : '-')
+    },
+  }),
+
+  col.accessor('memo', {
+    header: '메모',
+    cell: (info) => {
+      const user = info.row.original
+      if (editingUser.value === user.username) {
+        return h('div', { class: 'flex gap-2' }, [
+          h('input', {
+            type: 'password',
+            value: editPassword.value,
+            placeholder: '새 비밀번호',
+            onInput: (e: Event) => { editPassword.value = (e.target as HTMLInputElement).value },
+            class: 'flex-1 px-2 py-1 border border-slate-300 rounded text-xs',
+          }),
+          h('input', {
+            value: editMemo.value,
+            placeholder: '메모',
+            onInput: (e: Event) => { editMemo.value = (e.target as HTMLInputElement).value },
+            class: 'flex-1 px-2 py-1 border border-slate-300 rounded text-xs',
+          }),
+        ])
+      }
+      return h('span', { class: 'text-slate-400' }, info.getValue() || '-')
+    },
+  }),
+
+  col.display({
+    id: 'actions',
+    header: '작업',
+    size: 96,
+    cell: (info) => {
+      const user = info.row.original
+      if (editingUser.value === user.username) {
+        return h('div', { class: 'flex justify-end gap-2' }, [
+          h('button', {
+            onClick: (e: MouseEvent) => { e.stopPropagation(); handleUpdate() },
+            class: 'text-emerald-500 text-xs',
+          }, '저장'),
+          h('button', {
+            onClick: (e: MouseEvent) => { e.stopPropagation(); editingUser.value = null },
+            class: 'text-slate-400 text-xs',
+          }, '취소'),
+        ])
+      }
+      return h('div', { class: 'flex justify-end gap-2' }, [
+        h('button', {
+          onClick: (e: MouseEvent) => { e.stopPropagation(); startEdit(user) },
+          class: 'text-blue-500 hover:text-blue-700 text-xs',
+        }, '수정'),
+        ...(user.username !== auth.username
+          ? [h('button', {
+              onClick: (e: MouseEvent) => { e.stopPropagation(); handleDelete(user.username) },
+              class: 'text-red-400 hover:text-red-600 text-xs',
+            }, '삭제')]
+          : []),
+      ])
+    },
+  }),
+])
 </script>
 
 <template>
@@ -91,61 +216,14 @@ async function handleUpdate() {
       <p v-if="formError" class="text-red-500 text-xs mt-2">{{ formError }}</p>
     </div>
 
-    <div class="bg-white border border-slate-200 rounded-lg overflow-hidden max-w-3xl">
-      <table class="w-full text-sm">
-        <thead class="bg-slate-50 border-b border-slate-200">
-          <tr>
-            <th class="text-left px-4 py-2 font-medium text-slate-500 w-28">ID</th>
-            <th class="text-left px-4 py-2 font-medium text-slate-500 w-20">역할</th>
-            <th class="text-left px-4 py-2 font-medium text-slate-500 w-28">지점</th>
-            <th class="text-left px-4 py-2 font-medium text-slate-500">메모</th>
-            <th class="text-right px-4 py-2 font-medium text-slate-500 w-24">작업</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="user in users" :key="user.username" class="border-b border-slate-100 hover:bg-slate-50">
-            <template v-if="editingUser !== user.username">
-              <td class="px-4 py-2 font-medium">{{ user.username }}</td>
-              <td class="px-4 py-2">
-                <span class="px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap"
-                  :class="{ 'bg-slate-100 text-slate-600': user.role === 'viewer', 'bg-blue-100 text-blue-700': user.role === 'branch', 'bg-amber-100 text-amber-700': user.role === 'editor', 'bg-red-100 text-red-700': user.role === 'admin' }">
-                  {{ roles.find(r => r.value === user.role)?.label || user.role }}
-                </span>
-              </td>
-              <td class="px-4 py-2 text-sm text-slate-600">{{ user.branch_id ? branchMap.get(user.branch_id) || '-' : '-' }}</td>
-              <td class="px-4 py-2 text-slate-400">{{ user.memo || '-' }}</td>
-              <td class="px-4 py-2 text-right space-x-2">
-                <button @click="startEdit(user)" class="text-blue-500 hover:text-blue-700 text-xs">수정</button>
-                <button v-if="user.username !== auth.username" @click="handleDelete(user.username)" class="text-red-400 hover:text-red-600 text-xs">삭제</button>
-              </td>
-            </template>
-            <template v-else>
-              <td class="px-4 py-2 font-medium">{{ user.username }}</td>
-              <td class="px-4 py-2">
-                <select v-model="editRole" class="px-2 py-1 border border-slate-300 rounded text-xs">
-                  <option v-for="r in roles" :key="r.value" :value="r.value">{{ r.label }}</option>
-                </select>
-              </td>
-              <td class="px-4 py-2">
-                <select v-model="editBranchId" class="px-2 py-1 border border-slate-300 rounded text-xs">
-                  <option :value="null">없음</option>
-                  <option v-for="b in branches" :key="b.id" :value="b.id">{{ b.name }}</option>
-                </select>
-              </td>
-              <td class="px-4 py-2">
-                <div class="flex gap-2">
-                  <input v-model="editPassword" type="password" placeholder="새 비밀번호" class="flex-1 px-2 py-1 border border-slate-300 rounded text-xs" />
-                  <input v-model="editMemo" placeholder="메모" class="flex-1 px-2 py-1 border border-slate-300 rounded text-xs" />
-                </div>
-              </td>
-              <td class="px-4 py-2 text-right space-x-2">
-                <button @click="handleUpdate" class="text-emerald-500 text-xs">저장</button>
-                <button @click="editingUser = null" class="text-slate-400 text-xs">취소</button>
-              </td>
-            </template>
-          </tr>
-        </tbody>
-      </table>
+    <div class="max-w-3xl">
+      <DataTable
+        :data="users"
+        :columns="columns"
+        :page-size="50"
+        height="600px"
+        :searchable="false"
+      />
     </div>
   </div>
 </template>

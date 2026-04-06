@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as cafeApi from '@/api/cafe'
+import { useBranchStore } from '@/stores/branches'
 
 export interface Branch { id: number; name: string; short_name: string }
 export interface Period { id: number; year: number; month: number; label: string; is_current: number }
@@ -29,8 +30,10 @@ export interface SummaryRow {
 }
 
 export const useCafeStore = defineStore('cafe', () => {
+  const branchStore = useBranchStore()
   const periods = ref<Period[]>([])
-  const branches = ref<Branch[]>([])
+  // Expose branches from shared store for backwards compatibility
+  const branches = computed(() => branchStore.branches)
   const currentPeriod = ref<Period | null>(null)
   const currentBranch = ref<Branch | null>(null)
   const branchPeriodId = ref<number | null>(null)
@@ -48,8 +51,7 @@ export const useCafeStore = defineStore('cafe', () => {
   }
 
   async function loadBranches() {
-    const { data } = await cafeApi.getBranches()
-    branches.value = data
+    await branchStore.loadBranches()
   }
 
   async function selectBranchPeriod(branchId: number, year: number, month: number) {
@@ -87,7 +89,8 @@ export const useCafeStore = defineStore('cafe', () => {
     }
     const idx = articles.value.findIndex(a => a.id === articleId)
     if (idx !== -1) {
-      Object.assign(articles.value[idx], updates)
+      const article = articles.value[idx]
+      if (article) Object.assign(article, updates)
     }
   }
 

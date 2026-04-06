@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import * as equipApi from '@/api/equipment'
+import { useBranchStore } from '@/stores/branches'
 
 export interface Branch { id: number; name: string }
 export interface Category { id: number; name: string }
@@ -11,7 +12,10 @@ export interface EquipmentRow {
 }
 
 export const useEquipmentStore = defineStore('equipment', () => {
-  const branches = ref<Branch[]>([])
+  const branchStore = useBranchStore()
+  // Expose branches from shared store for backwards compatibility
+  const branches = computed(() => branchStore.branches)
+
   const categories = ref<Category[]>([])
   const rows = ref<EquipmentRow[]>([])
   const loading = ref(false)
@@ -22,8 +26,7 @@ export const useEquipmentStore = defineStore('equipment', () => {
   const filterSearch = ref('')
 
   async function loadBranches() {
-    const { data } = await equipApi.getBranches()
-    branches.value = data
+    await branchStore.loadBranches()
   }
 
   async function loadCategories() {

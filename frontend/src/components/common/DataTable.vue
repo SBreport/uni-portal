@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   useVueTable,
   getCoreRowModel,
@@ -10,7 +10,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/vue-table'
-import { ref } from 'vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const props = withDefaults(defineProps<{
   data: any[]
@@ -116,11 +116,7 @@ const pageInfo = computed(() => {
                 <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
               </td>
             </tr>
-            <tr v-if="table.getRowModel().rows.length === 0">
-              <td :colspan="columns.length" class="px-3 py-8 text-center text-slate-400">
-                데이터가 없습니다
-              </td>
-            </tr>
+            <EmptyState v-if="table.getRowModel().rows.length === 0" :colspan="columns.length" />
           </tbody>
         </table>
       </div>

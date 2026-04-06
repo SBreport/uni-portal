@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import * as blogApi from '@/api/blog'
 import { channelLabel, channelColor } from '@/utils/blogFormatters'
-import { useColumnResize } from '@/composables/useResizePanel'
+import DataTable from '@/components/common/DataTable.vue'
+import { createColumnHelper } from '@tanstack/vue-table'
 
 const props = defineProps<{
   branchFilter?: string
@@ -51,69 +52,6 @@ async function runFixUrlTitles() {
     setTimeout(() => { toolMessage.value = '' }, 5000)
   }
 }
-
-// 정렬
-type SortKey = 'channel' | 'blog_id' | 'blog_nickname' | 'blog_title' | 'post_count' | 'recent_count' | 'last_published'
-const sortKey = ref<SortKey>('last_published')
-const sortAsc = ref(false)
-
-function toggleSort(key: SortKey) {
-  if (sortKey.value === key) {
-    sortAsc.value = !sortAsc.value
-  } else {
-    sortKey.value = key
-    // 기본 방향: 게시글/발행일은 내림차순, 나머지는 오름차순
-    sortAsc.value = !['post_count', 'recent_count', 'last_published'].includes(key)
-  }
-}
-
-function sortIcon(key: SortKey) {
-  if (sortKey.value !== key) return ''
-  return sortAsc.value ? ' \u25B2' : ' \u25BC'
-}
-
-// 컬럼 리사이즈
-const cols = ref([
-  { key: 'check',          label: '',             width: 36,  minWidth: 30 },
-  { key: 'channel',        label: '채널',         width: 52,  minWidth: 46 },
-  { key: 'blog_id',        label: '블로그 ID',    width: 120, minWidth: 80 },
-  { key: 'blog_nickname',  label: '닉네임',       width: 120, minWidth: 60 },
-  { key: 'post_count',     label: '전체',         width: 50,  minWidth: 40 },
-  { key: 'recent_count',   label: '최근',         width: 50,  minWidth: 40 },
-  { key: 'last_published', label: '최근발행',     width: 84,  minWidth: 60 },
-  { key: 'blog_title',     label: '블로그 타이틀', width: 180, minWidth: 100 },
-  { key: 'blog_link',      label: '블로그 링크',  width: 170, minWidth: 120 },
-  { key: 'edit',           label: '',             width: 38,  minWidth: 30 },
-])
-const { startResize } = useColumnResize(cols)
-
-const sortedAccounts = computed(() => {
-  const arr = [...accounts.value]
-  const key = sortKey.value
-  const asc = sortAsc.value
-  arr.sort((a, b) => {
-    let va = a[key] ?? ''
-    let vb = b[key] ?? ''
-    if (key === 'post_count' || key === 'recent_count') {
-      va = Number(va) || 0
-      vb = Number(vb) || 0
-    } else {
-      va = String(va).toLowerCase()
-      vb = String(vb).toLowerCase()
-    }
-    if (va < vb) return asc ? -1 : 1
-    if (va > vb) return asc ? 1 : -1
-    // 2차 정렬: 채널 오름차순
-    if (key !== 'channel') {
-      const ca = (a.channel || '').toLowerCase()
-      const cb = (b.channel || '').toLowerCase()
-      if (ca < cb) return -1
-      if (ca > cb) return 1
-    }
-    return 0
-  })
-  return arr
-})
 
 async function loadAccounts() {
   loading.value = true
@@ -172,6 +110,143 @@ const allAccountsSelected = computed(() =>
 )
 
 onMounted(loadAccounts)
+
+// ── Column definitions ────────────────────────────────────────────
+const col = createColumnHelper<any>()
+
+const columns = computed(() => [
+  col.display({
+    id: 'select',
+    size: 36,
+    enableSorting: false,
+    header: () => h('input', {
+      type: 'checkbox',
+      checked: allAccountsSelected.value,
+      onChange: () => toggleAllAccounts(),
+      class: 'rounded border-slate-300',
+    }),
+    cell: (info) => {
+      const blogId = info.row.original.blog_id
+      return h('input', {
+        type: 'checkbox',
+        checked: selectedAccounts.value.has(blogId),
+        onChange: (e: Event) => { e.stopPropagation(); toggleAccount(blogId) },
+        class: 'rounded border-slate-300',
+      })
+    },
+  }),
+
+  col.accessor('channel', {
+    header: '채널',
+    size: 52,
+    enableSorting: true,
+    cell: (info) => h('span', {
+      class: `text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap ${channelColor(info.getValue())}`,
+    }, channelLabel(info.getValue())),
+  }),
+
+  col.accessor('blog_id', {
+    header: '블로그 ID',
+    size: 120,
+    enableSorting: true,
+    cell: (info) => h('span', {
+      class: 'font-mono text-[11px] text-slate-600 truncate block',
+    }, info.getValue()),
+  }),
+
+  col.accessor('blog_nickname', {
+    header: '닉네임',
+    size: 120,
+    enableSorting: true,
+    cell: (info) => {
+      const v = info.getValue()
+      const cls = v?.startsWith('(') ? 'text-red-400 italic' : v ? 'text-slate-700' : 'text-slate-400'
+      return h('span', { class: `text-xs truncate block ${cls}` }, v || '-')
+    },
+  }),
+
+  col.accessor('post_count', {
+    header: '전체',
+    size: 50,
+    enableSorting: true,
+    cell: (info) => h('span', { class: 'text-right text-xs text-slate-600 font-medium block' }, info.getValue()),
+  }),
+
+  col.accessor('recent_count', {
+    header: '최근',
+    size: 50,
+    enableSorting: true,
+    cell: (info) => {
+      const v = info.getValue() ?? 0
+      return h('span', {
+        class: `text-right text-xs font-medium block ${v > 0 ? 'text-blue-600' : 'text-slate-300'}`,
+      }, v)
+    },
+  }),
+
+  col.accessor('last_published', {
+    header: '최근발행',
+    size: 84,
+    enableSorting: true,
+    cell: (info) => h('span', { class: 'text-xs text-slate-400' }, info.getValue() || '-'),
+  }),
+
+  col.accessor('blog_title', {
+    header: '블로그 타이틀',
+    size: 180,
+    enableSorting: true,
+    cell: (info) => h('span', { class: 'text-xs text-slate-500 truncate block' }, info.getValue() || '-'),
+  }),
+
+  col.accessor('blog_link', {
+    header: '블로그 링크',
+    size: 170,
+    enableSorting: false,
+    cell: (info) => {
+      const acc = info.row.original
+      if (acc.channel !== 'cafe') {
+        return h('a', {
+          href: `https://blog.naver.com/${acc.blog_id}`,
+          target: '_blank',
+          onClick: (e: MouseEvent) => e.stopPropagation(),
+          class: 'text-xs text-blue-400 hover:text-blue-600 hover:underline truncate block',
+        }, `blog.naver.com/${acc.blog_id}`)
+      }
+      return h('span', { class: 'text-xs text-slate-300' }, '-')
+    },
+  }),
+
+  col.display({
+    id: 'edit',
+    size: 60,
+    enableSorting: false,
+    header: '',
+    cell: (info) => {
+      const acc = info.row.original
+      if (editingAccount.value === acc.blog_id) {
+        return h('div', { class: 'flex justify-end gap-1' }, [
+          h('button', {
+            onClick: (e: MouseEvent) => { e.stopPropagation(); saveAccount(acc.blog_id) },
+            class: 'text-[10px] text-blue-600 hover:underline',
+          }, '저장'),
+          h('button', {
+            onClick: (e: MouseEvent) => { e.stopPropagation(); cancelEdit() },
+            class: 'text-[10px] text-slate-400 hover:underline',
+          }, '취소'),
+        ])
+      }
+      return h('div', { class: 'flex justify-end' }, [
+        h('button', {
+          onClick: (e: MouseEvent) => { e.stopPropagation(); startEdit(acc) },
+          class: 'text-[10px] text-slate-400 hover:text-blue-600',
+        }, '편집'),
+      ])
+    },
+  }),
+])
+
+// Row highlight: selected accounts get a blue tint — handled via onRowClick + CSS class
+// DataTable doesn't support per-row class, so selection highlight is done via checkbox only
 </script>
 
 <template>
@@ -215,85 +290,12 @@ onMounted(loadAccounts)
     </div>
 
     <!-- 테이블 -->
-    <div class="flex-1 bg-white border border-slate-200 rounded-lg overflow-auto">
-      <table class="text-sm" style="table-layout: fixed; width: max-content; min-width: 100%;">
-        <colgroup>
-          <col v-for="c in cols" :key="c.key"
-               :style="c.width ? { width: c.width + 'px' } : {}" />
-        </colgroup>
-        <thead class="sticky top-0 z-10" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-          <tr class="text-left text-xs text-slate-500 border-b">
-            <!-- 체크박스 -->
-            <th class="px-2 py-2 bg-slate-50">
-              <input type="checkbox"
-                     :checked="allAccountsSelected"
-                     @change="toggleAllAccounts"
-                     class="rounded border-slate-300" />
-            </th>
-            <!-- 정렬 가능 헤더 + 리사이즈 핸들 -->
-            <th v-for="(c, idx) in cols.slice(1, -1)" :key="c.key"
-                @click="toggleSort(c.key as SortKey)"
-                class="px-2 py-2 bg-slate-50 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group"
-                :class="{ 'text-right': c.key === 'post_count' || c.key === 'recent_count' }">
-              <span>{{ c.label }}</span>
-              <span v-if="sortKey === c.key" class="ml-0.5 text-blue-500 text-[9px]">{{ sortIcon(c.key as SortKey) }}</span>
-              <div v-if="c.width > 0"
-                   @mousedown.stop.prevent="startResize(idx + 1, $event)"
-                   class="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize z-10 hover:bg-blue-300/50" />
-            </th>
-            <!-- 편집 -->
-            <th class="px-2 py-2 bg-slate-50"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="acc in sortedAccounts" :key="acc.blog_id"
-              class="border-b border-slate-100 hover:bg-slate-50/50"
-              :class="{ 'bg-blue-50/50': selectedAccounts.has(acc.blog_id) }">
-            <td class="px-2 py-1.5">
-              <input type="checkbox"
-                     :checked="selectedAccounts.has(acc.blog_id)"
-                     @change="toggleAccount(acc.blog_id)"
-                     class="rounded border-slate-300" />
-            </td>
-            <td class="px-2 py-1.5">
-              <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
-                    :class="channelColor(acc.channel)">
-                {{ channelLabel(acc.channel) }}
-              </span>
-            </td>
-            <td class="px-2 py-1.5 font-mono text-[11px] text-slate-600 truncate">{{ acc.blog_id }}</td>
-            <td class="px-2 py-1.5 text-xs truncate"
-                :class="acc.blog_nickname?.startsWith('(') ? 'text-red-400 italic' : acc.blog_nickname ? 'text-slate-700' : 'text-slate-400'">
-              {{ acc.blog_nickname || '-' }}
-            </td>
-            <td class="px-2 py-1.5 text-right text-xs text-slate-600 font-medium">{{ acc.post_count }}</td>
-            <td class="px-2 py-1.5 text-right text-xs font-medium"
-                :class="acc.recent_count > 0 ? 'text-blue-600' : 'text-slate-300'">{{ acc.recent_count ?? 0 }}</td>
-            <td class="px-2 py-1.5 text-xs text-slate-400">{{ acc.last_published || '-' }}</td>
-            <td class="px-2 py-1.5 text-xs text-slate-500 truncate">{{ acc.blog_title || '-' }}</td>
-            <td class="px-2 py-1.5 text-xs truncate">
-              <a v-if="acc.channel !== 'cafe'"
-                 :href="`https://blog.naver.com/${acc.blog_id}`"
-                 target="_blank"
-                 @click.stop
-                 class="text-blue-400 hover:text-blue-600 hover:underline">blog.naver.com/{{ acc.blog_id }}</a>
-              <span v-else class="text-slate-300">-</span>
-            </td>
-            <td class="px-2 py-1.5 text-right">
-              <template v-if="editingAccount === acc.blog_id">
-                <button @click="saveAccount(acc.blog_id)" class="text-[10px] text-blue-600 hover:underline mr-1">저장</button>
-                <button @click="cancelEdit" class="text-[10px] text-slate-400 hover:underline">취소</button>
-              </template>
-              <template v-else>
-                <button @click="startEdit(acc)" class="text-[10px] text-slate-400 hover:text-blue-600">편집</button>
-              </template>
-            </td>
-          </tr>
-          <tr v-if="!accounts.length && !loading">
-            <td colspan="10" class="px-3 py-8 text-center text-slate-400 text-sm">계정이 없습니다</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      :data="accounts"
+      :columns="columns"
+      :page-size="100"
+      height="650px"
+      :searchable="false"
+    />
   </div>
 </template>

@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import * as encApi from '@/api/encyclopedia'
+import TabBar from '@/components/common/TabBar.vue'
 
 const auth = useAuthStore()
 const isAdmin = computed(() => auth.role === 'admin')
@@ -9,6 +10,11 @@ const isAdmin = computed(() => auth.role === 'admin')
 // ── 탭: 목적별 / 부위별 / 장비별 ──
 type Tab = 'purpose' | 'body' | 'equipment'
 const activeTab = ref<Tab>('purpose')
+const tabs = [
+  { key: 'purpose', label: '목적별' },
+  { key: 'body', label: '부위별' },
+  { key: 'equipment', label: '장비별' },
+]
 
 // ── 목록 데이터 ──
 const purposes = ref<any[]>([])
@@ -162,17 +168,7 @@ onMounted(() => { loadLists(); loadPendingSummary() })
     <!-- 목록 모드 -->
     <template v-if="mode === 'list'">
       <!-- 탭 -->
-      <div class="flex gap-3 mb-4 border-b border-slate-200">
-        <button v-for="tab in [
-          { key: 'purpose', label: '목적별' },
-          { key: 'body', label: '부위별' },
-          { key: 'equipment', label: '장비별' },
-        ]" :key="tab.key" @click="activeTab = tab.key as Tab"
-          :class="['pb-2 text-sm font-medium border-b-2 transition',
-            activeTab === tab.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600']">
-          {{ tab.label }}
-        </button>
-      </div>
+      <TabBar :model-value="activeTab" :tabs="tabs" @update:model-value="(v) => activeTab = v as Tab" />
 
       <div v-if="loading" class="text-sm text-slate-400 py-8 text-center">로딩 중...</div>
 

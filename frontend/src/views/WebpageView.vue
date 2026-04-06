@@ -49,7 +49,7 @@ function getAgency(branch: string): string {
   return AGENCY_MAP[branch] || '-'
 }
 
-const AGENCIES = ['채움AD'] as const
+const AGENCIES: string[] = ['채움AD']
 
 const loading = ref(true)
 const error = ref('')

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as eventsApi from '@/api/events'
+import { useBranchStore } from '@/stores/branches'
 
 export interface EventRow {
   id: number; branch_name: string; category_name: string
@@ -11,8 +12,10 @@ export interface EventRow {
 }
 
 export const useEventsStore = defineStore('events', () => {
+  const branchStore = useBranchStore()
   const events = ref<EventRow[]>([])
-  const branches = ref<any[]>([])
+  // Expose branches from shared store for backwards compatibility
+  const branches = computed(() => branchStore.branches)
   const categories = ref<any[]>([])
   const loading = ref(false)
   const isFallback = ref(false)
@@ -58,12 +61,12 @@ export const useEventsStore = defineStore('events', () => {
   async function loadAll() {
     loading.value = true
     try {
-      const [evtRes, brRes, catRes] = await Promise.all([
-        eventsApi.getEvents(), eventsApi.getBranches(), eventsApi.getCategories()
+      const [evtRes, catRes] = await Promise.all([
+        eventsApi.getEvents(), eventsApi.getCategories(),
+        branchStore.loadBranches(),
       ])
       events.value = evtRes.data.data || []
       isFallback.value = evtRes.data.is_fallback || false
-      branches.value = brRes.data
       categories.value = catRes.data
     } finally {
       loading.value = false

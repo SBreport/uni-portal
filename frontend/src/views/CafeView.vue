@@ -5,10 +5,17 @@ import CafeDashboard from '@/components/cafe/CafeDashboard.vue'
 import ArticleListV1 from '@/components/cafe/ArticleListV1.vue'
 import ArticleListV2 from '@/components/cafe/ArticleListV2.vue'
 import ArticleEditor from '@/components/cafe/ArticleEditor.vue'
+import TabBar from '@/components/common/TabBar.vue'
 
 const store = useCafeStore()
 
 const subView = ref<'dashboard' | 'list' | 'editor' | 'publish'>('dashboard')
+const tabs = [
+  { key: 'dashboard', label: '대시보드' },
+  { key: 'list', label: '원고 목록' },
+  { key: 'editor', label: '원고 작성' },
+  { key: 'publish', label: '발행 결과' },
+]
 const selectedBranchId = ref<number | null>(null)
 const selectedYear = ref(new Date().getFullYear())
 const selectedMonth = ref(new Date().getMonth() + 1)
@@ -86,22 +93,7 @@ function goToBranch(branchName: string) {
     </div>
 
     <!-- 서브뷰 탭 -->
-    <div class="flex gap-4 mb-5 border-b border-slate-200">
-      <button v-for="tab in [
-        { key: 'dashboard', label: '대시보드' },
-        { key: 'list', label: '원고 목록' },
-        { key: 'editor', label: '원고 작성' },
-        { key: 'publish', label: '발행 결과' },
-      ]" :key="tab.key"
-        @click="subView = tab.key as any"
-        :class="[
-          'pb-2 text-sm font-medium border-b-2 transition',
-          subView === tab.key
-            ? 'border-blue-600 text-blue-600'
-            : 'border-transparent text-slate-400 hover:text-slate-600'
-        ]"
-      >{{ tab.label }}</button>
-    </div>
+    <TabBar :model-value="subView" :tabs="tabs" @update:model-value="(v: string) => subView = v as 'dashboard' | 'list' | 'editor' | 'publish'" />
 
     <!-- 지점 미선택 시 안내 (원고 목록/작성은 지점 필요) -->
     <template v-if="!selectedBranchId && (subView === 'list' || subView === 'editor')">

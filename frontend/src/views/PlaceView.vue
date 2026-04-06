@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { getPlaceRankingDaily, syncPlaceToDB, getPlaceLastSync } from '@/api/place'
 import { getComparison } from '@/api/rankChecker'
+import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
@@ -339,7 +340,7 @@ onMounted(() => { loadData(); loadLastSync() })
 
     <!-- 로딩 -->
     <div v-if="loading" class="flex items-center justify-center flex-1">
-      <div class="text-slate-400 text-sm">데이터를 불러오는 중...</div>
+      <LoadingSpinner message="데이터를 불러오는 중..." />
     </div>
 
     <template v-else-if="data">

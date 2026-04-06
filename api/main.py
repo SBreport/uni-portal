@@ -60,7 +60,7 @@ app.add_middleware(
 )
 
 # 라우터 등록
-from api.routers import auth, users, cafe, equipment, events, papers, blog, place, webpage, treatment_catalog, complaints, reports, branch_info, rank_checker, encyclopedia, branches, config
+from api.routers import auth, users, cafe, equipment, events, papers, blog, place, webpage, treatment_catalog, complaints, reports, branch_info, rank_checker, encyclopedia, branches, config, explorer
 
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
@@ -79,6 +79,7 @@ app.include_router(rank_checker.router)
 app.include_router(encyclopedia.router)
 app.include_router(branches.router)
 app.include_router(config.router)
+app.include_router(explorer.router, prefix="/explorer", tags=["Explorer"])
 
 
 @app.get("/health")

@@ -1,5 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+
+// Helper: compute effectiveRole from localStorage (guard runs before Pinia)
+function getEffectiveRole(): string {
+  const role = localStorage.getItem('role') || ''
+  const branchId = localStorage.getItem('branch_id')
+  if (role === 'viewer' && branchId !== null) return 'viewer-branch'
+  if (role === 'viewer' && branchId === null) return 'viewer-hq'
+  return role
+}
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -29,6 +37,7 @@ const router = createRouter({
       path: '/treatment-info',
       name: 'treatment-info',
       component: () => import('@/views/TreatmentInfoView.vue'),
+      meta: { roles: ['admin', 'editor'] },
     },
     {
       path: '/papers',
@@ -45,19 +54,21 @@ const router = createRouter({
       path: '/cafe',
       name: 'cafe',
       component: () => import('@/views/CafeView.vue'),
+      meta: { roles: ['admin', 'editor'] },
     },
     {
       path: '/blog',
       name: 'blog',
       component: () => import('@/views/BlogView.vue'),
       props: { mode: 'uandi' },
+      meta: { roles: ['admin', 'editor'] },
     },
     {
       path: '/blog-all',
       name: 'blog-all',
       component: () => import('@/views/BlogView.vue'),
       props: { mode: 'all' },
-      meta: { adminOnly: true },
+      meta: { adminOnly: true, roles: ['admin'] },
     },
     {
       path: '/place',
@@ -86,6 +97,7 @@ const router = createRouter({
       path: '/admin',
       name: 'admin',
       component: () => import('@/views/AdminView.vue'),
+      meta: { roles: ['admin'] },
     },
     // ── 작성자 전용 (/w/) ──
     {
@@ -135,20 +147,28 @@ const router = createRouter({
 // 인증 가드
 router.beforeEach((to) => {
   if (to.meta.public) return true
+
   const token = localStorage.getItem('token')
   if (!token) return { name: 'login' }
-  // admin 전용 페이지 체크
-  if (to.meta.adminOnly) {
-    const role = localStorage.getItem('role')
-    if (role !== 'admin') return { name: 'home' }
-  }
-  // 권한 태그 체크
+
+  // 권한 태그 체크 (/w, /p 레이아웃)
   if (to.meta.requiredPermission) {
     const role = localStorage.getItem('role')
     if (role === 'admin') return true
     const perms: string[] = JSON.parse(localStorage.getItem('permissions') || '[]')
     if (!perms.includes(to.meta.requiredPermission as string)) return { name: 'home' }
   }
+
+  // meta.roles 기반 접근 제어 (adminOnly 하위 호환 포함)
+  if (to.meta.adminOnly && !to.meta.roles) {
+    const role = localStorage.getItem('role')
+    if (role !== 'admin') return { name: 'home' }
+  }
+  if (to.meta.roles) {
+    const effectiveRole = getEffectiveRole()
+    if (!(to.meta.roles as string[]).includes(effectiveRole)) return { name: 'home' }
+  }
+
   return true
 })
 

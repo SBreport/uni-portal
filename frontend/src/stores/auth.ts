@@ -19,22 +19,37 @@ export const useAuthStore = defineStore('auth', () => {
     return role.value === 'admin' || permissionTags.value.includes(perm)
   }
 
+  // Effective role that distinguishes viewer subtypes
+  const effectiveRole = computed(() => {
+    if (role.value === 'viewer' && branchId.value !== null) return 'viewer-branch'
+    if (role.value === 'viewer' && branchId.value === null) return 'viewer-hq'
+    return role.value // admin, editor, branch
+  })
+
+  // Writer/Publisher detection
+  const isWriter = computed(() => hasPermission('cafe_write') || hasPermission('blog_write'))
+  const isPublisher = computed(() => hasPermission('cafe_publish'))
+
   const permissions = computed(() => {
-    const r = role.value
+    const er = effectiveRole.value
     return {
-      canEditPhoto: ['branch', 'editor', 'admin'].includes(r),
-      canSave: ['branch', 'editor', 'admin'].includes(r),
-      canSync: r === 'admin',
-      canManageUsers: r === 'admin',
-      canEditDictionary: ['editor', 'admin'].includes(r),
+      canEditPhoto: ['branch', 'editor', 'admin'].includes(er),
+      canSave: ['branch', 'editor', 'admin'].includes(er),
+      canSync: er === 'admin',
+      canManageUsers: er === 'admin',
+      canEditDictionary: ['editor', 'admin'].includes(er),
     }
   })
 
   const roleLabel = computed(() => {
     const labels: Record<string, string> = {
-      viewer: '뷰어', branch: '지점담당', editor: '편집자', admin: '관리자'
+      admin: '관리자',
+      editor: '대행사',
+      branch: '지점담당',
+      'viewer-hq': '본사',
+      'viewer-branch': '지점 원장',
     }
-    return labels[role.value] || role.value
+    return labels[effectiveRole.value] || role.value
   })
 
   async function login(id: string, password: string) {
@@ -66,5 +81,10 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('permissions')
   }
 
-  return { token, username, role, branchId, permissionTags, isAuthenticated, permissions, hasPermission, roleLabel, login, logout }
+  return {
+    token, username, role, branchId, permissionTags,
+    isAuthenticated, effectiveRole, isWriter, isPublisher,
+    permissions, hasPermission, roleLabel,
+    login, logout,
+  }
 })

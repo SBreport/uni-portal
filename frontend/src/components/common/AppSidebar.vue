@@ -13,7 +13,6 @@ const marketingOpen = ref(true)
 const isMarketingActive = computed(() =>
   ['/cafe', '/blog', '/place', '/webpage'].some(p => route.path.startsWith(p))
 )
-// blog-all은 /blog로 시작하므로 isActive 로직 수정 필요
 
 // 단일 메뉴 항목
 interface MenuItem {
@@ -22,32 +21,96 @@ interface MenuItem {
   icon: string
   color?: string        // 비활성 아이콘 배경색
   colorActive?: string  // 활성 아이콘 배경색
-  adminOnly?: boolean
+  adminOnly?: boolean   // 하위 호환: admin 전용 여부
+  roles?: string[]      // effectiveRole 기반 표시 제어
+}
+
+// roles 필터 헬퍼: roles가 없으면 모두 표시, 있으면 effectiveRole이 포함된 경우만 표시
+function canSee(item: MenuItem): boolean {
+  if (item.adminOnly) return auth.role === 'admin'
+  if (item.roles) return item.roles.includes(auth.effectiveRole)
+  return true
 }
 
 // 마케팅 하위 메뉴
 const marketingChildren = computed<MenuItem[]>(() => [
-  { path: '/cafe', label: '카페', icon: 'C' },
-  { path: '/blog', label: '블로그', icon: 'B' },
-  ...(auth.role === 'admin' ? [{ path: '/blog-all', label: '블로그(all)', icon: 'B', adminOnly: true }] : []),
-  { path: '/place', label: '플레이스', icon: 'P' },
-  { path: '/webpage', label: '웹페이지', icon: 'W' },
+  {
+    path: '/cafe',
+    label: '카페',
+    icon: 'C',
+    roles: ['admin', 'editor'],
+  },
+  {
+    path: '/blog',
+    label: '블로그',
+    icon: 'B',
+    roles: ['admin', 'editor'],
+  },
+  ...(auth.role === 'admin'
+    ? [{ path: '/blog-all', label: '블로그(all)', icon: 'B', adminOnly: true } as MenuItem]
+    : []),
+  {
+    path: '/place',
+    label: '플레이스',
+    icon: 'P',
+    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
+  },
+  {
+    path: '/webpage',
+    label: '웹페이지',
+    icon: 'W',
+    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
+  },
 ])
+
+// 마케팅 하위 중 현재 사용자가 볼 수 있는 항목만
+const visibleMarketingChildren = computed(() =>
+  marketingChildren.value.filter(canSee)
+)
 
 // 최상위 메뉴 (마케팅 제외)
 const topItems: MenuItem[] = [
   { path: '/', label: 'HOME', icon: 'H' },
-  { path: '/branch-info', label: '지점 정보', icon: 'B' },
-  { path: '/equipment', label: '보유장비', icon: 'E' },
-  { path: '/events', label: '이벤트', icon: 'V' },
-  { path: '/treatment-info', label: '시술정보', icon: 'T' },
-  { path: '/complaints', label: '민원관리', icon: 'M' },
+  {
+    path: '/branch-info',
+    label: '지점 정보',
+    icon: 'B',
+    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
+  },
+  {
+    path: '/equipment',
+    label: '보유장비',
+    icon: 'E',
+    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
+  },
+  {
+    path: '/events',
+    label: '이벤트',
+    icon: 'V',
+    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
+  },
+  {
+    path: '/treatment-info',
+    label: '시술정보',
+    icon: 'T',
+    roles: ['admin', 'editor'],
+  },
+  {
+    path: '/complaints',
+    label: '민원관리',
+    icon: 'M',
+    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
+  },
 ]
+
+const visibleTopItems = computed(() => topItems.filter(canSee))
 
 const bottomItems: MenuItem[] = [
   { path: '/reports', label: '보고서', icon: 'R' },
   { path: '/admin', label: '관리자 모드', icon: 'A', adminOnly: true },
 ]
+
+const visibleBottomItems = computed(() => bottomItems.filter(canSee))
 
 function isActive(path: string) {
   if (path === '/') return route.path === '/'
@@ -74,7 +137,7 @@ function handleLogout() {
     <nav class="flex-1 py-4 px-3 space-y-0.5 overflow-auto">
       <!-- 상위 메뉴 -->
       <router-link
-        v-for="item in topItems" :key="item.path"
+        v-for="item in visibleTopItems" :key="item.path"
         :to="item.path"
         :class="[
           'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition',
@@ -90,7 +153,7 @@ function handleLogout() {
       </router-link>
 
       <!-- 마케팅 (트리) -->
-      <div class="pt-0.5">
+      <div v-if="visibleMarketingChildren.length > 0" class="pt-0.5">
         <button
           @click="marketingOpen = !marketingOpen"
           :class="[
@@ -117,7 +180,7 @@ function handleLogout() {
         <transition name="tree">
           <div v-show="marketingOpen || isMarketingActive" class="ml-5 mt-0.5 space-y-0.5 border-l border-slate-200 pl-2">
             <router-link
-              v-for="child in marketingChildren" :key="child.path"
+              v-for="child in visibleMarketingChildren" :key="child.path"
               :to="child.path"
               :class="[
                 'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition',
@@ -139,23 +202,21 @@ function handleLogout() {
       <div class="!my-2 border-t border-slate-100"></div>
 
       <!-- 하위 메뉴 (보고서, 관리자) -->
-      <template v-for="item in bottomItems" :key="item.path">
-        <router-link
-          v-if="!item.adminOnly || auth.role === 'admin'"
-          :to="item.path"
-          :class="[
-            'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition',
-            isActive(item.path)
-              ? 'bg-blue-600 text-white font-semibold'
-              : 'text-slate-600 hover:bg-slate-50'
-          ]"
-        >
-          <span class="w-5 h-5 flex items-center justify-center text-xs font-bold rounded"
-            :class="isActive(item.path) ? (item.colorActive || 'bg-blue-500 text-white') : (item.color || 'bg-slate-100 text-slate-500')"
-          >{{ item.icon }}</span>
-          {{ item.label }}
-        </router-link>
-      </template>
+      <router-link
+        v-for="item in visibleBottomItems" :key="item.path"
+        :to="item.path"
+        :class="[
+          'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition',
+          isActive(item.path)
+            ? 'bg-blue-600 text-white font-semibold'
+            : 'text-slate-600 hover:bg-slate-50'
+        ]"
+      >
+        <span class="w-5 h-5 flex items-center justify-center text-xs font-bold rounded"
+          :class="isActive(item.path) ? (item.colorActive || 'bg-blue-500 text-white') : (item.color || 'bg-slate-100 text-slate-500')"
+        >{{ item.icon }}</span>
+        {{ item.label }}
+      </router-link>
     </nav>
 
     <!-- 사용자 정보 -->

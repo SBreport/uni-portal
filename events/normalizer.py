@@ -30,11 +30,24 @@ def save_json(path: Path, data: dict) -> None:
 
 
 class CategoryNormalizer:
-    """카테고리 별명을 표준 카테고리로 매핑."""
+    """카테고리 별명을 표준 카테고리로 매핑.
+
+    분류 우선순위:
+      1. DB evt_category_aliases (정확 매칭) — sync 파이프라인에서 먼저 체크
+      2. mappings (정확 매칭) — category_map.json의 "mappings"
+      3. mappings (공백 제거 매칭)
+      4. mappings (부분 문자열 매칭, 3자 이상)
+      5. keyword_rules (키워드 포함 매칭) — category_map.json의 "keyword_rules"
+      6. 미매핑 → '기타' + review_queue에 기록
+
+    keyword_rules는 2개월마다 갱신되는 이벤트 시트의 지점별 양식 차이를
+    흡수하기 위한 규칙. 규칙 배열 순서대로 평가되며 먼저 매칭된 것이 적용됨.
+    """
 
     def __init__(self):
         config = load_json(CATEGORY_MAP_FILE)
         self.mappings: dict[str, str] = config.get("mappings", {})
+        self.keyword_rules: list[dict] = config.get("keyword_rules", [])
         self._unmapped: list[str] = []
 
     def normalize(self, raw_category: str) -> str:
@@ -45,13 +58,13 @@ class CategoryNormalizer:
         if cleaned in self.mappings:
             return self.mappings[cleaned]
 
-        # 2. 정규화된 형태로 매핑
+        # 2. 정규화된 형태로 매핑 (공백 제거)
         normalized = re.sub(r"\s+", "", cleaned)
         for alias, standard in self.mappings.items():
             if re.sub(r"\s+", "", alias) == normalized:
                 return standard
 
-        # 3. 부분 일치 (길이 3자 이상)
+        # 3. 부분 일치 — mappings 기반 (길이 3자 이상, 가장 긴 매칭)
         best_match = None
         best_len = 0
         for alias, standard in self.mappings.items():
@@ -63,7 +76,15 @@ class CategoryNormalizer:
         if best_match:
             return best_match
 
-        # 4. 미매핑 → '기타'
+        # 4. 키워드 규칙 매칭 (배열 순서 = 우선순위)
+        for rule in self.keyword_rules:
+            category = rule.get("category", "")
+            keywords = rule.get("keywords", [])
+            for kw in keywords:
+                if kw in cleaned:
+                    return category
+
+        # 5. 미매핑 → '기타'
         if cleaned not in self._unmapped:
             self._unmapped.append(cleaned)
         return "기타"

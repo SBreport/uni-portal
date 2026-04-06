@@ -402,3 +402,29 @@ async def approve_all(user=Depends(_admin)):
     """추천 태그 전체 일괄 승인."""
     from treatment.sync_diff import approve_all_recommended
     return approve_all_recommended()
+
+
+@router.get("/untagged")
+async def get_untagged(user=Depends(_admin)):
+    """미분류 항목 (태그도 추천도 없는 시술명)."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        rows = conn.execute("""
+            SELECT DISTINCT ei.raw_event_name, ei.raw_category
+            FROM evt_items ei
+            WHERE ei.raw_event_name IS NOT NULL AND ei.raw_event_name != ''
+              AND NOT EXISTS (
+                SELECT 1 FROM treatment_body_tags t
+                WHERE t.source = 'evt_items' AND t.source_name = ei.raw_event_name
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM encyclopedia_pending p
+                WHERE p.source_name = ei.raw_event_name AND p.action = 'recommend' AND p.status = 'pending'
+              )
+            ORDER BY ei.raw_category, ei.raw_event_name
+            LIMIT 200
+        """).fetchall()
+        return [{"name": r[0], "category": r[1] or ""} for r in rows]
+    finally:
+        conn.close()

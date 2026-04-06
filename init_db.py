@@ -714,6 +714,47 @@ def init_db():
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_complaint_logs_cid ON complaint_logs(complaint_id)")
 
+    # ── 시술 백과사전 태그 ──
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS treatment_body_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        source_id INTEGER,
+        source_name TEXT NOT NULL,
+        tag_type TEXT NOT NULL CHECK(tag_type IN ('body_part','purpose','equipment','material','gender')),
+        tag_value TEXT NOT NULL,
+        tag_category TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tbt_source ON treatment_body_tags(source, source_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tbt_type ON treatment_body_tags(tag_type)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tbt_value ON treatment_body_tags(tag_value)")
+
+    # ── 백과사전 대기 항목 ──
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS encyclopedia_pending (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL CHECK(action IN ('new','removed','recommend')),
+        source_name TEXT NOT NULL,
+        raw_category TEXT DEFAULT '',
+        recommended_tags TEXT DEFAULT '',
+        status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','dismissed')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        resolved_at TIMESTAMP
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ep_status ON encyclopedia_pending(status)")
+
+    # ── 백과사전 스냅샷 ──
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS encyclopedia_snapshot (
+        source_name TEXT NOT NULL,
+        raw_category TEXT DEFAULT '',
+        snapshot_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # ============================================================
     # 마이그레이션: 기존 DB에 새 컬럼 추가 (이미 있으면 무시)
     # ============================================================

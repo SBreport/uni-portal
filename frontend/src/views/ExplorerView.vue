@@ -1,128 +1,222 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useBranchStore } from '@/stores/branches'
 import * as explorerApi from '@/api/explorer'
 import TabBar from '@/components/common/TabBar.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import ExplorerDeviceDetail from '@/components/explorer/ExplorerDeviceDetail.vue'
-import ExplorerBranchDetail from '@/components/explorer/ExplorerBranchDetail.vue'
+import ExplorerDeviceInline from '@/components/explorer/ExplorerDeviceInline.vue'
 
-// ── 스토어 ──────────────────────────────────────────────────────────────
+// ── 스토어 ──────────────────────────────────────────────────────────────────
 const branchStore = useBranchStore()
 
 onMounted(async () => {
   await branchStore.loadBranches()
   loadDeviceList()
+  loadDevicesSummary()
 })
 
-// ── 탭 ───────────────────────────────────────────────────────────────────
-const TABS = [
-  { key: 'branch',   label: '지점별' },
-  { key: 'category', label: '카테고리별' },
-  { key: 'device',   label: '장비별' },
-  { key: 'search',   label: '검색결과' },
+// ── 탭 ──────────────────────────────────────────────────────────────────────
+const tabs = [
+  { key: 'branch',    label: '지점별' },
+  { key: 'treatment', label: '시술별' },
+  { key: 'device',    label: '장비별' },
+  { key: 'papers',    label: '논문' },
 ]
 const activeTab = ref('branch')
 
-// ── 공통 검색창 ───────────────────────────────────────────────────────────
+// ── 가격 포맷 헬퍼 ──────────────────────────────────────────────────────────
+function formatPrice(price?: number | null): string {
+  if (!price) return '-'
+  return `${(price / 10000).toFixed(0)}만`
+}
+
+// ── 통합 검색창 (드롭다운 방식) ─────────────────────────────────────────────
 const searchQuery = ref('')
+const searchResults = ref<any>(null)
+const searchLoading = ref(false)
+const showDropdown = ref(false)
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
-function onSearchInput(e: Event) {
-  searchQuery.value = (e.target as HTMLInputElement).value
+watch(searchQuery, (q) => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
-  if (searchQuery.value.trim().length >= 2) {
-    searchDebounceTimer = setTimeout(() => {
-      activeTab.value = 'search'
-      runSearch()
-    }, 400)
+  if (q.trim().length < 2) {
+    searchResults.value = null
+    showDropdown.value = false
+    return
   }
-}
+  searchDebounceTimer = setTimeout(async () => {
+    searchLoading.value = true
+    showDropdown.value = true
+    try {
+      searchResults.value = await explorerApi.search(q.trim())
+    } catch (e) {
+      console.error('[Explorer] 검색 실패:', e)
+    } finally {
+      searchLoading.value = false
+    }
+  }, 400)
+})
 
 function clearSearch() {
   searchQuery.value = ''
   searchResults.value = null
+  showDropdown.value = false
 }
 
-// ── Tab 1: 지점별 ─────────────────────────────────────────────────────────
+function closeDropdown() {
+  showDropdown.value = false
+}
+
+function goToBranch(id: number) {
+  selectedBranchId.value = String(id)
+  activeTab.value = 'branch'
+  closeDropdown()
+  clearSearch()
+}
+
+function goToDevice(id: number) {
+  expandedDeviceId.value = expandedDeviceId.value === id ? null : id
+  activeTab.value = 'device'
+  closeDropdown()
+  clearSearch()
+}
+
+function goToPaper(id: number) {
+  expandedPaperId.value = expandedPaperId.value === id ? null : id
+  activeTab.value = 'papers'
+  closeDropdown()
+  clearSearch()
+}
+
+const hasAnySearchResult = computed(() => {
+  if (!searchResults.value) return false
+  const r = searchResults.value
+  return !!(r.branches?.length || r.devices?.length || r.events?.length ||
+    r.treatments?.length || r.papers?.length || r.blog_posts?.length)
+})
+
+// 외부 클릭시 드롭다운 닫기
+function handleOutsideClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  if (!target.closest('[data-search-container]')) {
+    closeDropdown()
+  }
+}
+onMounted(() => document.addEventListener('click', handleOutsideClick))
+onBeforeUnmount(() => document.removeEventListener('click', handleOutsideClick))
+
+// ── Tab 1: 지점별 ────────────────────────────────────────────────────────────
 const branchOptions = computed(() =>
   branchStore.branches.map(b => ({ value: String(b.id), label: b.name }))
 )
 const selectedBranchId = ref('')
+const branchLoading = ref(false)
+const branchData = ref<any>(null)
 
-watch(selectedBranchId, () => {
-  selectedDeviceIdDirect.value = null
+// 지점별 섹션 토글 상태
+const openBranch = ref<Record<string, boolean>>({
+  equip: true,
+  events: true,
+  blogs: false,
+  place: false,
 })
 
-function onBranchDeviceClick(deviceId: number) {
-  selectedDeviceIdDirect.value = deviceId
-  activeTab.value = 'device'
+function toggleBranch(key: string) {
+  openBranch.value[key] = !openBranch.value[key]
 }
 
-// ── Tab 2: 카테고리별 ──────────────────────────────────────────────────────
+// 지점별 장비 인라인 확장
+const expandedEquip = ref<number | null>(null)
+
+watch(selectedBranchId, async (id) => {
+  expandedEquip.value = null
+  branchData.value = null
+  if (!id) return
+  branchLoading.value = true
+  try {
+    branchData.value = await explorerApi.getByBranch(Number(id))
+  } catch (e) {
+    console.error('[Explorer] 지점 로드 실패:', e)
+  } finally {
+    branchLoading.value = false
+  }
+})
+
+function toggleEquip(deviceInfoId: number) {
+  expandedEquip.value = expandedEquip.value === deviceInfoId ? null : deviceInfoId
+}
+
+// 이벤트를 카테고리별로 그룹화
+const eventsByCategory = computed(() => {
+  if (!branchData.value?.events?.length) return {}
+  const map: Record<string, any[]> = {}
+  for (const ev of branchData.value.events) {
+    const cat = ev.category || '기타'
+    if (!map[cat]) map[cat] = []
+    map[cat].push(ev)
+  }
+  return map
+})
+
+const eventCount = computed(() => branchData.value?.events?.length ?? 0)
+
+// ── Tab 2: 시술별 (카테고리별) ───────────────────────────────────────────────
 const CATEGORIES = [
-  { id: 1,  label: '리프팅' },
-  { id: 2,  label: '보톡스' },
-  { id: 3,  label: '필러' },
-  { id: 4,  label: '레이저' },
-  { id: 5,  label: '피부관리' },
-  { id: 6,  label: '실리프팅' },
-  { id: 7,  label: '지방분해' },
-  { id: 8,  label: '체형관리' },
-  { id: 9,  label: '탈모' },
-  { id: 10, label: '여드름' },
-  { id: 11, label: '흉터/모공' },
-  { id: 12, label: '미백/톤업' },
-  { id: 13, label: '눈/코' },
-  { id: 14, label: '안티에이징' },
-  { id: 15, label: '제모' },
-  { id: 16, label: '기타' },
+  { id: 1,  name: '리프팅' },
+  { id: 2,  name: '보톡스' },
+  { id: 3,  name: '필러' },
+  { id: 4,  name: '레이저' },
+  { id: 5,  name: '피부관리' },
+  { id: 6,  name: '실리프팅' },
+  { id: 7,  name: '지방분해' },
+  { id: 8,  name: '체형관리' },
+  { id: 9,  name: '탈모' },
+  { id: 10, name: '여드름' },
+  { id: 11, name: '흉터/모공' },
+  { id: 12, name: '미백/톤업' },
+  { id: 13, name: '눈/코' },
+  { id: 14, name: '안티에이징' },
+  { id: 15, name: '제모' },
+  { id: 16, name: '기타' },
 ]
+
 const selectedCategoryId = ref<number | null>(null)
 const categoryLoading = ref(false)
 const categoryData = ref<any>(null)
 
-async function onCategoryClick(catId: number) {
+async function selectCategory(catId: number) {
+  if (selectedCategoryId.value === catId) {
+    selectedCategoryId.value = null
+    categoryData.value = null
+    return
+  }
   selectedCategoryId.value = catId
   categoryLoading.value = true
   categoryData.value = null
   try {
     categoryData.value = await explorerApi.getByCategory(catId)
   } catch (e) {
-    console.error('[Explorer] 카테고리별 로드 실패:', e)
+    console.error('[Explorer] 카테고리 로드 실패:', e)
   } finally {
     categoryLoading.value = false
   }
 }
 
-const selectedCategoryLabel = computed(
-  () => CATEGORIES.find(c => c.id === selectedCategoryId.value)?.label ?? ''
-)
-
-function categoryColorClass(idx: number): string {
-  const colors = [
-    'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100',
-    'bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100',
-    'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100',
-    'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100',
-    'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100',
-    'bg-cyan-50 text-cyan-600 border-cyan-200 hover:bg-cyan-100',
-    'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100',
-    'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100',
-  ]
-  return colors[idx % colors.length]!
+function goToDeviceFromCategory(deviceInfoId: number) {
+  expandedDeviceId.value = deviceInfoId
+  activeTab.value = 'device'
 }
 
-// ── Tab 3: 장비별 ─────────────────────────────────────────────────────────
-const deviceSearchQuery = ref('')
+// ── Tab 3: 장비별 ────────────────────────────────────────────────────────────
+const deviceSearch = ref('')
 const deviceListLoading = ref(false)
 const deviceList = ref<Array<{ id: number; name: string; category?: string }>>([])
-const selectedDeviceIdDirect = ref<number | null>(null)
+const expandedDeviceId = ref<number | null>(null)
 
 const filteredDevices = computed(() => {
-  const q = deviceSearchQuery.value.trim().toLowerCase()
+  const q = deviceSearch.value.trim().toLowerCase()
   if (!q) return deviceList.value
   return deviceList.value.filter(d =>
     d.name.toLowerCase().includes(q) ||
@@ -141,69 +235,71 @@ async function loadDeviceList() {
   }
 }
 
-function onDeviceSelect(deviceId: number) {
-  selectedDeviceIdDirect.value = deviceId
+function toggleDevice(id: number) {
+  expandedDeviceId.value = expandedDeviceId.value === id ? null : id
 }
 
-// ── Tab 4: 검색결과 ───────────────────────────────────────────────────────
-const searchLoading = ref(false)
-const searchResults = ref<any>(null)
+// ── Tab 4: 논문 ─────────────────────────────────────────────────────────────
+const paperSearch = ref('')
+const paperDeviceFilter = ref('')
+const paperLoading = ref(false)
+const papers = ref<any[]>([])
+const expandedPaperId = ref<number | null>(null)
+const devicesSummary = ref<Array<{ id: number; name: string; paper_count: number }>>([])
 
-const hasAnySearchResult = computed(() => {
-  if (!searchResults.value) return false
-  const r = searchResults.value
-  return (
-    r.branches?.length ||
-    r.devices?.length ||
-    r.events?.length ||
-    r.treatments?.length ||
-    r.papers?.length ||
-    r.blogs?.length
-  )
-})
+const deviceFilterOptions = computed(() =>
+  devicesSummary.value.map(d => ({ value: String(d.id), label: `${d.name} (${d.paper_count})` }))
+)
 
-async function runSearch() {
-  const q = searchQuery.value.trim()
-  if (!q) return
-  searchLoading.value = true
-  searchResults.value = null
+async function loadDevicesSummary() {
   try {
-    searchResults.value = await explorerApi.search(q)
-  } catch (e) {
-    console.error('[Explorer] 검색 실패:', e)
-  } finally {
-    searchLoading.value = false
+    devicesSummary.value = await explorerApi.getDevicesSummary()
+  } catch {
+    devicesSummary.value = []
   }
 }
 
-watch(activeTab, (tab) => {
-  if (tab === 'search' && searchQuery.value.trim().length >= 2 && !searchResults.value) {
-    runSearch()
-  }
+let paperDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+watch([paperSearch, paperDeviceFilter], () => {
+  if (paperDebounceTimer) clearTimeout(paperDebounceTimer)
+  paperDebounceTimer = setTimeout(loadPapers, 350)
 })
 
-function onSearchResultDeviceClick(deviceId: number) {
-  selectedDeviceIdDirect.value = deviceId
-  activeTab.value = 'device'
+watch(() => activeTab.value, (tab) => {
+  if (tab === 'papers' && !papers.value.length) loadPapers()
+})
+
+async function loadPapers() {
+  paperLoading.value = true
+  try {
+    papers.value = await explorerApi.listPapers({
+      q: paperSearch.value.trim() || undefined,
+      device_info_id: paperDeviceFilter.value ? Number(paperDeviceFilter.value) : undefined,
+    })
+  } catch (e) {
+    console.error('[Explorer] 논문 로드 실패:', e)
+  } finally {
+    paperLoading.value = false
+  }
 }
 
-function onSearchResultBranchClick(branchId: number) {
-  selectedBranchId.value = String(branchId)
-  activeTab.value = 'branch'
+function togglePaper(id: number) {
+  expandedPaperId.value = expandedPaperId.value === id ? null : id
 }
 </script>
 
 <template>
-  <div class="p-5 max-w-5xl">
+  <div class="p-5 max-w-4xl">
 
     <!-- 헤더 -->
     <div class="mb-5">
       <h2 class="text-xl font-bold text-slate-800">탐색기</h2>
-      <p class="text-sm text-slate-400 mt-1">지점 · 카테고리 · 장비를 중심으로 연결된 정보를 탐색합니다</p>
+      <p class="text-sm text-slate-400 mt-1">지점 · 시술 · 장비 · 논문을 중심으로 연결된 정보를 탐색합니다</p>
     </div>
 
-    <!-- 통합 검색창 -->
-    <div class="relative mb-5">
+    <!-- 통합 검색창 (드롭다운) -->
+    <div class="relative mb-5" data-search-container>
       <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
         <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24"
           stroke="currentColor" stroke-width="2">
@@ -212,12 +308,12 @@ function onSearchResultBranchClick(branchId: number) {
         </svg>
       </div>
       <input
-        :value="searchQuery"
-        @input="onSearchInput"
+        v-model="searchQuery"
         type="text"
         placeholder="장비명, 지점명, 시술명, 키워드 통합 검색... (2자 이상)"
         class="w-full pl-9 pr-10 py-2.5 border border-slate-300 rounded-lg text-sm bg-white
                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+        @focus="showDropdown = searchResults !== null"
       />
       <button
         v-if="searchQuery"
@@ -228,73 +324,369 @@ function onSearchResultBranchClick(branchId: number) {
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
+
+      <!-- 검색 드롭다운 -->
+      <div
+        v-if="showDropdown && searchQuery.length >= 2"
+        class="absolute top-full left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-lg max-h-96 overflow-auto mt-1"
+      >
+        <!-- 로딩 -->
+        <div v-if="searchLoading" class="px-4 py-3 text-sm text-slate-400 text-center">
+          검색 중...
+        </div>
+
+        <!-- 결과 없음 -->
+        <div v-else-if="searchResults && !hasAnySearchResult"
+          class="px-4 py-3 text-sm text-slate-400 text-center">
+          '{{ searchQuery }}' 검색 결과가 없습니다
+        </div>
+
+        <template v-else-if="searchResults">
+          <!-- 지점 -->
+          <template v-if="searchResults.branches?.length">
+            <p class="px-3 py-1.5 text-xs font-bold text-slate-400 bg-slate-50 sticky top-0">지점</p>
+            <button
+              v-for="b in searchResults.branches"
+              :key="b.id"
+              @click="goToBranch(b.id)"
+              class="w-full text-left px-4 py-2 hover:bg-blue-50 text-sm text-slate-700 flex items-center justify-between"
+            >
+              <span>{{ b.name }}</span>
+            </button>
+          </template>
+
+          <!-- 장비 -->
+          <template v-if="searchResults.devices?.length">
+            <p class="px-3 py-1.5 text-xs font-bold text-slate-400 bg-slate-50 sticky top-0">장비</p>
+            <button
+              v-for="d in searchResults.devices"
+              :key="d.id"
+              @click="goToDevice(d.id)"
+              class="w-full text-left px-4 py-2 hover:bg-blue-50 flex items-center gap-2"
+            >
+              <span class="text-sm text-slate-700">{{ d.name }}</span>
+              <span v-if="d.category"
+                class="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded">
+                {{ d.category }}
+              </span>
+            </button>
+          </template>
+
+          <!-- 이벤트 -->
+          <template v-if="searchResults.events?.length">
+            <p class="px-3 py-1.5 text-xs font-bold text-slate-400 bg-slate-50 sticky top-0">이벤트</p>
+            <div
+              v-for="ev in searchResults.events"
+              :key="ev.id"
+              class="px-4 py-2 border-b border-slate-50 last:border-0"
+            >
+              <p class="text-sm text-slate-700">{{ ev.display_name }}</p>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span v-if="ev.branch_name" class="text-xs text-slate-400">{{ ev.branch_name }}</span>
+                <span v-if="ev.event_price" class="text-xs text-red-500 font-bold">{{ formatPrice(ev.event_price) }}</span>
+              </div>
+            </div>
+          </template>
+
+          <!-- 논문 -->
+          <template v-if="searchResults.papers?.length">
+            <p class="px-3 py-1.5 text-xs font-bold text-slate-400 bg-slate-50 sticky top-0">논문</p>
+            <button
+              v-for="p in searchResults.papers"
+              :key="p.id"
+              @click="goToPaper(p.id)"
+              class="w-full text-left px-4 py-2 hover:bg-blue-50"
+            >
+              <p class="text-sm text-slate-700 leading-snug">{{ p.title_ko || p.title }}</p>
+            </button>
+          </template>
+
+          <!-- 블로그 -->
+          <template v-if="searchResults.blog_posts?.length">
+            <p class="px-3 py-1.5 text-xs font-bold text-slate-400 bg-slate-50 sticky top-0">블로그</p>
+            <div
+              v-for="b in searchResults.blog_posts"
+              :key="b.id"
+              class="px-4 py-2 border-b border-slate-50 last:border-0"
+            >
+              <p class="text-sm text-slate-700 leading-snug">{{ b.title }}</p>
+              <span v-if="b.keyword" class="text-xs text-blue-500">{{ b.keyword }}</span>
+            </div>
+          </template>
+        </template>
+      </div>
     </div>
 
     <!-- 탭 -->
-    <TabBar :tabs="TABS" v-model="activeTab" />
+    <TabBar :tabs="tabs" v-model="activeTab" />
 
-    <!-- ━━ Tab 1: 지점별 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-    <div v-if="activeTab === 'branch'">
-      <div class="flex items-center gap-3 mb-4">
+    <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Tab 1: 지점별 -->
+    <div v-if="activeTab === 'branch'" class="space-y-4">
+
+      <!-- 지점 선택 -->
+      <div class="flex items-center gap-3">
         <FilterSelect
           v-model="selectedBranchId"
           :options="branchOptions"
           placeholder="지점 선택..."
         />
-        <span v-if="branchStore.loading" class="text-xs text-slate-400">지점 목록 로딩 중...</span>
+        <span v-if="branchStore.loading" class="text-xs text-slate-400">목록 로딩 중...</span>
       </div>
 
+      <!-- 지점 미선택 -->
       <EmptyState
         v-if="!selectedBranchId"
         message="지점을 선택하면 보유장비 · 이벤트 · 순위 정보를 탐색합니다"
-        icon="🏥"
       />
-      <ExplorerBranchDetail
-        v-else
-        :branch-id="Number(selectedBranchId)"
-        @device-click="onBranchDeviceClick"
-      />
+
+      <!-- 로딩 -->
+      <div v-else-if="branchLoading" class="flex justify-center py-10">
+        <LoadingSpinner message="지점 정보 로딩 중..." />
+      </div>
+
+      <!-- 지점 데이터 -->
+      <template v-else-if="branchData">
+
+        <!-- 지점명 + 요약 카드 행 -->
+        <div>
+          <h3 class="text-base font-bold text-slate-800 mb-3">
+            {{ branchData.branch?.name ?? '지점 정보' }}
+            <span v-if="branchData.branch?.region_name"
+              class="text-sm font-normal text-slate-400 ml-2">
+              {{ branchData.branch.region_name }}
+            </span>
+          </h3>
+          <div class="grid grid-cols-5 gap-3">
+            <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
+              <p class="text-xl font-bold text-blue-600">{{ branchData.equipment?.length ?? 0 }}</p>
+              <p class="text-xs text-slate-400 mt-0.5">장비</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
+              <p class="text-xl font-bold text-amber-500">{{ eventCount }}</p>
+              <p class="text-xs text-slate-400 mt-0.5">이벤트</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
+              <p class="text-xl font-bold text-emerald-600">{{ branchData.blog_count ?? 0 }}</p>
+              <p class="text-xs text-slate-400 mt-0.5">블로그</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
+              <p class="text-xl font-bold text-sky-600">
+                {{ branchData.place_rank?.success_today ?? 0 }}
+                <span class="text-sm font-normal text-slate-400">/{{ branchData.place_rank?.total ?? 0 }}</span>
+              </p>
+              <p class="text-xs text-slate-400 mt-0.5">플레이스</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
+              <p class="text-xl font-bold text-rose-500">{{ branchData.complaints_open ?? 0 }}</p>
+              <p class="text-xs text-slate-400 mt-0.5">미처리 민원</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 보유 장비 (접이식) -->
+        <section class="border border-slate-200 rounded-lg overflow-hidden">
+          <button
+            @click="toggleBranch('equip')"
+            class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition text-left"
+          >
+            <span class="font-semibold text-sm text-slate-700">보유 장비</span>
+            <div class="flex items-center gap-2">
+              <span class="text-xs bg-blue-100 text-blue-600 font-bold px-2 py-0.5 rounded-full">
+                {{ branchData.equipment?.length ?? 0 }}종
+              </span>
+              <svg class="w-4 h-4 text-slate-400 transition-transform"
+                :class="{ 'rotate-180': openBranch.equip }"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+          <div v-if="openBranch.equip" class="divide-y divide-slate-100 bg-white">
+            <template v-if="branchData.equipment?.length">
+              <div
+                v-for="e in branchData.equipment"
+                :key="e.id ?? e.name"
+              >
+                <div
+                  @click="e.device_info_id ? toggleEquip(e.device_info_id) : null"
+                  :class="[
+                    'flex items-center justify-between px-4 py-2.5 transition',
+                    e.device_info_id
+                      ? 'cursor-pointer hover:bg-blue-50'
+                      : 'cursor-default'
+                  ]"
+                >
+                  <div>
+                    <span class="text-sm font-medium text-slate-700">{{ e.name }}</span>
+                    <span v-if="e.category" class="ml-2 text-xs text-slate-400">{{ e.category }}</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-xs text-slate-400">
+                    <span>{{ e.quantity }}대</span>
+                    <svg v-if="e.device_info_id"
+                      class="w-3.5 h-3.5 text-slate-300 transition-transform"
+                      :class="{ 'rotate-180': expandedEquip === e.device_info_id }"
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                <!-- 인라인 확장 -->
+                <div
+                  v-if="e.device_info_id && expandedEquip === e.device_info_id"
+                  class="px-4 pb-4 pt-1 bg-slate-50 border-t border-slate-100"
+                >
+                  <ExplorerDeviceInline :device-id="e.device_info_id" />
+                </div>
+              </div>
+            </template>
+            <p v-else class="px-4 py-3 text-sm text-slate-400">보유 장비 없음</p>
+          </div>
+        </section>
+
+        <!-- 이벤트 (접이식, 카테고리별) -->
+        <section class="border border-slate-200 rounded-lg overflow-hidden">
+          <button
+            @click="toggleBranch('events')"
+            class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition text-left"
+          >
+            <span class="font-semibold text-sm text-slate-700">이벤트</span>
+            <div class="flex items-center gap-2">
+              <span class="text-xs bg-amber-100 text-amber-600 font-bold px-2 py-0.5 rounded-full">
+                {{ eventCount }}건
+              </span>
+              <svg class="w-4 h-4 text-slate-400 transition-transform"
+                :class="{ 'rotate-180': openBranch.events }"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+          <div v-if="openBranch.events" class="bg-white px-4 pb-3">
+            <template v-if="eventCount">
+              <div v-for="(items, category) in eventsByCategory" :key="category" class="mt-3">
+                <h4 class="text-xs font-bold text-slate-500 mb-1.5">{{ category }}</h4>
+                <div class="space-y-1">
+                  <div
+                    v-for="(ev, idx) in items"
+                    :key="idx"
+                    class="flex items-center justify-between py-1.5 px-3 bg-slate-50 rounded text-sm"
+                  >
+                    <span class="text-slate-700 text-xs leading-snug flex-1 mr-3">{{ ev.display_name }}</span>
+                    <div class="flex items-center gap-2 whitespace-nowrap">
+                      <span v-if="ev.event_price" class="text-red-500 font-bold text-xs">
+                        {{ formatPrice(ev.event_price) }}
+                      </span>
+                      <span v-if="ev.discount_rate" class="text-emerald-500 text-xs">
+                        {{ ev.discount_rate }}%↓
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <p v-else class="py-2 text-sm text-slate-400">이벤트 없음</p>
+          </div>
+        </section>
+
+        <!-- 플레이스/웹페이지 순위 (접이식) -->
+        <section
+          v-if="branchData.place_rank || branchData.webpage_rank"
+          class="border border-slate-200 rounded-lg overflow-hidden"
+        >
+          <button
+            @click="toggleBranch('place')"
+            class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition text-left"
+          >
+            <span class="font-semibold text-sm text-slate-700">노출 현황</span>
+            <svg class="w-4 h-4 text-slate-400 transition-transform"
+              :class="{ 'rotate-180': openBranch.place }"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div v-if="openBranch.place" class="bg-white px-4 pb-3 space-y-3 pt-1">
+            <!-- 플레이스 -->
+            <div v-if="branchData.place_rank" class="p-3 bg-sky-50 border border-sky-100 rounded">
+              <p class="text-xs font-semibold text-sky-700 mb-1">플레이스 노출 (최신)</p>
+              <div class="flex gap-4 text-sm">
+                <div>
+                  <span class="font-bold text-sky-600">{{ branchData.place_rank.success_today }}</span>
+                  <span class="text-xs text-slate-400 ml-1">노출</span>
+                </div>
+                <div>
+                  <span class="font-bold text-slate-500">{{ branchData.place_rank.fail_today }}</span>
+                  <span class="text-xs text-slate-400 ml-1">미노출</span>
+                </div>
+                <div>
+                  <span class="font-bold text-slate-700">{{ branchData.place_rank.total }}</span>
+                  <span class="text-xs text-slate-400 ml-1">전체</span>
+                </div>
+              </div>
+            </div>
+            <!-- 웹페이지 -->
+            <div v-if="branchData.webpage_rank" class="p-3 bg-indigo-50 border border-indigo-100 rounded">
+              <p class="text-xs font-semibold text-indigo-700 mb-1">웹페이지 노출 (최신)</p>
+              <div class="flex gap-4 text-sm">
+                <div>
+                  <span class="font-bold text-indigo-600">{{ branchData.webpage_rank.success_today }}</span>
+                  <span class="text-xs text-slate-400 ml-1">노출</span>
+                </div>
+                <div>
+                  <span class="font-bold text-slate-500">{{ branchData.webpage_rank.fail_today }}</span>
+                  <span class="text-xs text-slate-400 ml-1">미노출</span>
+                </div>
+                <div>
+                  <span class="font-bold text-slate-700">{{ branchData.webpage_rank.total }}</span>
+                  <span class="text-xs text-slate-400 ml-1">전체</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </template>
     </div>
 
-    <!-- ━━ Tab 2: 카테고리별 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-    <div v-else-if="activeTab === 'category'">
+    <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Tab 2: 시술별 -->
+    <div v-else-if="activeTab === 'treatment'">
 
-      <!-- 카테고리 카드 그리드 -->
+      <!-- 카테고리 카드 그리드 (4열) -->
       <div class="grid grid-cols-4 gap-3 mb-5">
         <button
-          v-for="(cat, idx) in CATEGORIES"
+          v-for="cat in CATEGORIES"
           :key="cat.id"
-          @click="onCategoryClick(cat.id)"
+          @click="selectCategory(cat.id)"
           :class="[
-            'px-3 py-3 text-sm font-medium rounded-lg border transition text-center',
-            categoryColorClass(idx),
-            selectedCategoryId === cat.id ? 'ring-2 ring-offset-1 ring-blue-400' : '',
+            'p-3 border rounded-lg text-center transition text-sm font-medium',
+            selectedCategoryId === cat.id
+              ? 'border-blue-500 bg-blue-50 text-blue-700'
+              : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-slate-50'
           ]"
         >
-          {{ cat.label }}
+          {{ cat.name }}
         </button>
       </div>
 
-      <!-- 결과 영역 -->
+      <!-- 선택된 카테고리 상세 -->
       <div v-if="selectedCategoryId">
-        <div class="flex items-center gap-2 mb-3">
-          <h3 class="text-sm font-bold text-slate-700">{{ selectedCategoryLabel }}</h3>
-          <span class="text-xs text-slate-400">탐색 결과</span>
-        </div>
-
         <div v-if="categoryLoading" class="flex justify-center py-8">
           <LoadingSpinner message="카테고리 정보 로딩 중..." />
         </div>
 
         <template v-else-if="categoryData">
-          <!-- 관련 장비 -->
-          <div v-if="categoryData.devices?.length" class="mb-5">
-            <h4 class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">관련 장비</h4>
+          <h3 class="text-sm font-bold text-slate-700 mb-3">
+            {{ CATEGORIES.find(c => c.id === selectedCategoryId)?.name }}
+            <span class="text-slate-400 font-normal ml-1">탐색 결과</span>
+          </h3>
+
+          <!-- 관련 장비 칩 -->
+          <div v-if="categoryData.devices?.length" class="mb-4">
+            <p class="text-xs font-semibold text-slate-500 mb-2">관련 장비</p>
             <div class="flex flex-wrap gap-2">
               <button
                 v-for="d in categoryData.devices"
                 :key="d.device_info_id"
-                @click="onDeviceSelect(d.device_info_id); activeTab = 'device'"
+                @click="goToDeviceFromCategory(d.device_info_id)"
                 class="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-200
                        hover:bg-blue-100 transition font-medium"
               >
@@ -304,36 +696,48 @@ function onSearchResultBranchClick(branchId: number) {
           </div>
 
           <!-- 지점별 이벤트 -->
-          <div v-if="categoryData.events_by_branch?.length">
-            <h4 class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">지점별 이벤트</h4>
-            <div class="space-y-2">
-              <div
-                v-for="group in categoryData.events_by_branch"
-                :key="group.branch_name"
-                class="bg-white border border-slate-200 rounded-lg px-4 py-3"
-              >
-                <div class="flex items-center justify-between mb-1.5">
-                  <span class="text-sm font-semibold text-slate-700">{{ group.branch_name }}</span>
-                  <span class="text-xs text-slate-400">{{ group.items?.length ?? 0 }}건</span>
+          <div v-if="categoryData.events_by_branch?.length" class="space-y-3">
+            <p class="text-xs font-semibold text-slate-500">지점별 이벤트</p>
+            <div
+              v-for="group in categoryData.events_by_branch"
+              :key="group.branch_name"
+              class="bg-white border border-slate-200 rounded-lg"
+            >
+              <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                <span class="text-sm font-semibold text-slate-700">{{ group.branch_name }}</span>
+                <span class="text-xs text-slate-400">{{ group.items?.length ?? 0 }}건</span>
+              </div>
+              <div class="px-4 py-2 space-y-1">
+                <div
+                  v-for="(ev, idx) in (group.items || []).slice(0, 5)"
+                  :key="idx"
+                  class="flex items-center justify-between py-1 text-xs"
+                >
+                  <span class="text-slate-700 flex-1 mr-3 leading-snug">{{ ev.display_name }}</span>
+                  <div class="flex items-center gap-2 whitespace-nowrap">
+                    <span v-if="ev.event_price" class="text-red-500 font-bold">
+                      {{ formatPrice(ev.event_price) }}
+                    </span>
+                    <span v-if="ev.discount_rate" class="text-emerald-500">
+                      {{ ev.discount_rate }}%↓
+                    </span>
+                  </div>
                 </div>
-                <div class="space-y-0.5">
-                  <p v-for="(ev, idx) in (group.items || []).slice(0, 3)" :key="idx"
-                    class="text-xs text-slate-600 truncate">
-                    · {{ ev.display_name }}
-                    <span v-if="ev.event_price" class="text-red-500 font-medium ml-1">{{ (ev.event_price / 10000).toFixed(0) }}만</span>
-                  </p>
-                  <p v-if="(group.items?.length ?? 0) > 3" class="text-xs text-slate-400">
-                    외 {{ group.items.length - 3 }}건
-                  </p>
-                </div>
+                <p v-if="(group.items?.length ?? 0) > 5" class="text-xs text-slate-400 pt-0.5">
+                  외 {{ group.items.length - 5 }}건
+                </p>
               </div>
             </div>
           </div>
 
-          <!-- 논문 수 -->
-          <p v-if="categoryData.papers_count !== undefined" class="mt-4 text-sm text-slate-500">
+          <!-- 논문 수 표시 -->
+          <p v-if="categoryData.papers_count" class="mt-4 text-sm text-slate-500">
             관련 논문
-            <span class="font-bold text-purple-600">{{ categoryData.papers_count }}</span>건
+            <span class="font-bold text-purple-600 mx-1">{{ categoryData.papers_count }}</span>건 —
+            <button
+              @click="activeTab = 'papers'"
+              class="text-blue-600 underline text-xs ml-1"
+            >논문 탭에서 보기</button>
           </p>
 
           <EmptyState
@@ -346,212 +750,178 @@ function onSearchResultBranchClick(branchId: number) {
       <EmptyState
         v-else
         message="카테고리를 선택하면 관련 장비 · 이벤트를 탐색합니다"
-        icon="📂"
       />
     </div>
 
-    <!-- ━━ Tab 3: 장비별 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+    <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Tab 3: 장비별 -->
     <div v-else-if="activeTab === 'device'">
+
+      <!-- 검색 -->
       <div class="mb-4">
         <input
-          v-model="deviceSearchQuery"
+          v-model="deviceSearch"
           type="text"
           placeholder="장비명 또는 카테고리 검색..."
-          class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white
+          class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white
                  focus:outline-none focus:ring-1 focus:ring-blue-500 transition"
         />
       </div>
 
-      <div class="flex gap-5">
-        <!-- 장비 목록 패널 -->
-        <div class="w-52 flex-shrink-0">
-          <div v-if="deviceListLoading" class="flex justify-center py-6">
-            <LoadingSpinner size="sm" />
-          </div>
-          <div v-else-if="filteredDevices.length"
-            class="space-y-0.5 max-h-[60vh] overflow-y-auto pr-1">
-            <button
-              v-for="d in filteredDevices"
-              :key="d.id"
-              @click="onDeviceSelect(d.id)"
-              :class="[
-                'w-full text-left px-3 py-2 rounded-lg text-sm transition',
-                selectedDeviceIdDirect === d.id
-                  ? 'bg-blue-600 text-white'
-                  : 'hover:bg-slate-50 text-slate-700'
-              ]"
-            >
-              <p class="font-medium truncate">{{ d.name }}</p>
-              <p v-if="d.category"
-                class="text-[11px] truncate mt-0.5"
-                :class="selectedDeviceIdDirect === d.id ? 'text-blue-200' : 'text-slate-400'">
-                {{ d.category }}
-              </p>
-            </button>
-          </div>
-          <div v-else class="text-center py-6 text-sm text-slate-400">
-            {{ deviceSearchQuery ? '검색 결과 없음' : '장비 목록 없음' }}
-          </div>
-        </div>
+      <!-- 로딩 -->
+      <div v-if="deviceListLoading" class="flex justify-center py-8">
+        <LoadingSpinner message="장비 목록 로딩 중..." />
+      </div>
 
-        <!-- 장비 상세 패널 -->
-        <div class="flex-1 min-w-0">
-          <ExplorerDeviceDetail
-            v-if="selectedDeviceIdDirect"
-            :device-id="selectedDeviceIdDirect"
-          />
-          <EmptyState
-            v-else
-            message="장비를 선택하면 상세 정보를 탐색합니다"
-            icon="🔬"
-          />
+      <EmptyState
+        v-else-if="!filteredDevices.length"
+        :message="deviceSearch ? `'${deviceSearch}' 검색 결과가 없습니다` : '장비 목록이 없습니다'"
+      />
+
+      <!-- 장비 목록 (인라인 확장) -->
+      <div v-else class="space-y-2">
+        <div v-for="d in filteredDevices" :key="d.id">
+          <div
+            @click="toggleDevice(d.id)"
+            :class="[
+              'flex items-center justify-between p-3 bg-white border rounded-lg cursor-pointer transition',
+              expandedDeviceId === d.id
+                ? 'border-blue-400 bg-blue-50'
+                : 'border-slate-200 hover:border-blue-300'
+            ]"
+          >
+            <div>
+              <span class="text-sm font-medium text-slate-700">{{ d.name }}</span>
+              <span v-if="d.category" class="ml-2 text-xs text-slate-400">{{ d.category }}</span>
+            </div>
+            <svg
+              class="w-4 h-4 text-slate-400 transition-transform flex-shrink-0"
+              :class="{ 'rotate-180': expandedDeviceId === d.id }"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+
+          <!-- 인라인 상세 확장 -->
+          <div
+            v-if="expandedDeviceId === d.id"
+            class="mx-0 px-4 py-4 bg-slate-50 border-x border-b border-slate-200 rounded-b-lg"
+          >
+            <ExplorerDeviceInline :device-id="d.id" />
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- ━━ Tab 4: 검색결과 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
-    <div v-else-if="activeTab === 'search'">
+    <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Tab 4: 논문 -->
+    <div v-else-if="activeTab === 'papers'">
 
-      <EmptyState
-        v-if="!searchQuery.trim()"
-        message="상단 검색창에 키워드를 입력하세요 (2자 이상)"
-        icon="🔍"
-      />
+      <!-- 검색 + 필터 -->
+      <div class="flex gap-3 mb-4">
+        <input
+          v-model="paperSearch"
+          type="text"
+          placeholder="논문 제목, 키워드, 저자 검색..."
+          class="flex-1 px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white
+                 focus:outline-none focus:ring-1 focus:ring-blue-500 transition"
+        />
+        <FilterSelect
+          v-model="paperDeviceFilter"
+          :options="deviceFilterOptions"
+          all-label="전체 장비"
+        />
+      </div>
 
-      <div v-else-if="searchLoading" class="flex justify-center py-10">
-        <LoadingSpinner message="검색 중..." />
+      <!-- 로딩 -->
+      <div v-if="paperLoading" class="flex justify-center py-8">
+        <LoadingSpinner message="논문 로딩 중..." />
       </div>
 
       <EmptyState
-        v-else-if="searchResults && !hasAnySearchResult"
-        :message="`'${searchQuery}' 검색 결과가 없습니다`"
-        icon="🔍"
+        v-else-if="!papers.length"
+        :message="paperSearch || paperDeviceFilter ? '검색 결과가 없습니다' : '논문 데이터가 없습니다'"
       />
 
-      <template v-else-if="searchResults">
-        <p class="text-xs text-slate-400 mb-5">
-          "<span class="font-medium text-slate-600">{{ searchQuery }}</span>" 검색 결과
-        </p>
+      <!-- 논문 목록 (인라인 확장) -->
+      <div v-else class="space-y-2">
+        <p class="text-xs text-slate-400 mb-3">총 {{ papers.length }}건</p>
 
-        <!-- 지점 -->
-        <div v-if="searchResults.branches?.length" class="mb-5">
-          <h4 class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
-            지점
-            <span class="text-slate-400 normal-case font-normal ml-1">{{ searchResults.branches.length }}건</span>
-          </h4>
-          <div class="space-y-1">
-            <button
-              v-for="b in searchResults.branches"
-              :key="b.id"
-              @click="onSearchResultBranchClick(b.id)"
-              class="w-full text-left px-4 py-2.5 bg-white border border-slate-200 rounded-lg
-                     hover:bg-slate-50 hover:border-blue-300 transition text-sm text-slate-700"
-            >
-              {{ b.name }}
-              <span v-if="b.region_name" class="text-xs text-slate-400 ml-2">{{ b.region_name }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 장비 -->
-        <div v-if="searchResults.devices?.length" class="mb-5">
-          <h4 class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
-            장비
-            <span class="text-slate-400 normal-case font-normal ml-1">{{ searchResults.devices.length }}건</span>
-          </h4>
-          <div class="space-y-1">
-            <button
-              v-for="d in searchResults.devices"
-              :key="d.id"
-              @click="onSearchResultDeviceClick(d.id)"
-              class="w-full text-left px-4 py-2.5 bg-white border border-slate-200 rounded-lg
-                     hover:bg-slate-50 hover:border-blue-300 transition"
-            >
-              <span class="text-sm text-slate-700 font-medium">{{ d.name }}</span>
-              <span v-if="d.category"
-                class="ml-2 text-xs px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded">
-                {{ d.category }}
+        <div v-for="p in papers" :key="p.id">
+          <!-- 논문 카드 -->
+          <div
+            @click="togglePaper(p.id)"
+            :class="[
+              'p-3 bg-white border rounded-lg cursor-pointer transition',
+              expandedPaperId === p.id
+                ? 'border-purple-400 bg-purple-50 rounded-b-none'
+                : 'border-slate-200 hover:border-purple-300'
+            ]"
+          >
+            <p class="text-sm font-medium text-slate-800 leading-snug">
+              {{ p.title_ko || p.title }}
+            </p>
+            <div class="flex flex-wrap gap-2 text-xs text-slate-400 mt-1.5">
+              <span v-if="p.device_name" class="text-blue-500">{{ p.device_name }}</span>
+              <span v-if="p.pub_year">{{ p.pub_year }}년</span>
+              <span v-if="p.journal">{{ p.journal }}</span>
+              <span v-if="p.study_type" class="px-1.5 py-0.5 bg-slate-100 rounded">{{ p.study_type }}</span>
+              <span v-if="p.evidence_level"
+                :class="[
+                  'px-1.5 py-0.5 rounded font-medium',
+                  p.evidence_level >= 4 ? 'bg-green-100 text-green-700' :
+                  p.evidence_level >= 2 ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-slate-100 text-slate-500'
+                ]"
+              >
+                EL{{ p.evidence_level }}
               </span>
-            </button>
+            </div>
           </div>
-        </div>
 
-        <!-- 이벤트 -->
-        <div v-if="searchResults.events?.length" class="mb-5">
-          <h4 class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
-            이벤트
-            <span class="text-slate-400 normal-case font-normal ml-1">{{ searchResults.events.length }}건</span>
-          </h4>
-          <div class="space-y-1">
-            <div
-              v-for="ev in searchResults.events"
-              :key="ev.id"
-              class="px-4 py-2.5 bg-white border border-slate-200 rounded-lg"
-            >
-              <p class="text-sm text-slate-700 font-medium">{{ ev.title }}</p>
-              <span v-if="ev.branch_name" class="text-xs text-slate-400">{{ ev.branch_name }}</span>
+          <!-- 인라인 확장 -->
+          <div
+            v-if="expandedPaperId === p.id"
+            class="px-4 py-4 bg-slate-50 border-x border-b border-slate-200 rounded-b-lg space-y-3"
+          >
+            <!-- 한줄 요약 -->
+            <div v-if="p.one_line_summary">
+              <h5 class="text-xs font-bold text-slate-500 mb-1">한줄 요약</h5>
+              <p class="text-sm text-slate-700">{{ p.one_line_summary }}</p>
+            </div>
+
+            <!-- 주요 결과 -->
+            <div v-if="p.key_findings">
+              <h5 class="text-xs font-bold text-slate-500 mb-1">주요 결과</h5>
+              <p class="text-sm text-slate-700 leading-relaxed">{{ p.key_findings }}</p>
+            </div>
+
+            <!-- 결론 -->
+            <div v-if="p.conclusion">
+              <h5 class="text-xs font-bold text-slate-500 mb-1">결론</h5>
+              <p class="text-sm text-slate-700 leading-relaxed">{{ p.conclusion }}</p>
+            </div>
+
+            <!-- 인용 통계 -->
+            <div v-if="p.quotable_stats">
+              <h5 class="text-xs font-bold text-slate-500 mb-1">인용 가능 통계</h5>
+              <p class="text-sm text-slate-700">{{ p.quotable_stats }}</p>
+            </div>
+
+            <!-- 원본 파일 -->
+            <div v-if="p.source_url || p.source_file">
+              <h5 class="text-xs font-bold text-slate-500 mb-1">원본</h5>
+              <p v-if="p.source_url" class="text-xs text-blue-600 break-all">{{ p.source_url }}</p>
+              <p v-if="p.source_file" class="text-xs text-slate-500">{{ p.source_file }}</p>
+            </div>
+
+            <!-- 저자 / 샘플 사이즈 -->
+            <div class="flex gap-4 text-xs text-slate-400">
+              <span v-if="p.authors">저자: {{ p.authors }}</span>
+              <span v-if="p.sample_size">샘플: {{ p.sample_size }}명</span>
             </div>
           </div>
         </div>
-
-        <!-- 시술 -->
-        <div v-if="searchResults.treatments?.length" class="mb-5">
-          <h4 class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
-            시술
-            <span class="text-slate-400 normal-case font-normal ml-1">{{ searchResults.treatments.length }}건</span>
-          </h4>
-          <div class="flex flex-wrap gap-2">
-            <span
-              v-for="t in searchResults.treatments"
-              :key="t.id"
-              class="px-3 py-1.5 bg-rose-50 text-rose-600 text-xs rounded-full font-medium border border-rose-100"
-            >
-              {{ t.name }}
-            </span>
-          </div>
-        </div>
-
-        <!-- 논문 -->
-        <div v-if="searchResults.papers?.length" class="mb-5">
-          <h4 class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
-            논문
-            <span class="text-slate-400 normal-case font-normal ml-1">{{ searchResults.papers.length }}건</span>
-          </h4>
-          <div class="space-y-1">
-            <div
-              v-for="p in searchResults.papers"
-              :key="p.id"
-              class="px-4 py-2.5 bg-white border border-slate-200 rounded-lg"
-            >
-              <p class="text-sm text-slate-700 leading-snug">{{ p.title_ko || p.title }}</p>
-              <span v-if="p.year" class="text-xs text-slate-400">{{ p.year }}년</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 블로그 -->
-        <div v-if="searchResults.blogs?.length" class="mb-5">
-          <h4 class="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
-            블로그
-            <span class="text-slate-400 normal-case font-normal ml-1">{{ searchResults.blogs.length }}건</span>
-          </h4>
-          <div class="space-y-1">
-            <div
-              v-for="b in searchResults.blogs"
-              :key="b.id"
-              class="px-4 py-2.5 bg-white border border-slate-200 rounded-lg"
-            >
-              <p class="text-sm text-slate-700 leading-snug">{{ b.title }}</p>
-              <div class="flex items-center gap-2 mt-0.5">
-                <span v-if="b.keyword" class="text-xs text-blue-500">{{ b.keyword }}</span>
-                <span v-if="b.published_at" class="text-xs text-slate-400">
-                  {{ b.published_at.slice(0, 10) }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </template>
+      </div>
     </div>
 
   </div>

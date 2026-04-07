@@ -1,6 +1,7 @@
-"""Explorer 라우터 — 통합 탐색 API (4개 진입점).
+"""Explorer 라우터 — 통합 탐색 API (6개 엔드포인트).
 
 키워드→논문→블로그→시술→장비→지점→이벤트 연결 탐색.
+FK 기반 조인으로 완전한 연결 데이터 반환.
 """
 
 import json
@@ -14,6 +15,32 @@ router = APIRouter()
 
 
 # ──────────────────────────────────────────────
+# 내부 헬퍼
+# ──────────────────────────────────────────────
+
+def _get_current_period_id(conn) -> Optional[int]:
+    """is_current=1인 이벤트 기간 ID 반환."""
+    row = conn.execute("""
+        SELECT id FROM evt_periods
+        WHERE is_current = 1
+        ORDER BY year DESC, start_month DESC
+        LIMIT 1
+    """).fetchone()
+    return row["id"] if row else None
+
+
+def _get_current_cafe_period_id(conn) -> Optional[int]:
+    """is_current=1인 카페 기간 ID 반환."""
+    row = conn.execute("""
+        SELECT id FROM cafe_periods
+        WHERE is_current = 1
+        ORDER BY year DESC, month DESC
+        LIMIT 1
+    """).fetchone()
+    return row["id"] if row else None
+
+
+# ──────────────────────────────────────────────
 # 1. 지점 기준 탐색
 # ──────────────────────────────────────────────
 
@@ -22,7 +49,7 @@ async def explore_by_branch(
     user: Annotated[dict, Depends(get_current_user)],
     branch_id: int = Query(..., description="evt_branches.id"),
 ):
-    """지점 ID 기준으로 장비·이벤트·순위·블로그·민원 통합 조회."""
+    """지점 ID 기준으로 장비·이벤트·순위·블로그·카페·민원 통합 조회."""
     conn = get_conn(EQUIPMENT_DB)
     try:
         # 지점 기본 정보
@@ -34,82 +61,149 @@ async def explore_by_branch(
         """, (branch_id,)).fetchone()
 
         if not branch:
-            return {"branch": None, "equipment": [], "events": [],
-                    "place_rank": None, "webpage_rank": None,
-                    "blog_count": 0, "complaints_open": 0}
+            return {
+                "branch": None,
+                "equipment": [],
+                "events_by_category": {},
+                "recent_blogs": [],
+                "cafe_summary": {"total": 0, "published": 0, "pending": 0},
+                "place_keywords": [],
+                "webpage_keywords": [],
+                "complaints_open": 0,
+            }
 
         branch_dict = dict(branch)
 
-        # 장비 목록
-        equipment = conn.execute("""
-            SELECT e.id, e.name, c.name AS category, e.quantity, e.photo_status
+        # ── 장비 목록 (device_info FK JOIN) ──
+        equipment_rows = conn.execute("""
+            SELECT e.name, e.quantity,
+                   di.id   AS device_info_id,
+                   di.category AS device_category,
+                   di.summary  AS device_summary
             FROM equipment e
-            LEFT JOIN categories c ON e.category_id = c.id
+            LEFT JOIN device_info di ON e.device_info_id = di.id
             WHERE e.evt_branch_id = ?
-            ORDER BY c.name, e.name
+            ORDER BY di.category, e.name
         """, (branch_id,)).fetchall()
-        equipment_list = [dict(r) for r in equipment]
+        equipment_list = [dict(r) for r in equipment_rows]
 
-        # 현재 기간 이벤트 (is_current=1 또는 가장 최근 기간)
-        current_period = conn.execute("""
-            SELECT id FROM evt_periods
-            WHERE is_current = 1
-            ORDER BY year DESC, start_month DESC
-            LIMIT 1
-        """).fetchone()
-
-        events = []
-        if current_period:
-            events_rows = conn.execute("""
-                SELECT ei.id, ec.display_name AS category, ei.display_name,
-                       ei.event_price, ei.regular_price, ei.discount_rate
+        # ── 현재 기간 이벤트 — 카테고리별 그룹 ──
+        events_by_category: dict[str, list] = {}
+        period_id = _get_current_period_id(conn)
+        if period_id:
+            evt_rows = conn.execute("""
+                SELECT ec.display_name AS category,
+                       ei.display_name, ei.event_price,
+                       ei.regular_price, ei.discount_rate
                 FROM evt_items ei
-                LEFT JOIN evt_categories ec ON ei.category_id = ec.id
+                JOIN evt_categories ec ON ei.category_id = ec.id
                 WHERE ei.branch_id = ? AND ei.event_period_id = ? AND ei.is_active = 1
                 ORDER BY ec.sort_order, ei.row_order
-            """, (branch_id, current_period["id"])).fetchall()
-            events = [dict(r) for r in events_rows]
+            """, (branch_id, period_id)).fetchall()
+            for r in evt_rows:
+                cat = r["category"] or "기타"
+                events_by_category.setdefault(cat, []).append({
+                    "display_name": r["display_name"],
+                    "event_price": r["event_price"],
+                    "regular_price": r["regular_price"],
+                    "discount_rate": r["discount_rate"],
+                })
 
-        # 플레이스 순위 — 최신 날짜 집계
-        place_rank = None
+        # ── 최근 블로그 15건 (evt_branch_id FK) ──
+        blog_rows = conn.execute("""
+            SELECT id, title, keyword, published_at, author
+            FROM blog_posts
+            WHERE evt_branch_id = ?
+            ORDER BY published_at DESC
+            LIMIT 15
+        """, (branch_id,)).fetchall()
+        recent_blogs = [dict(r) for r in blog_rows]
+
+        # ── 카페 현황 (cafe_branch_periods — 현재 기간) ──
+        cafe_summary = {"total": 0, "published": 0, "pending": 0}
+        cafe_period_id = _get_current_cafe_period_id(conn)
+        if cafe_period_id:
+            cbp = conn.execute("""
+                SELECT id FROM cafe_branch_periods
+                WHERE cafe_period_id = ? AND branch_id = ?
+                LIMIT 1
+            """, (cafe_period_id, branch_id)).fetchone()
+            if cbp:
+                totals = conn.execute("""
+                    SELECT
+                        COUNT(*) AS total,
+                        SUM(CASE WHEN status IN ('발행완료','완료') THEN 1 ELSE 0 END) AS published,
+                        SUM(CASE WHEN status NOT IN ('발행완료','완료') THEN 1 ELSE 0 END) AS pending
+                    FROM cafe_articles
+                    WHERE branch_period_id = ?
+                """, (cbp["id"],)).fetchone()
+                if totals:
+                    cafe_summary = {
+                        "total": totals["total"] or 0,
+                        "published": totals["published"] or 0,
+                        "pending": totals["pending"] or 0,
+                    }
+
+        # ── 플레이스 키워드 최신 날짜 (evt_branch_id FK) ──
+        place_keywords: list[dict] = []
         place_latest = conn.execute("""
-            SELECT MAX(date) AS latest_date FROM place_daily WHERE branch_id = ?
+            SELECT MAX(date) AS latest_date
+            FROM place_daily
+            WHERE evt_branch_id = ?
         """, (branch_id,)).fetchone()
         if place_latest and place_latest["latest_date"]:
-            pr = conn.execute("""
-                SELECT
-                    SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS success_today,
-                    SUM(CASE WHEN is_exposed = 0 THEN 1 ELSE 0 END) AS fail_today,
-                    COUNT(*) AS total
+            pk_rows = conn.execute("""
+                SELECT keyword, rank, is_exposed
                 FROM place_daily
-                WHERE branch_id = ? AND date = ?
-            """, (branch_id, place_latest["latest_date"])).fetchone()
-            if pr:
-                place_rank = dict(pr)
+                WHERE evt_branch_id = ? AND date = ?
+                ORDER BY rank
+            """, (branch_id, place_latest["latest_date"])).fetchall()
+            place_keywords = [dict(r) for r in pk_rows]
+        else:
+            # evt_branch_id 미설정 폴백: branch_id 기준
+            place_latest_fb = conn.execute("""
+                SELECT MAX(date) AS latest_date
+                FROM place_daily WHERE branch_id = ?
+            """, (branch_id,)).fetchone()
+            if place_latest_fb and place_latest_fb["latest_date"]:
+                pk_rows = conn.execute("""
+                    SELECT keyword, rank, is_exposed
+                    FROM place_daily
+                    WHERE branch_id = ? AND date = ?
+                    ORDER BY rank
+                """, (branch_id, place_latest_fb["latest_date"])).fetchall()
+                place_keywords = [dict(r) for r in pk_rows]
 
-        # 웹페이지 순위 — 최신 날짜 집계
-        webpage_rank = None
+        # ── 웹페이지 키워드 최신 날짜 (evt_branch_id FK) ──
+        webpage_keywords: list[dict] = []
         web_latest = conn.execute("""
-            SELECT MAX(date) AS latest_date FROM webpage_daily WHERE branch_id = ?
+            SELECT MAX(date) AS latest_date
+            FROM webpage_daily
+            WHERE evt_branch_id = ?
         """, (branch_id,)).fetchone()
         if web_latest and web_latest["latest_date"]:
-            wr = conn.execute("""
-                SELECT
-                    SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS success_today,
-                    SUM(CASE WHEN is_exposed = 0 THEN 1 ELSE 0 END) AS fail_today,
-                    COUNT(*) AS total
+            wk_rows = conn.execute("""
+                SELECT keyword, rank, is_exposed
                 FROM webpage_daily
-                WHERE branch_id = ? AND date = ?
-            """, (branch_id, web_latest["latest_date"])).fetchone()
-            if wr:
-                webpage_rank = dict(wr)
+                WHERE evt_branch_id = ? AND date = ?
+                ORDER BY rank
+            """, (branch_id, web_latest["latest_date"])).fetchall()
+            webpage_keywords = [dict(r) for r in wk_rows]
+        else:
+            web_latest_fb = conn.execute("""
+                SELECT MAX(date) AS latest_date
+                FROM webpage_daily WHERE branch_id = ?
+            """, (branch_id,)).fetchone()
+            if web_latest_fb and web_latest_fb["latest_date"]:
+                wk_rows = conn.execute("""
+                    SELECT keyword, rank, is_exposed
+                    FROM webpage_daily
+                    WHERE branch_id = ? AND date = ?
+                    ORDER BY rank
+                """, (branch_id, web_latest_fb["latest_date"])).fetchall()
+                webpage_keywords = [dict(r) for r in wk_rows]
 
-        # 블로그 게시글 수 — branch_name 기준
-        blog_count = conn.execute("""
-            SELECT COUNT(*) AS cnt FROM blog_posts WHERE branch_name = ?
-        """, (branch_dict["name"],)).fetchone()["cnt"]
-
-        # 열린 민원 수
+        # ── 열린 민원 수 ──
         complaints_open = conn.execute("""
             SELECT COUNT(*) AS cnt FROM complaints
             WHERE branch_id = ? AND status NOT IN ('resolved', 'closed')
@@ -118,10 +212,11 @@ async def explore_by_branch(
         return {
             "branch": branch_dict,
             "equipment": equipment_list,
-            "events": events,
-            "place_rank": place_rank,
-            "webpage_rank": webpage_rank,
-            "blog_count": blog_count,
+            "events_by_category": events_by_category,
+            "recent_blogs": recent_blogs,
+            "cafe_summary": cafe_summary,
+            "place_keywords": place_keywords,
+            "webpage_keywords": webpage_keywords,
             "complaints_open": complaints_open,
         }
     finally:
@@ -140,7 +235,6 @@ async def explore_by_category(
     """카테고리 ID 기준으로 시술·이벤트·장비·논문 통합 조회."""
     conn = get_conn(EQUIPMENT_DB)
     try:
-        # 카테고리 기본 정보
         category = conn.execute("""
             SELECT id, name, display_name FROM evt_categories WHERE id = ?
         """, (category_id,)).fetchone()
@@ -150,16 +244,10 @@ async def explore_by_category(
 
         category_dict = dict(category)
 
-        # 현재 기간 이벤트 — 지점별로 그룹
-        current_period = conn.execute("""
-            SELECT id FROM evt_periods
-            WHERE is_current = 1
-            ORDER BY year DESC, start_month DESC
-            LIMIT 1
-        """).fetchone()
-
+        # 현재 기간 이벤트 — 지점별 그룹
         events_by_branch: list[dict] = []
-        if current_period:
+        period_id = _get_current_period_id(conn)
+        if period_id:
             rows = conn.execute("""
                 SELECT eb.name AS branch_name,
                        ei.display_name, ei.event_price, ei.regular_price, ei.discount_rate
@@ -167,9 +255,7 @@ async def explore_by_category(
                 LEFT JOIN evt_branches eb ON ei.branch_id = eb.id
                 WHERE ei.category_id = ? AND ei.event_period_id = ? AND ei.is_active = 1
                 ORDER BY eb.name, ei.row_order
-            """, (category_id, current_period["id"])).fetchall()
-
-            # branch_name 기준으로 그룹화
+            """, (category_id, period_id)).fetchall()
             branch_map: dict[str, list] = {}
             for r in rows:
                 bn = r["branch_name"] or "미지정"
@@ -184,7 +270,7 @@ async def explore_by_category(
                 for k, v in sorted(branch_map.items())
             ]
 
-        # 관련 장비 — evt_treatments.device_info_id를 통해 연결
+        # 관련 장비 — evt_treatments.device_info_id FK
         devices = conn.execute("""
             SELECT DISTINCT di.id AS device_info_id, di.name, di.summary, di.category
             FROM evt_treatments et
@@ -194,7 +280,7 @@ async def explore_by_category(
         """, (category_id,)).fetchall()
         devices_list = [dict(r) for r in devices]
 
-        # 논문 수 — 관련 장비를 통해 간접 연결
+        # 논문 수 — 관련 장비 통해 연결
         device_ids = [d["device_info_id"] for d in devices_list]
         papers_count = 0
         if device_ids:
@@ -215,6 +301,45 @@ async def explore_by_category(
 
 
 # ──────────────────────────────────────────────
+# 2b. 카테고리 요약 카드 (이벤트 건수 포함)
+# ──────────────────────────────────────────────
+
+@router.get("/category-summary")
+async def category_summary(
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    """카테고리별 이벤트 건수 포함 요약 카드 (현재 기간 기준)."""
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        period_id = _get_current_period_id(conn)
+
+        if period_id:
+            rows = conn.execute("""
+                SELECT ec.id, ec.name, ec.display_name,
+                       COUNT(ei.id) AS event_count
+                FROM evt_categories ec
+                LEFT JOIN evt_items ei
+                    ON ei.category_id = ec.id
+                    AND ei.event_period_id = ?
+                    AND ei.is_active = 1
+                WHERE ec.is_active = 1
+                GROUP BY ec.id, ec.name, ec.display_name
+                ORDER BY ec.sort_order, ec.name
+            """, (period_id,)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT id, name, display_name, 0 AS event_count
+                FROM evt_categories
+                WHERE is_active = 1
+                ORDER BY sort_order, name
+            """).fetchall()
+
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+# ──────────────────────────────────────────────
 # 3. 장비 기준 탐색
 # ──────────────────────────────────────────────
 
@@ -226,21 +351,26 @@ async def explore_by_device(
     """장비(device_info) ID 기준으로 지점·이벤트·논문·블로그·시술 통합 조회."""
     conn = get_conn(EQUIPMENT_DB)
     try:
-        # 장비 기본 정보
         device = conn.execute("""
             SELECT id, name, category, summary, target, mechanism, aliases
             FROM device_info WHERE id = ?
         """, (device_id,)).fetchone()
 
         if not device:
-            return {"device": None, "owning_branches": [], "events": [],
-                    "papers": [], "blog_posts": [], "related_treatments": []}
+            return {
+                "device": None,
+                "owning_branches": [],
+                "events": [],
+                "papers": [],
+                "blog_posts": [],
+                "keyword_summary": [],
+                "related_treatments": [],
+            }
 
         device_dict = dict(device)
         device_name = device_dict["name"]
 
-        # 보유 지점 — 장비명 LIKE 검색 (equipment에 device_info_id FK 없음)
-        # device_info aliases도 함께 검색
+        # aliases 파싱
         aliases_raw = device_dict.get("aliases") or "[]"
         try:
             alias_list = json.loads(aliases_raw) if aliases_raw.startswith("[") else []
@@ -248,43 +378,58 @@ async def explore_by_device(
             alias_list = []
         search_names = [device_name] + alias_list
 
-        like_conditions = " OR ".join(["e.name LIKE ?"] * len(search_names))
-        like_params_branch = [f"%{n}%" for n in search_names]
-
-        owning_branches = conn.execute(f"""
+        # ── 보유 지점 — device_info_id FK 우선, 없으면 name LIKE 폴백 ──
+        owning_branches_rows = conn.execute("""
             SELECT eb.name AS branch_name, SUM(e.quantity) AS quantity
             FROM equipment e
             JOIN evt_branches eb ON e.evt_branch_id = eb.id
-            WHERE {like_conditions}
+            WHERE e.device_info_id = ?
             GROUP BY eb.id, eb.name
             ORDER BY eb.name
-        """, like_params_branch).fetchall()
-
-        owning_branches_list = [dict(r) for r in owning_branches]
-
-        # 관련 이벤트 — evt_treatments.device_info_id → evt_item_components → evt_items
-        events = conn.execute("""
-            SELECT DISTINCT eb.name AS branch_name,
-                   ei.display_name, ei.event_price, ei.regular_price, ei.discount_rate
-            FROM evt_treatments et
-            JOIN evt_item_components eic ON eic.treatment_id = et.id
-            JOIN evt_items ei ON ei.id = eic.event_item_id
-            JOIN evt_branches eb ON ei.branch_id = eb.id
-            WHERE et.device_info_id = ? AND ei.is_active = 1
-            ORDER BY eb.name, ei.display_name
-            LIMIT 50
         """, (device_id,)).fetchall()
-        events_list = [dict(r) for r in events]
+        owning_branches_list = [dict(r) for r in owning_branches_rows]
 
-        # 논문 — device_info_id 직접 참조 + paper_devices 다대다 연결
-        papers = conn.execute("""
+        # FK 미설정 폴백: name LIKE
+        if not owning_branches_list:
+            like_conditions = " OR ".join(["e.name LIKE ?"] * len(search_names))
+            like_params = [f"%{n}%" for n in search_names]
+            owning_branches_rows = conn.execute(f"""
+                SELECT eb.name AS branch_name, SUM(e.quantity) AS quantity
+                FROM equipment e
+                JOIN evt_branches eb ON e.evt_branch_id = eb.id
+                WHERE ({like_conditions}) AND e.device_info_id IS NULL
+                GROUP BY eb.id, eb.name
+                ORDER BY eb.name
+            """, like_params).fetchall()
+            owning_branches_list = [dict(r) for r in owning_branches_rows]
+
+        # ── 관련 이벤트 — evt_treatments.device_info_id → components → items (현재 기간) ──
+        period_id = _get_current_period_id(conn)
+        events_list: list[dict] = []
+        if period_id:
+            events_rows = conn.execute("""
+                SELECT DISTINCT eb.name AS branch_name,
+                       ei.display_name, ei.event_price, ei.regular_price, ei.discount_rate
+                FROM evt_treatments et
+                JOIN evt_item_components eic ON eic.treatment_id = et.id
+                JOIN evt_items ei ON ei.id = eic.event_item_id
+                JOIN evt_branches eb ON ei.branch_id = eb.id
+                WHERE et.device_info_id = ?
+                  AND ei.event_period_id = ?
+                  AND ei.is_active = 1
+                ORDER BY eb.name, ei.display_name
+                LIMIT 50
+            """, (device_id, period_id)).fetchall()
+            events_list = [dict(r) for r in events_rows]
+
+        # ── 논문 — device_info_id 직접 참조 + paper_devices 다대다 ──
+        papers_rows = conn.execute("""
             SELECT id, title, title_ko, journal, pub_year, one_line_summary
             FROM papers WHERE device_info_id = ?
             ORDER BY pub_year DESC
         """, (device_id,)).fetchall()
-        papers_set = {r["id"]: dict(r) for r in papers}
+        papers_set = {r["id"]: dict(r) for r in papers_rows}
 
-        # paper_devices 다대다 연결도 포함
         papers_via_link = conn.execute("""
             SELECT p.id, p.title, p.title_ko, p.journal, p.pub_year, p.one_line_summary
             FROM paper_devices pd
@@ -295,30 +440,40 @@ async def explore_by_device(
         for r in papers_via_link:
             papers_set.setdefault(r["id"], dict(r))
 
-        papers_list = sorted(papers_set.values(), key=lambda x: -(x["pub_year"] or 0))
+        papers_list = sorted(papers_set.values(), key=lambda x: -(x.get("pub_year") or 0))
 
-        # 블로그 게시글 — 장비명 또는 aliases 기준 keyword/title 검색
-        search_terms = search_names  # device_name + alias_list (이미 위에서 구성)
-
-        # LIKE 조건 동적 생성
+        # ── 블로그 게시글 — 장비명/aliases LIKE 검색 ──
         like_clauses = " OR ".join(
-            ["(keyword LIKE ? OR title LIKE ?)"] * len(search_terms)
+            ["(keyword LIKE ? OR title LIKE ?)"] * len(search_names)
         )
-        like_params: list = []
-        for t in search_terms:
-            like_params.extend([f"%{t}%", f"%{t}%"])
+        like_params_blog: list = []
+        for t in search_names:
+            like_params_blog.extend([f"%{t}%", f"%{t}%"])
 
-        blog_sql = f"""
-            SELECT id, title, keyword, published_at, branch_name, author
-            FROM blog_posts
+        blog_rows = conn.execute(f"""
+            SELECT bp.id, bp.title, bp.keyword, bp.published_at, bp.author,
+                   eb.name AS branch_name
+            FROM blog_posts bp
+            LEFT JOIN evt_branches eb ON bp.evt_branch_id = eb.id
             WHERE {like_clauses}
-            ORDER BY published_at DESC
+            ORDER BY bp.published_at DESC
             LIMIT 20
-        """
-        blog_posts = conn.execute(blog_sql, like_params).fetchall()
-        blog_posts_list = [dict(r) for r in blog_posts]
+        """, like_params_blog).fetchall()
+        blog_posts_list = [dict(r) for r in blog_rows]
 
-        # 관련 시술 — evt_treatments WHERE device_info_id = X
+        # ── 키워드 요약 — blog_posts의 keyword 집계 ──
+        kw_rows = conn.execute(f"""
+            SELECT keyword, COUNT(*) AS cnt
+            FROM blog_posts
+            WHERE keyword IS NOT NULL AND keyword != ''
+              AND ({like_clauses})
+            GROUP BY keyword
+            ORDER BY cnt DESC
+            LIMIT 15
+        """, like_params_blog).fetchall()
+        keyword_summary = [f"{r['keyword']}({r['cnt']})" for r in kw_rows]
+
+        # ── 관련 시술 ──
         related_treatments = conn.execute("""
             SELECT id, name, item_type
             FROM evt_treatments
@@ -334,6 +489,7 @@ async def explore_by_device(
             "events": events_list,
             "papers": papers_list,
             "blog_posts": blog_posts_list,
+            "keyword_summary": keyword_summary,
             "related_treatments": related_treatments_list,
         }
     finally:
@@ -361,7 +517,113 @@ async def list_devices(
 
 
 # ──────────────────────────────────────────────
-# 4. 유니버설 검색
+# 4. 논문 탐색
+# ──────────────────────────────────────────────
+
+@router.get("/papers")
+async def explore_papers(
+    user: Annotated[dict, Depends(get_current_user)],
+    device_id: Optional[int] = Query(None, description="device_info.id 필터"),
+    q: Optional[str] = Query(None, description="제목/요약 검색어"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+):
+    """논문 페이지네이션 조회 — 연결된 장비 + 블로그 링크 포함."""
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        conditions: list[str] = []
+        params: list = []
+
+        if device_id is not None:
+            conditions.append("""
+                (p.device_info_id = ?
+                 OR EXISTS (
+                     SELECT 1 FROM paper_devices pd
+                     WHERE pd.paper_id = p.id AND pd.device_info_id = ?
+                 ))
+            """)
+            params.extend([device_id, device_id])
+
+        if q:
+            like = f"%{q}%"
+            conditions.append("""
+                (p.title LIKE ? OR p.title_ko LIKE ?
+                 OR p.abstract_summary LIKE ? OR p.one_line_summary LIKE ?
+                 OR p.keywords LIKE ?)
+            """)
+            params.extend([like, like, like, like, like])
+
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        total = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM papers p {where_clause}", params
+        ).fetchone()["cnt"]
+
+        offset = (page - 1) * per_page
+        rows = conn.execute(f"""
+            SELECT p.id, p.title, p.title_ko, p.authors, p.journal, p.pub_year,
+                   p.abstract_summary, p.key_findings, p.one_line_summary, p.source_url,
+                   p.device_info_id
+            FROM papers p
+            {where_clause}
+            ORDER BY p.pub_year DESC, p.id DESC
+            LIMIT ? OFFSET ?
+        """, params + [per_page, offset]).fetchall()
+
+        items = []
+        for r in rows:
+            paper = dict(r)
+
+            # 연결 장비 정보
+            di_id = paper.pop("device_info_id", None)
+            device_info = None
+            if di_id:
+                di_row = conn.execute(
+                    "SELECT id, name, category FROM device_info WHERE id = ?",
+                    (di_id,)
+                ).fetchone()
+                if di_row:
+                    device_info = dict(di_row)
+            # paper_devices 다대다도 확인
+            if not device_info:
+                pd_row = conn.execute("""
+                    SELECT di.id, di.name, di.category
+                    FROM paper_devices pd
+                    JOIN device_info di ON di.id = pd.device_info_id
+                    WHERE pd.paper_id = ?
+                    LIMIT 1
+                """, (paper["id"],)).fetchone()
+                if pd_row:
+                    device_info = dict(pd_row)
+            paper["device"] = device_info
+
+            # 연결 블로그 링크
+            blog_links_rows = conn.execute("""
+                SELECT pbl.blog_post_id AS blog_id,
+                       bp.title, bp.keyword,
+                       eb.name AS branch_name
+                FROM paper_blog_links pbl
+                LEFT JOIN blog_posts bp ON bp.id = pbl.blog_post_id
+                LEFT JOIN evt_branches eb ON bp.evt_branch_id = eb.id
+                WHERE pbl.paper_id = ?
+                LIMIT 10
+            """, (paper["id"],)).fetchall()
+            paper["blog_links"] = [dict(bl) for bl in blog_links_rows]
+
+            items.append(paper)
+
+        return {
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "items": items,
+        }
+    finally:
+        conn.close()
+
+
+# ──────────────────────────────────────────────
+# 5. 유니버설 검색
 # ──────────────────────────────────────────────
 
 @router.get("/search")
@@ -374,21 +636,18 @@ async def explorer_search(
     try:
         like = f"%{q}%"
 
-        # 지점
         branches = conn.execute("""
             SELECT id, name FROM evt_branches
             WHERE name LIKE ? OR short_name LIKE ?
             LIMIT 10
         """, (like, like)).fetchall()
 
-        # 장비 (device_info)
         devices = conn.execute("""
             SELECT id, name, category FROM device_info
             WHERE name LIKE ? OR aliases LIKE ? OR summary LIKE ?
             LIMIT 10
         """, (like, like, like)).fetchall()
 
-        # 이벤트 상품
         events = conn.execute("""
             SELECT ei.id, ei.display_name, eb.name AS branch_name, ei.event_price
             FROM evt_items ei
@@ -398,14 +657,12 @@ async def explorer_search(
             LIMIT 10
         """, (like, like)).fetchall()
 
-        # 시술
         treatments = conn.execute("""
             SELECT id, name, item_type FROM evt_treatments
             WHERE name LIKE ? OR brand LIKE ?
             LIMIT 10
         """, (like, like)).fetchall()
 
-        # 논문
         papers = conn.execute("""
             SELECT id, title, title_ko FROM papers
             WHERE title LIKE ? OR title_ko LIKE ? OR keywords LIKE ?
@@ -413,7 +670,6 @@ async def explorer_search(
             LIMIT 10
         """, (like, like, like)).fetchall()
 
-        # 블로그
         blog_posts = conn.execute("""
             SELECT id, title, keyword FROM blog_posts
             WHERE title LIKE ? OR keyword LIKE ?

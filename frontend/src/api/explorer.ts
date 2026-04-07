@@ -20,3 +20,15 @@ export async function listDevices() {
   const { data } = await api.get('/explorer/devices')
   return data
 }
+export async function listPapers(params: {
+  device_info_id?: number
+  q?: string
+  status?: string
+} = {}) {
+  const { data } = await api.get('/papers', { params })
+  return data
+}
+export async function getDevicesSummary() {
+  const { data } = await api.get('/papers/devices-summary')
+  return data
+}

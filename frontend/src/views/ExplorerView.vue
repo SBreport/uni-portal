@@ -161,16 +161,18 @@ function toggleEquip(idx: number) {
 // 이벤트: API가 events_by_category 딕셔너리를 직접 반환
 const eventsByCategory = computed(() => branchData.value?.events_by_category ?? {})
 
-// 플레이스 요약: 5위 이내=성공, 6위 이하/미노출=실패
+// 플레이스 요약: 평균 순위 + 키워드 수
 const placeSummary = computed(() => {
   const kws = branchData.value?.place_keywords
   if (!kws?.length) return null
-  const success = kws.filter((k: any) => k.rank && k.rank > 0 && k.rank <= 5).length
-  const fail = kws.length - success
-  return { success, fail, total: kws.length }
+  const rankedKws = kws.filter((k: any) => k.rank && k.rank > 0)
+  const avgRank = rankedKws.length
+    ? Math.round(rankedKws.reduce((sum: number, k: any) => sum + k.rank, 0) / rankedKws.length * 10) / 10
+    : null
+  return { avgRank, total: kws.length, ranked: rankedKws.length }
 })
 
-// 웹페이지 요약: is_exposed=1 노출, 0=미노출
+// 웹페이지 요약: 노출/미노출
 const webpageSummary = computed(() => {
   const kws = branchData.value?.webpage_keywords
   if (!kws?.length) return null
@@ -520,26 +522,36 @@ function togglePaper(id: number) {
             </button>
           </div>
           <div class="grid grid-cols-3 gap-3 mt-3">
-            <button @click="toggleBranch('place')"
-              class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-sky-300 transition">
-              <p v-if="placeSummary" class="text-sm font-bold">
-                <span class="text-sky-600">{{ placeSummary.success }}</span>
-                <span class="text-xs text-slate-400 font-normal">성공</span>
-                <span class="text-red-400 ml-1">{{ placeSummary.fail }}</span>
-                <span class="text-xs text-slate-400 font-normal">실패</span>
-              </p>
-              <p v-else class="text-sm text-slate-300">—</p>
-              <p class="text-xs text-slate-400 mt-0.5">플레이스 (5위 이내)</p>
+            <button @click="placeSummary ? toggleBranch('place') : null"
+              :class="['bg-white border rounded-lg p-3 text-center transition',
+                placeSummary ? 'border-slate-200 hover:border-sky-300 cursor-pointer' : 'border-slate-100 cursor-default']">
+              <template v-if="placeSummary">
+                <p class="text-xl font-bold"
+                  :class="placeSummary.avgRank && placeSummary.avgRank <= 5 ? 'text-sky-600' : placeSummary.avgRank && placeSummary.avgRank <= 10 ? 'text-amber-500' : 'text-slate-400'">
+                  {{ placeSummary.avgRank ?? '-' }}<span class="text-xs font-normal text-slate-400">위</span>
+                </p>
+                <p class="text-[10px] text-slate-400 mt-0.5">{{ placeSummary.total }}개 키워드 평균</p>
+              </template>
+              <template v-else>
+                <p class="text-xs text-slate-300 py-1">진행하지 않음</p>
+              </template>
+              <p class="text-xs text-slate-400 mt-0.5">플레이스</p>
             </button>
-            <button @click="toggleBranch('place')"
-              class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-indigo-300 transition">
-              <p v-if="webpageSummary" class="text-sm font-bold">
-                <span class="text-indigo-600">{{ webpageSummary.exposed }}</span>
-                <span class="text-xs text-slate-400 font-normal">노출</span>
-                <span class="text-red-400 ml-1">{{ webpageSummary.notExposed }}</span>
-                <span class="text-xs text-slate-400 font-normal">미노출</span>
-              </p>
-              <p v-else class="text-sm text-slate-300">—</p>
+            <button @click="webpageSummary ? toggleBranch('place') : null"
+              :class="['bg-white border rounded-lg p-3 text-center transition',
+                webpageSummary ? 'border-slate-200 hover:border-indigo-300 cursor-pointer' : 'border-slate-100 cursor-default']">
+              <template v-if="webpageSummary">
+                <p class="text-sm font-bold">
+                  <span class="text-indigo-600">{{ webpageSummary.exposed }}</span>
+                  <span class="text-xs text-slate-400 font-normal">노출</span>
+                  <span class="text-red-400 ml-1">{{ webpageSummary.notExposed }}</span>
+                  <span class="text-xs text-slate-400 font-normal">미노출</span>
+                </p>
+                <p class="text-[10px] text-slate-400 mt-0.5">{{ webpageSummary.total }}개 키워드</p>
+              </template>
+              <template v-else>
+                <p class="text-xs text-slate-300 py-1">진행하지 않음</p>
+              </template>
               <p class="text-xs text-slate-400 mt-0.5">웹페이지</p>
             </button>
             <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
@@ -704,11 +716,8 @@ function togglePaper(id: number) {
           </div>
         </section>
 
-        <!-- 플레이스/웹페이지 순위 (접이식) -->
-        <section
-          v-if="branchData.place_keywords?.length || branchData.webpage_keywords?.length"
-          class="border border-slate-200 rounded-lg overflow-hidden"
-        >
+        <!-- 노출 현황 (접이식) -->
+        <section class="border border-slate-200 rounded-lg overflow-hidden">
           <button
             @click="toggleBranch('place')"
             class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition text-left"
@@ -720,55 +729,57 @@ function togglePaper(id: number) {
               <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          <div v-if="openBranch.place" class="bg-white px-4 pb-3 space-y-3 pt-1">
-            <!-- 플레이스 키워드별 순위 -->
-            <div v-if="branchData.place_keywords?.length">
-              <p class="text-xs font-semibold text-sky-700 mb-2">플레이스 키워드별 순위</p>
-              <div class="space-y-1">
-                <div
-                  v-for="kw in branchData.place_keywords"
-                  :key="kw.keyword"
-                  class="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded text-sm"
-                >
-                  <span class="text-slate-700 text-xs">{{ kw.keyword }}</span>
-                  <div class="flex items-center gap-2">
-                    <span v-if="kw.rank" class="font-bold text-sm"
-                      :class="kw.rank <= 5 ? 'text-sky-600' : kw.rank <= 10 ? 'text-amber-500' : 'text-slate-400'">
-                      {{ kw.rank }}위
-                    </span>
-                    <span v-if="kw.is_exposed"
-                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-100 text-sky-600">노출</span>
-                    <span v-else
-                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-500">미노출</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <p v-else class="text-xs text-slate-400">플레이스 데이터 없음</p>
+          <div v-if="openBranch.place" class="bg-white px-4 pb-3 space-y-4 pt-1">
 
-            <!-- 웹페이지 키워드별 순위 -->
-            <div v-if="branchData.webpage_keywords?.length" class="mt-3">
-              <p class="text-xs font-semibold text-indigo-700 mb-2">웹페이지 키워드별 순위</p>
-              <div class="space-y-1">
-                <div
-                  v-for="kw in branchData.webpage_keywords"
-                  :key="kw.keyword"
-                  class="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded text-sm"
-                >
-                  <span class="text-slate-700 text-xs">{{ kw.keyword }}</span>
-                  <div class="flex items-center gap-2">
-                    <span v-if="kw.rank" class="font-bold text-sm"
-                      :class="kw.rank <= 5 ? 'text-indigo-600' : kw.rank <= 10 ? 'text-amber-500' : 'text-slate-400'">
-                      {{ kw.rank }}위
-                    </span>
-                    <span v-if="kw.is_exposed"
-                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-600">노출</span>
-                    <span v-else
-                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-500">미노출</span>
+            <!-- 플레이스 -->
+            <div>
+              <p class="text-xs font-semibold text-sky-700 mb-2">플레이스 순위</p>
+              <template v-if="branchData.place_keywords?.length">
+                <div class="space-y-1">
+                  <div
+                    v-for="kw in branchData.place_keywords"
+                    :key="'p_'+kw.keyword"
+                    class="flex items-center justify-between px-3 py-2 bg-slate-50 rounded"
+                  >
+                    <span class="text-xs text-slate-700">{{ kw.keyword }}</span>
+                    <div class="flex items-center gap-1.5">
+                      <span v-if="kw.rank && kw.rank > 0" class="text-sm font-bold"
+                        :class="kw.rank <= 3 ? 'text-sky-600' : kw.rank <= 5 ? 'text-sky-400' : kw.rank <= 10 ? 'text-amber-500' : 'text-slate-400'">
+                        {{ kw.rank }}위
+                      </span>
+                      <span v-else class="text-xs text-slate-300">순위 없음</span>
+                    </div>
                   </div>
                 </div>
+              </template>
+              <div v-else class="py-3 px-3 bg-slate-50 rounded text-center">
+                <p class="text-xs text-slate-400">플레이스 마케팅을 진행하지 않는 지점입니다</p>
               </div>
             </div>
+
+            <!-- 웹페이지 -->
+            <div>
+              <p class="text-xs font-semibold text-indigo-700 mb-2">웹페이지 노출 여부</p>
+              <template v-if="branchData.webpage_keywords?.length">
+                <div class="space-y-1">
+                  <div
+                    v-for="kw in branchData.webpage_keywords"
+                    :key="'w_'+kw.keyword"
+                    class="flex items-center justify-between px-3 py-2 bg-slate-50 rounded"
+                  >
+                    <span class="text-xs text-slate-700">{{ kw.keyword }}</span>
+                    <span v-if="kw.is_exposed"
+                      class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-600">O 노출</span>
+                    <span v-else
+                      class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-50 text-red-400">X 미노출</span>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="py-3 px-3 bg-slate-50 rounded text-center">
+                <p class="text-xs text-slate-400">웹페이지 마케팅을 진행하지 않는 지점입니다</p>
+              </div>
+            </div>
+
           </div>
         </section>
 

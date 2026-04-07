@@ -173,9 +173,19 @@ async def explore_by_branch(
                 WHERE evt_branch_id = ? AND date = ?
                 ORDER BY rank
             """, (branch_id, place_latest["latest_date"])).fetchall()
-            place_keywords = [dict(r) for r in pk_rows]
+            # 5위 밖인 키워드: 가장 최근 5위 이내였던 날짜 추가
+            for r in pk_rows:
+                d = dict(r)
+                if not d["rank"] or d["rank"] > 5:
+                    last_top5 = conn.execute("""
+                        SELECT MAX(date) AS d FROM place_daily
+                        WHERE evt_branch_id = ? AND keyword = ? AND rank > 0 AND rank <= 5
+                    """, (branch_id, d["keyword"])).fetchone()
+                    d["last_top5_date"] = last_top5["d"] if last_top5 else None
+                else:
+                    d["last_top5_date"] = None
+                place_keywords.append(d)
         else:
-            # evt_branch_id 미설정 폴백: branch_id 기준
             place_latest_fb = conn.execute("""
                 SELECT MAX(date) AS latest_date
                 FROM place_daily WHERE branch_id = ?

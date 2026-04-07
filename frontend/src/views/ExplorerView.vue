@@ -748,6 +748,9 @@ function togglePaper(id: number) {
                         {{ kw.rank }}위
                       </span>
                       <span v-else class="text-xs text-slate-300">순위 없음</span>
+                      <span v-if="kw.last_top5_date" class="text-[10px] text-slate-400">
+                        (최근 5위 이내: {{ kw.last_top5_date.slice(5) }})
+                      </span>
                     </div>
                   </div>
                 </div>

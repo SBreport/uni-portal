@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useBranchStore } from '@/stores/branches'
+import { useAuthStore } from '@/stores/auth'
 import * as explorerApi from '@/api/explorer'
 import TabBar from '@/components/common/TabBar.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
@@ -10,6 +11,8 @@ import ExplorerDeviceInline from '@/components/explorer/ExplorerDeviceInline.vue
 
 // ── 스토어 ──────────────────────────────────────────────────────────────────
 const branchStore = useBranchStore()
+const auth = useAuthStore()
+const canSeeAuthor = computed(() => ['admin', 'editor'].includes(auth.effectiveRole))
 
 onMounted(async () => {
   await branchStore.loadBranches()
@@ -157,6 +160,14 @@ watch(selectedBranchId, async (id) => {
 function toggleEquip(idx: number) {
   expandedEquipIdx.value = expandedEquipIdx.value === idx ? null : idx
 }
+
+// 블로그: 브블/최블 분리
+const brandBlogs = computed(() =>
+  (branchData.value?.recent_blogs ?? []).filter((b: any) => b.blog_channel === 'br')
+)
+const optimalBlogs = computed(() =>
+  (branchData.value?.recent_blogs ?? []).filter((b: any) => b.blog_channel === 'opt' || b.blog_channel !== 'br')
+)
 
 // 이벤트: API가 events_by_category 딕셔너리를 직접 반환
 const eventsByCategory = computed(() => branchData.value?.events_by_category ?? {})
@@ -689,25 +700,43 @@ function togglePaper(id: number) {
           </button>
           <div v-if="openBranch.blogs" class="bg-white px-4 pb-3">
             <template v-if="branchData.recent_blogs?.length">
-              <div class="divide-y divide-slate-50">
-                <div v-for="b in branchData.recent_blogs" :key="b.id" class="py-2">
-                  <div class="flex items-start gap-2">
-                    <span class="shrink-0 mt-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                      :class="b.blog_channel === 'br'
-                        ? 'bg-emerald-50 text-emerald-600'
-                        : 'bg-violet-50 text-violet-600'">
-                      {{ b.blog_channel === 'br' ? '브블' : '최블' }}
-                    </span>
-                    <div class="flex-1 min-w-0">
+              <div class="grid grid-cols-2 gap-4">
+                <!-- 좌: 브랜드블로그 -->
+                <div>
+                  <p class="text-[11px] font-semibold text-emerald-600 mb-2 pb-1 border-b border-emerald-100">
+                    브랜드블로그 ({{ branchData.blog_summary?.brand_count ?? 0 }})
+                  </p>
+                  <div class="space-y-1.5">
+                    <div v-for="b in brandBlogs" :key="b.id">
                       <p class="text-xs text-slate-700 leading-snug truncate">{{ b.title }}</p>
-                      <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
                         <span v-if="b.keyword" class="text-blue-500">{{ b.keyword }}</span>
-                        <span v-if="b.published_at">{{ b.published_at.slice(0, 10) }}</span>
-                        <span v-if="b.author">{{ b.author }}</span>
+                        <span>{{ b.published_at?.slice(5, 10) }}</span>
+                        <span v-if="canSeeAuthor && b.author" class="text-slate-500">{{ b.author }}</span>
                         <a v-if="b.published_url" :href="b.published_url" target="_blank"
                           class="text-blue-400 hover:text-blue-600" @click.stop>링크</a>
                       </div>
                     </div>
+                    <p v-if="!brandBlogs.length" class="text-[11px] text-slate-300 py-2">없음</p>
+                  </div>
+                </div>
+                <!-- 우: 최적블로그 -->
+                <div>
+                  <p class="text-[11px] font-semibold text-violet-600 mb-2 pb-1 border-b border-violet-100">
+                    최적블로그 ({{ branchData.blog_summary?.optimal_count ?? 0 }})
+                  </p>
+                  <div class="space-y-1.5">
+                    <div v-for="b in optimalBlogs" :key="b.id">
+                      <p class="text-xs text-slate-700 leading-snug truncate">{{ b.title }}</p>
+                      <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+                        <span v-if="b.keyword" class="text-blue-500">{{ b.keyword }}</span>
+                        <span>{{ b.published_at?.slice(5, 10) }}</span>
+                        <span v-if="canSeeAuthor && b.author" class="text-slate-500">{{ b.author }}</span>
+                        <a v-if="b.published_url" :href="b.published_url" target="_blank"
+                          class="text-blue-400 hover:text-blue-600" @click.stop>링크</a>
+                      </div>
+                    </div>
+                    <p v-if="!optimalBlogs.length" class="text-[11px] text-slate-300 py-2">없음</p>
                   </div>
                 </div>
               </div>

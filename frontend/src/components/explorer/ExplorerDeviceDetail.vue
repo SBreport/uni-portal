@@ -8,42 +8,46 @@ const props = defineProps<{
 }>()
 
 interface DeviceData {
-  device_info: {
+  device: {
     id: number
     name: string
     category: string
     summary?: string
+    target?: string
     mechanism?: string
+    aliases?: string
   } | null
-  branches: Array<{
-    branch_id: number
+  owning_branches: Array<{
     branch_name: string
     quantity: number
   }>
   events: Array<{
-    event_id: number
-    title: string
     branch_name: string
-    price_min?: number
-    price_max?: number
-    category?: string
+    display_name: string
+    event_price?: number
+    regular_price?: number
+    discount_rate?: number
   }>
   papers: Array<{
     id: number
     title: string
     title_ko?: string
-    year?: number
+    journal?: string
+    pub_year?: number
+    one_line_summary?: string
   }>
-  blogs: Array<{
+  blog_posts: Array<{
     id: number
     title: string
-    published_at?: string
     keyword?: string
+    published_at?: string
+    branch_name?: string
+    author?: string
   }>
-  treatments: Array<{
+  related_treatments: Array<{
     id: number
     name: string
-    category?: string
+    item_type?: string
   }>
 }
 
@@ -98,20 +102,20 @@ function formatPrice(min?: number, max?: number): string {
         <div class="flex items-start justify-between">
           <div>
             <h3 class="text-base font-bold text-slate-800">
-              {{ data.device_info?.name ?? '알 수 없는 장비' }}
+              {{ data.device?.name ?? '알 수 없는 장비' }}
             </h3>
-            <span v-if="data.device_info?.category"
+            <span v-if="data.device?.category"
               class="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-600 text-xs rounded-full font-medium">
-              {{ data.device_info.category }}
+              {{ data.device.category }}
             </span>
           </div>
           <span class="text-xs text-slate-400">ID {{ deviceId }}</span>
         </div>
-        <p v-if="data.device_info?.summary" class="mt-2 text-sm text-slate-600 leading-relaxed">
-          {{ data.device_info.summary }}
+        <p v-if="data.device?.summary" class="mt-2 text-sm text-slate-600 leading-relaxed">
+          {{ data.device.summary }}
         </p>
-        <p v-if="data.device_info?.mechanism" class="mt-1 text-xs text-slate-500">
-          작용 원리: {{ data.device_info.mechanism }}
+        <p v-if="data.device?.mechanism" class="mt-1 text-xs text-slate-500">
+          작용 원리: {{ data.device.mechanism }}
         </p>
       </div>
 
@@ -127,7 +131,7 @@ function formatPrice(min?: number, max?: number): string {
             <span class="text-sm font-semibold text-slate-700">보유 지점</span>
             <div class="flex items-center gap-2">
               <span class="text-xs bg-blue-100 text-blue-600 font-bold px-2 py-0.5 rounded-full">
-                {{ data.branches.length }}
+                {{ data.owning_branches?.length ?? 0 }}
               </span>
               <svg class="w-4 h-4 text-slate-400 transition-transform"
                 :class="{ 'rotate-180': openSections.has('branches') }"
@@ -137,8 +141,8 @@ function formatPrice(min?: number, max?: number): string {
             </div>
           </button>
           <div v-if="openSections.has('branches')" class="px-5 pb-3">
-            <div v-if="data.branches.length" class="space-y-1.5">
-              <div v-for="b in data.branches" :key="b.branch_id"
+            <div v-if="data.owning_branches?.length ?? 0" class="space-y-1.5">
+              <div v-for="b in (data.owning_branches || [])" :key="b.branch_name"
                 class="flex items-center justify-between py-1.5 px-3 bg-slate-50 rounded text-sm">
                 <span class="text-slate-700">{{ b.branch_name }}</span>
                 <span class="text-xs text-slate-500 font-medium">{{ b.quantity }}대</span>
@@ -157,7 +161,7 @@ function formatPrice(min?: number, max?: number): string {
             <span class="text-sm font-semibold text-slate-700">이벤트</span>
             <div class="flex items-center gap-2">
               <span class="text-xs bg-amber-100 text-amber-600 font-bold px-2 py-0.5 rounded-full">
-                {{ data.events.length }}
+                {{ data.events?.length ?? 0 }}
               </span>
               <svg class="w-4 h-4 text-slate-400 transition-transform"
                 :class="{ 'rotate-180': openSections.has('events') }"
@@ -167,16 +171,19 @@ function formatPrice(min?: number, max?: number): string {
             </div>
           </button>
           <div v-if="openSections.has('events')" class="px-5 pb-3">
-            <div v-if="data.events.length" class="space-y-1.5">
-              <div v-for="ev in data.events" :key="ev.event_id"
+            <div v-if="data.events?.length ?? 0" class="space-y-1.5">
+              <div v-for="(ev, idx) in (data.events || [])" :key="idx"
                 class="py-2 px-3 bg-slate-50 rounded text-sm">
                 <div class="flex items-start justify-between gap-2">
-                  <span class="text-slate-700 text-xs leading-snug flex-1">{{ ev.title }}</span>
-                  <span class="text-xs text-amber-600 font-medium whitespace-nowrap">
-                    {{ formatPrice(ev.price_min, ev.price_max) }}
+                  <span class="text-slate-700 text-xs leading-snug flex-1">{{ ev.display_name }}</span>
+                  <span v-if="ev.event_price" class="text-xs text-red-500 font-bold whitespace-nowrap">
+                    {{ (ev.event_price / 10000).toFixed(0) }}만
                   </span>
                 </div>
-                <span class="text-[11px] text-slate-400 mt-0.5 block">{{ ev.branch_name }}</span>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-[11px] text-slate-400">{{ ev.branch_name }}</span>
+                  <span v-if="ev.discount_rate" class="text-[11px] text-emerald-500 font-medium">{{ ev.discount_rate }}%↓</span>
+                </div>
               </div>
             </div>
             <p v-else class="text-sm text-slate-400 py-2">이벤트 없음</p>
@@ -192,7 +199,7 @@ function formatPrice(min?: number, max?: number): string {
             <span class="text-sm font-semibold text-slate-700">관련 논문</span>
             <div class="flex items-center gap-2">
               <span class="text-xs bg-purple-100 text-purple-600 font-bold px-2 py-0.5 rounded-full">
-                {{ data.papers.length }}
+                {{ data.papers?.length ?? 0 }}
               </span>
               <svg class="w-4 h-4 text-slate-400 transition-transform"
                 :class="{ 'rotate-180': openSections.has('papers') }"
@@ -202,11 +209,12 @@ function formatPrice(min?: number, max?: number): string {
             </div>
           </button>
           <div v-if="openSections.has('papers')" class="px-5 pb-3">
-            <div v-if="data.papers.length" class="space-y-1.5">
-              <div v-for="p in data.papers" :key="p.id"
+            <div v-if="data.papers?.length ?? 0" class="space-y-1.5">
+              <div v-for="p in (data.papers || [])" :key="p.id"
                 class="py-1.5 px-3 bg-slate-50 rounded text-sm">
                 <p class="text-slate-700 text-xs leading-snug">{{ p.title_ko || p.title }}</p>
-                <span v-if="p.year" class="text-[11px] text-slate-400">{{ p.year }}년</span>
+                <span v-if="p.pub_year" class="text-[11px] text-slate-400">{{ p.pub_year }}년</span>
+                <span v-if="p.journal" class="text-[11px] text-slate-400 ml-1">{{ p.journal }}</span>
               </div>
             </div>
             <p v-else class="text-sm text-slate-400 py-2">관련 논문 없음</p>
@@ -222,7 +230,7 @@ function formatPrice(min?: number, max?: number): string {
             <span class="text-sm font-semibold text-slate-700">관련 블로그</span>
             <div class="flex items-center gap-2">
               <span class="text-xs bg-emerald-100 text-emerald-600 font-bold px-2 py-0.5 rounded-full">
-                {{ data.blogs.length }}
+                {{ data.blog_posts?.length ?? 0 }}
               </span>
               <svg class="w-4 h-4 text-slate-400 transition-transform"
                 :class="{ 'rotate-180': openSections.has('blogs') }"
@@ -232,8 +240,8 @@ function formatPrice(min?: number, max?: number): string {
             </div>
           </button>
           <div v-if="openSections.has('blogs')" class="px-5 pb-3">
-            <div v-if="data.blogs.length" class="space-y-1.5">
-              <div v-for="b in data.blogs" :key="b.id"
+            <div v-if="data.blog_posts?.length ?? 0" class="space-y-1.5">
+              <div v-for="b in (data.blog_posts || [])" :key="b.id"
                 class="py-1.5 px-3 bg-slate-50 rounded text-sm">
                 <p class="text-slate-700 text-xs leading-snug">{{ b.title }}</p>
                 <div class="flex items-center gap-2 mt-0.5">
@@ -255,7 +263,7 @@ function formatPrice(min?: number, max?: number): string {
             <span class="text-sm font-semibold text-slate-700">관련 시술</span>
             <div class="flex items-center gap-2">
               <span class="text-xs bg-rose-100 text-rose-600 font-bold px-2 py-0.5 rounded-full">
-                {{ data.treatments.length }}
+                {{ data.related_treatments?.length ?? 0 }}
               </span>
               <svg class="w-4 h-4 text-slate-400 transition-transform"
                 :class="{ 'rotate-180': openSections.has('treatments') }"
@@ -265,8 +273,8 @@ function formatPrice(min?: number, max?: number): string {
             </div>
           </button>
           <div v-if="openSections.has('treatments')" class="px-5 pb-3">
-            <div v-if="data.treatments.length" class="flex flex-wrap gap-2">
-              <span v-for="t in data.treatments" :key="t.id"
+            <div v-if="data.related_treatments?.length ?? 0" class="flex flex-wrap gap-2">
+              <span v-for="t in (data.related_treatments || [])" :key="t.id"
                 class="px-2 py-1 bg-rose-50 text-rose-600 text-xs rounded-full font-medium">
                 {{ t.name }}
               </span>

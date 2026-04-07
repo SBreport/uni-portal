@@ -125,7 +125,8 @@ async def explore_by_branch(
         }
 
         blog_rows = conn.execute("""
-            SELECT id, title, keyword, published_at, author,
+            SELECT id, COALESCE(clean_title, scraped_title, title, keyword) AS title,
+                   keyword, published_at, author,
                    blog_channel, post_type, published_url
             FROM blog_posts
             WHERE evt_branch_id = ?
@@ -488,7 +489,8 @@ async def explore_by_device(
             like_params_blog.extend([f"%{t}%", f"%{t}%"])
 
         blog_rows = conn.execute(f"""
-            SELECT bp.id, bp.title, bp.keyword, bp.published_at, bp.author,
+            SELECT bp.id, COALESCE(bp.clean_title, bp.scraped_title, bp.title, bp.keyword) AS title,
+                   bp.keyword, bp.published_at, bp.author,
                    eb.name AS branch_name
             FROM blog_posts bp
             LEFT JOIN evt_branches eb ON bp.evt_branch_id = eb.id
@@ -637,7 +639,8 @@ async def explore_papers(
             # 연결 블로그 링크
             blog_links_rows = conn.execute("""
                 SELECT pbl.blog_post_id AS blog_id,
-                       bp.title, bp.keyword,
+                       COALESCE(bp.clean_title, bp.scraped_title, bp.title, bp.keyword) AS title,
+                       bp.keyword,
                        eb.name AS branch_name
                 FROM paper_blog_links pbl
                 LEFT JOIN blog_posts bp ON bp.id = pbl.blog_post_id
@@ -708,11 +711,11 @@ async def explorer_search(
         """, (like, like, like)).fetchall()
 
         blog_posts = conn.execute("""
-            SELECT id, title, keyword FROM blog_posts
-            WHERE title LIKE ? OR keyword LIKE ?
+            SELECT id, COALESCE(clean_title, scraped_title, title, keyword) AS title, keyword FROM blog_posts
+            WHERE (clean_title LIKE ? OR title LIKE ? OR keyword LIKE ?)
             ORDER BY published_at DESC
             LIMIT 10
-        """, (like, like)).fetchall()
+        """, (like, like, like)).fetchall()
 
         return {
             "branches": [dict(r) for r in branches],

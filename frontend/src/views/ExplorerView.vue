@@ -708,13 +708,17 @@ function togglePaper(id: number) {
                   </p>
                   <div class="space-y-1.5">
                     <div v-for="b in brandBlogs" :key="b.id">
-                      <p class="text-xs text-slate-700 leading-snug truncate">{{ b.title }}</p>
+                      <a v-if="b.published_url" :href="b.published_url" target="_blank"
+                        class="text-xs text-slate-700 leading-snug truncate block hover:text-blue-600 transition">
+                        {{ b.title || b.keyword || '(제목 없음)' }}
+                      </a>
+                      <p v-else class="text-xs text-slate-700 leading-snug truncate">
+                        {{ b.title || b.keyword || '(제목 없음)' }}
+                      </p>
                       <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
-                        <span v-if="b.keyword" class="text-blue-500">{{ b.keyword }}</span>
+                        <span v-if="b.keyword && b.title" class="text-blue-500">{{ b.keyword }}</span>
                         <span>{{ b.published_at?.slice(5, 10) }}</span>
                         <span v-if="canSeeAuthor && b.author" class="text-slate-500">{{ b.author }}</span>
-                        <a v-if="b.published_url" :href="b.published_url" target="_blank"
-                          class="text-blue-400 hover:text-blue-600" @click.stop>링크</a>
                       </div>
                     </div>
                     <p v-if="!brandBlogs.length" class="text-[11px] text-slate-300 py-2">없음</p>
@@ -727,13 +731,17 @@ function togglePaper(id: number) {
                   </p>
                   <div class="space-y-1.5">
                     <div v-for="b in optimalBlogs" :key="b.id">
-                      <p class="text-xs text-slate-700 leading-snug truncate">{{ b.title }}</p>
+                      <a v-if="b.published_url" :href="b.published_url" target="_blank"
+                        class="text-xs text-slate-700 leading-snug truncate block hover:text-blue-600 transition">
+                        {{ b.title || b.keyword || '(제목 없음)' }}
+                      </a>
+                      <p v-else class="text-xs text-slate-700 leading-snug truncate">
+                        {{ b.title || b.keyword || '(제목 없음)' }}
+                      </p>
                       <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
-                        <span v-if="b.keyword" class="text-blue-500">{{ b.keyword }}</span>
+                        <span v-if="b.keyword && b.title" class="text-blue-500">{{ b.keyword }}</span>
                         <span>{{ b.published_at?.slice(5, 10) }}</span>
                         <span v-if="canSeeAuthor && b.author" class="text-slate-500">{{ b.author }}</span>
-                        <a v-if="b.published_url" :href="b.published_url" target="_blank"
-                          class="text-blue-400 hover:text-blue-600" @click.stop>링크</a>
                       </div>
                     </div>
                     <p v-if="!optimalBlogs.length" class="text-[11px] text-slate-300 py-2">없음</p>

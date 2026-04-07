@@ -228,6 +228,79 @@ def fix_url_titles_api(user: dict = Depends(require_role("admin"))):
         raise HTTPException(500, f"URL 제목 수정 실패: {str(e)}")
 
 
+# ── 데이터 품질 현황 ──
+@router.get("/data-quality")
+def data_quality_summary(user: dict = Depends(require_role("admin"))):
+    """블로그 데이터 품질 현황 — 삭제/미수집/검토필요 건수."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        total = conn.execute("SELECT COUNT(*) FROM blog_posts").fetchone()[0]
+        deleted = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE scraped_title = '(삭제됨)'"
+        ).fetchone()[0]
+        cafe_fail = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE scraped_title = '(카페-수집불가)'"
+        ).fetchone()[0]
+        needs_review = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE needs_review = 1"
+        ).fetchone()[0]
+        no_title = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE (title IS NULL OR title = '') "
+            "AND (scraped_title IS NULL OR scraped_title = '') "
+            "AND published_url IS NOT NULL AND published_url != ''"
+        ).fetchone()[0]
+        no_branch = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE evt_branch_id IS NULL "
+            "AND branch_name LIKE '유앤%'"
+        ).fetchone()[0]
+        return {
+            "total": total,
+            "deleted": deleted,
+            "cafe_fail": cafe_fail,
+            "needs_review": needs_review,
+            "no_title": no_title,
+            "no_branch": no_branch,
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/data-quality/details")
+def data_quality_details(
+    category: str = Query(..., description="deleted|cafe_fail|needs_review|no_title|no_branch"),
+    limit: int = Query(50, ge=1, le=200),
+    user: dict = Depends(require_role("admin")),
+):
+    """데이터 품질 문제 건 상세 목록."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        conditions = {
+            "deleted": "scraped_title = '(삭제됨)'",
+            "cafe_fail": "scraped_title = '(카페-수집불가)'",
+            "needs_review": "needs_review = 1",
+            "no_title": "(title IS NULL OR title = '') AND (scraped_title IS NULL OR scraped_title = '') "
+                        "AND published_url IS NOT NULL AND published_url != ''",
+            "no_branch": "evt_branch_id IS NULL AND branch_name LIKE '유앤%'",
+        }
+        where = conditions.get(category)
+        if not where:
+            return {"items": [], "total": 0}
+
+        total = conn.execute(f"SELECT COUNT(*) FROM blog_posts WHERE {where}").fetchone()[0]
+        rows = conn.execute(f"""
+            SELECT id, COALESCE(clean_title, scraped_title, title) AS title,
+                   keyword, blog_channel, branch_name, published_url,
+                   published_at, author, scraped_title, needs_review
+            FROM blog_posts WHERE {where}
+            ORDER BY published_at DESC LIMIT ?
+        """, (limit,)).fetchall()
+        return {"items": [dict(r) for r in rows], "total": total}
+    finally:
+        conn.close()
+
+
 # ── 블로그 데이터 임포트 ──
 @router.post("/import-data")
 def import_blog_data(user: dict = Depends(require_role("admin"))):

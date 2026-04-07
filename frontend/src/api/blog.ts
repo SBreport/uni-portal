@@ -79,3 +79,9 @@ export const fixUrlTitles = () =>
 
 export const importBlogData = () =>
   api.post('/blog/import-data')
+
+export const getDataQuality = () =>
+  api.get('/blog/data-quality')
+
+export const getDataQualityDetails = (category: string, limit = 50) =>
+  api.get('/blog/data-quality/details', { params: { category, limit } })

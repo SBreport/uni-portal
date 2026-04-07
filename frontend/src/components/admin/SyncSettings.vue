@@ -249,9 +249,38 @@ async function uploadCred(event: Event) {
   }
 }
 
+// 데이터 품질 현황
+const qualitySummary = ref<any>(null)
+const qualityDetails = ref<any>(null)
+const qualityDetailCategory = ref('')
+const qualityLoading = ref(false)
+
+async function loadQuality() {
+  try {
+    const { data } = await blogApi.getDataQuality()
+    qualitySummary.value = data
+  } catch (e) { console.error(e) }
+}
+
+async function showDetails(category: string) {
+  if (qualityDetailCategory.value === category) {
+    qualityDetailCategory.value = ''
+    qualityDetails.value = null
+    return
+  }
+  qualityDetailCategory.value = category
+  qualityLoading.value = true
+  try {
+    const { data } = await blogApi.getDataQualityDetails(category, 50)
+    qualityDetails.value = data
+  } catch (e) { console.error(e) }
+  finally { qualityLoading.value = false }
+}
+
 onMounted(() => {
   loadNotionSyncStatus()
   loadScrapeStatus()
+  loadQuality()
 })
 </script>
 
@@ -490,6 +519,124 @@ onMounted(() => {
       <div v-if="credMsg" class="mt-2 ml-4 px-2 py-1 rounded text-xs inline-block"
         :class="credMsg.startsWith('오류') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'">{{ credMsg }}</div>
     </div>
+    </div>
+
+    <!-- ── 데이터 품질 현황 ── -->
+    <div class="border border-slate-200 rounded-lg overflow-hidden">
+      <div class="px-4 py-3 bg-slate-50 border-b border-slate-200">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold text-slate-700">📊 블로그 데이터 품질</div>
+            <div class="text-xs text-slate-400">총 {{ qualitySummary?.total?.toLocaleString() ?? '-' }}건 기준</div>
+          </div>
+          <button @click="loadQuality" class="text-xs text-blue-600 hover:text-blue-800">새로고침</button>
+        </div>
+      </div>
+
+      <div v-if="qualitySummary" class="divide-y divide-slate-100">
+        <!-- 삭제된 글 -->
+        <button @click="showDetails('deleted')"
+          class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition text-left">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-red-400"></span>
+            <span class="text-sm text-slate-700">삭제된 글</span>
+            <span class="text-xs text-slate-400">블로그가 실제로 삭제되어 404 반환</span>
+          </div>
+          <span class="text-sm font-bold text-red-500">{{ qualitySummary.deleted?.toLocaleString() }}건</span>
+        </button>
+
+        <!-- 카페 수집불가 -->
+        <button @click="showDetails('cafe_fail')"
+          class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition text-left">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span class="text-sm text-slate-700">카페 수집불가</span>
+            <span class="text-xs text-slate-400">카페 URL은 로그인 필요하여 제목 추출 불가</span>
+          </div>
+          <span class="text-sm font-bold text-amber-500">{{ qualitySummary.cafe_fail?.toLocaleString() }}건</span>
+        </button>
+
+        <!-- 검토 필요 -->
+        <button @click="showDetails('needs_review')"
+          class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition text-left">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+            <span class="text-sm text-slate-700">검토 필요</span>
+            <span class="text-xs text-slate-400">제목에 URL이 포함되거나 이상 데이터</span>
+          </div>
+          <span class="text-sm font-bold text-purple-500">{{ qualitySummary.needs_review?.toLocaleString() }}건</span>
+        </button>
+
+        <!-- 제목 미수집 -->
+        <button @click="showDetails('no_title')"
+          class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition text-left">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+            <span class="text-sm text-slate-700">제목 미수집</span>
+            <span class="text-xs text-slate-400">스크래핑 실패 또는 미실행</span>
+          </div>
+          <span class="text-sm font-bold text-slate-500">{{ qualitySummary.no_title?.toLocaleString() }}건</span>
+        </button>
+
+        <!-- 지점 미매핑 -->
+        <button @click="showDetails('no_branch')"
+          class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition text-left">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+            <span class="text-sm text-slate-700">지점 미매핑 (유앤아이)</span>
+            <span class="text-xs text-slate-400">evt_branches와 연결 안 된 유앤아이 글</span>
+          </div>
+          <span class="text-sm font-bold text-sky-500">{{ qualitySummary.no_branch?.toLocaleString() }}건</span>
+        </button>
+      </div>
+
+      <!-- 상세 목록 (클릭 시 펼침) -->
+      <div v-if="qualityDetailCategory" class="border-t border-slate-200 bg-white">
+        <div class="px-4 py-2 bg-slate-50 text-xs font-semibold text-slate-500 flex justify-between">
+          <span>{{ {deleted:'삭제된 글',cafe_fail:'카페 수집불가',needs_review:'검토 필요',no_title:'제목 미수집',no_branch:'지점 미매핑'}[qualityDetailCategory] }} 상세</span>
+          <span v-if="qualityDetails">{{ qualityDetails.total }}건 중 {{ qualityDetails.items?.length }}건 표시</span>
+        </div>
+        <div v-if="qualityLoading" class="px-4 py-4 text-sm text-slate-400 text-center">로딩 중...</div>
+        <div v-else-if="qualityDetails?.items?.length" class="max-h-80 overflow-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-50 sticky top-0">
+              <tr>
+                <th class="text-left px-3 py-1.5 text-slate-500 font-medium">채널</th>
+                <th class="text-left px-3 py-1.5 text-slate-500 font-medium">제목/키워드</th>
+                <th class="text-left px-3 py-1.5 text-slate-500 font-medium">지점</th>
+                <th class="text-left px-3 py-1.5 text-slate-500 font-medium">날짜</th>
+                <th class="text-left px-3 py-1.5 text-slate-500 font-medium">상태</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <tr v-for="item in qualityDetails.items" :key="item.id" class="hover:bg-slate-50">
+                <td class="px-3 py-1.5">
+                  <span class="px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    :class="item.blog_channel === 'br' ? 'bg-emerald-50 text-emerald-600' : item.blog_channel === 'opt' ? 'bg-violet-50 text-violet-600' : 'bg-slate-100 text-slate-500'">
+                    {{ item.blog_channel === 'br' ? '브블' : item.blog_channel === 'opt' ? '최블' : item.blog_channel || '-' }}
+                  </span>
+                </td>
+                <td class="px-3 py-1.5 max-w-xs truncate">
+                  <a v-if="item.published_url" :href="item.published_url" target="_blank"
+                    class="text-slate-700 hover:text-blue-600">
+                    {{ item.title || item.keyword || '(없음)' }}
+                  </a>
+                  <span v-else class="text-slate-500">{{ item.title || item.keyword || '(없음)' }}</span>
+                </td>
+                <td class="px-3 py-1.5 text-slate-400">{{ item.branch_name || '-' }}</td>
+                <td class="px-3 py-1.5 text-slate-400">{{ item.published_at?.slice(0, 10) || '-' }}</td>
+                <td class="px-3 py-1.5">
+                  <span v-if="item.scraped_title === '(삭제됨)'" class="text-red-400">삭제됨</span>
+                  <span v-else-if="item.scraped_title === '(카페-수집불가)'" class="text-amber-400">수집불가</span>
+                  <span v-else-if="item.needs_review" class="text-purple-400">검토필요</span>
+                  <span v-else class="text-slate-300">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-else class="px-4 py-3 text-xs text-slate-400">데이터 없음</p>
+      </div>
     </div>
 
   </div>

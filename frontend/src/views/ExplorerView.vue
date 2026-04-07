@@ -133,10 +133,7 @@ const filteredDevices = computed(() => {
 async function loadDeviceList() {
   deviceListLoading.value = true
   try {
-    const data = await explorerApi.search('__list__')
-    if (data?.devices) {
-      deviceList.value = data.devices
-    }
+    deviceList.value = await explorerApi.listDevices()
   } catch {
     deviceList.value = []
   } finally {
@@ -296,8 +293,8 @@ function onSearchResultBranchClick(branchId: number) {
             <div class="flex flex-wrap gap-2">
               <button
                 v-for="d in categoryData.devices"
-                :key="d.id"
-                @click="onDeviceSelect(d.id); activeTab = 'device'"
+                :key="d.device_info_id"
+                @click="onDeviceSelect(d.device_info_id); activeTab = 'device'"
                 class="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-200
                        hover:bg-blue-100 transition font-medium"
               >
@@ -317,15 +314,16 @@ function onSearchResultBranchClick(branchId: number) {
               >
                 <div class="flex items-center justify-between mb-1.5">
                   <span class="text-sm font-semibold text-slate-700">{{ group.branch_name }}</span>
-                  <span class="text-xs text-slate-400">{{ group.events.length }}건</span>
+                  <span class="text-xs text-slate-400">{{ group.items?.length ?? 0 }}건</span>
                 </div>
                 <div class="space-y-0.5">
-                  <p v-for="ev in group.events.slice(0, 3)" :key="ev.event_id"
+                  <p v-for="(ev, idx) in (group.items || []).slice(0, 3)" :key="idx"
                     class="text-xs text-slate-600 truncate">
-                    · {{ ev.title }}
+                    · {{ ev.display_name }}
+                    <span v-if="ev.event_price" class="text-red-500 font-medium ml-1">{{ (ev.event_price / 10000).toFixed(0) }}만</span>
                   </p>
-                  <p v-if="group.events.length > 3" class="text-xs text-slate-400">
-                    외 {{ group.events.length - 3 }}건
+                  <p v-if="(group.items?.length ?? 0) > 3" class="text-xs text-slate-400">
+                    외 {{ group.items.length - 3 }}건
                   </p>
                 </div>
               </div>
@@ -333,9 +331,9 @@ function onSearchResultBranchClick(branchId: number) {
           </div>
 
           <!-- 논문 수 -->
-          <p v-if="categoryData.paper_count !== undefined" class="mt-4 text-sm text-slate-500">
+          <p v-if="categoryData.papers_count !== undefined" class="mt-4 text-sm text-slate-500">
             관련 논문
-            <span class="font-bold text-purple-600">{{ categoryData.paper_count }}</span>건
+            <span class="font-bold text-purple-600">{{ categoryData.papers_count }}</span>건
           </p>
 
           <EmptyState

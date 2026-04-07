@@ -16,3 +16,7 @@ export async function search(q: string) {
   const { data } = await api.get('/explorer/search', { params: { q } })
   return data
 }
+export async function listDevices() {
+  const { data } = await api.get('/explorer/devices')
+  return data
+}

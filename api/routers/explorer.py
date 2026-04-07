@@ -3,6 +3,7 @@
 키워드→논문→블로그→시술→장비→지점→이벤트 연결 탐색.
 """
 
+import json
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Query
 
@@ -39,13 +40,11 @@ async def explore_by_branch(
 
         branch_dict = dict(branch)
 
-        # 장비 목록 (device_info JOIN)
+        # 장비 목록
         equipment = conn.execute("""
-            SELECT e.id, e.name, c.name AS category, e.quantity,
-                   e.photo_status, di.id AS device_info_id, di.name AS device_name
+            SELECT e.id, e.name, c.name AS category, e.quantity, e.photo_status
             FROM equipment e
             LEFT JOIN categories c ON e.category_id = c.id
-            LEFT JOIN device_info di ON e.device_info_id = di.id
             WHERE e.evt_branch_id = ?
             ORDER BY c.name, e.name
         """, (branch_id,)).fetchall()
@@ -240,26 +239,26 @@ async def explore_by_device(
         device_dict = dict(device)
         device_name = device_dict["name"]
 
-        # 보유 지점 — evt_branch_id 기준 우선, fallback: 장비명 LIKE
-        owning_branches = conn.execute("""
+        # 보유 지점 — 장비명 LIKE 검색 (equipment에 device_info_id FK 없음)
+        # device_info aliases도 함께 검색
+        aliases_raw = device_dict.get("aliases") or "[]"
+        try:
+            alias_list = json.loads(aliases_raw) if aliases_raw.startswith("[") else []
+        except Exception:
+            alias_list = []
+        search_names = [device_name] + alias_list
+
+        like_conditions = " OR ".join(["e.name LIKE ?"] * len(search_names))
+        like_params_branch = [f"%{n}%" for n in search_names]
+
+        owning_branches = conn.execute(f"""
             SELECT eb.name AS branch_name, SUM(e.quantity) AS quantity
             FROM equipment e
             JOIN evt_branches eb ON e.evt_branch_id = eb.id
-            WHERE e.device_info_id = ?
+            WHERE {like_conditions}
             GROUP BY eb.id, eb.name
             ORDER BY eb.name
-        """, (device_id,)).fetchall()
-
-        if not owning_branches:
-            # fallback: 장비명 LIKE 검색
-            owning_branches = conn.execute("""
-                SELECT eb.name AS branch_name, SUM(e.quantity) AS quantity
-                FROM equipment e
-                JOIN evt_branches eb ON e.evt_branch_id = eb.id
-                WHERE e.name LIKE ?
-                GROUP BY eb.id, eb.name
-                ORDER BY eb.name
-            """, (f"%{device_name}%",)).fetchall()
+        """, like_params_branch).fetchall()
 
         owning_branches_list = [dict(r) for r in owning_branches]
 
@@ -299,9 +298,7 @@ async def explore_by_device(
         papers_list = sorted(papers_set.values(), key=lambda x: -(x["pub_year"] or 0))
 
         # 블로그 게시글 — 장비명 또는 aliases 기준 keyword/title 검색
-        aliases_raw = device_dict.get("aliases") or ""
-        alias_terms = [a.strip() for a in aliases_raw.split(",") if a.strip()]
-        search_terms = [device_name] + alias_terms
+        search_terms = search_names  # device_name + alias_list (이미 위에서 구성)
 
         # LIKE 조건 동적 생성
         like_clauses = " OR ".join(
@@ -339,6 +336,26 @@ async def explore_by_device(
             "blog_posts": blog_posts_list,
             "related_treatments": related_treatments_list,
         }
+    finally:
+        conn.close()
+
+
+# ──────────────────────────────────────────────
+# 3b. 장비 전체 목록 (탐색기 장비 탭용)
+# ──────────────────────────────────────────────
+
+@router.get("/devices")
+async def list_devices(
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    """device_info 전체 목록 (id, name, category)."""
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        rows = conn.execute("""
+            SELECT id, name, category FROM device_info
+            ORDER BY category, name
+        """).fetchall()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 

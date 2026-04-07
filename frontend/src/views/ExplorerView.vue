@@ -161,13 +161,22 @@ function toggleEquip(idx: number) {
 // 이벤트: API가 events_by_category 딕셔너리를 직접 반환
 const eventsByCategory = computed(() => branchData.value?.events_by_category ?? {})
 
-// 플레이스 평균 순위 (어제 기준)
-const placeAvgRank = computed(() => {
+// 플레이스 요약: 5위 이내=성공, 6위 이하/미노출=실패
+const placeSummary = computed(() => {
   const kws = branchData.value?.place_keywords
   if (!kws?.length) return null
-  const ranks = kws.filter((k: any) => k.rank && k.rank > 0).map((k: any) => k.rank)
-  if (!ranks.length) return null
-  return Math.round(ranks.reduce((a: number, b: number) => a + b, 0) / ranks.length)
+  const success = kws.filter((k: any) => k.rank && k.rank > 0 && k.rank <= 5).length
+  const fail = kws.length - success
+  return { success, fail, total: kws.length }
+})
+
+// 웹페이지 요약: is_exposed=1 노출, 0=미노출
+const webpageSummary = computed(() => {
+  const kws = branchData.value?.webpage_keywords
+  if (!kws?.length) return null
+  const exposed = kws.filter((k: any) => k.is_exposed).length
+  const notExposed = kws.length - exposed
+  return { exposed, notExposed, total: kws.length }
 })
 
 const eventCount = computed(() => {
@@ -491,11 +500,11 @@ function togglePaper(id: number) {
               {{ branchData.branch.region_name }}
             </span>
           </h3>
-          <div class="grid grid-cols-5 gap-3">
+          <div class="grid grid-cols-3 gap-3">
             <button @click="toggleBranch('equip')"
               class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-blue-300 transition">
               <p class="text-xl font-bold text-blue-600">{{ branchData.equipment?.length ?? 0 }}</p>
-              <p class="text-xs text-slate-400 mt-0.5">장비</p>
+              <p class="text-xs text-slate-400 mt-0.5">보유 장비</p>
             </button>
             <button @click="toggleBranch('events')"
               class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-amber-300 transition">
@@ -509,12 +518,29 @@ function togglePaper(id: number) {
                 브블 {{ branchData.blog_summary?.brand_count ?? 0 }} · 최블 {{ branchData.blog_summary?.optimal_count ?? 0 }}
               </p>
             </button>
+          </div>
+          <div class="grid grid-cols-3 gap-3 mt-3">
             <button @click="toggleBranch('place')"
               class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-sky-300 transition">
-              <p class="text-lg font-bold text-sky-600">
-                {{ placeAvgRank ?? '-' }}<span class="text-xs font-normal text-slate-400">위</span>
+              <p v-if="placeSummary" class="text-sm font-bold">
+                <span class="text-sky-600">{{ placeSummary.success }}</span>
+                <span class="text-xs text-slate-400 font-normal">성공</span>
+                <span class="text-red-400 ml-1">{{ placeSummary.fail }}</span>
+                <span class="text-xs text-slate-400 font-normal">실패</span>
               </p>
-              <p class="text-xs text-slate-400 mt-0.5">플레이스</p>
+              <p v-else class="text-sm text-slate-300">—</p>
+              <p class="text-xs text-slate-400 mt-0.5">플레이스 (5위 이내)</p>
+            </button>
+            <button @click="toggleBranch('place')"
+              class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-indigo-300 transition">
+              <p v-if="webpageSummary" class="text-sm font-bold">
+                <span class="text-indigo-600">{{ webpageSummary.exposed }}</span>
+                <span class="text-xs text-slate-400 font-normal">노출</span>
+                <span class="text-red-400 ml-1">{{ webpageSummary.notExposed }}</span>
+                <span class="text-xs text-slate-400 font-normal">미노출</span>
+              </p>
+              <p v-else class="text-sm text-slate-300">—</p>
+              <p class="text-xs text-slate-400 mt-0.5">웹페이지</p>
             </button>
             <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
               <p class="text-xl font-bold text-rose-500">{{ branchData.complaints_open ?? 0 }}</p>

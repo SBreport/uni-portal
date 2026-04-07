@@ -112,6 +112,16 @@ const branchOptions = computed(() =>
   branchStore.branches.map(b => ({ value: String(b.id), label: b.name }))
 )
 const selectedBranchId = ref('')
+const branchSearchQuery = ref('')
+const filteredBranches = computed(() => {
+  const q = branchSearchQuery.value.trim().toLowerCase()
+  const list = branchStore.branches
+  if (!q) return list
+  return list.filter(b =>
+    b.name.toLowerCase().includes(q) ||
+    (b.short_name?.toLowerCase().includes(q) ?? false)
+  )
+})
 const branchLoading = ref(false)
 const branchData = ref<any>(null)
 
@@ -127,11 +137,11 @@ function toggleBranch(key: string) {
   openBranch.value[key] = !openBranch.value[key]
 }
 
-// 지점별 장비 인라인 확장
-const expandedEquip = ref<number | null>(null)
+// 지점별 장비 인라인 확장 (인덱스 기반 — 동일 device_info_id 장비가 여러 개일 수 있음)
+const expandedEquipIdx = ref<number | null>(null)
 
 watch(selectedBranchId, async (id) => {
-  expandedEquip.value = null
+  expandedEquipIdx.value = null
   branchData.value = null
   if (!id) return
   branchLoading.value = true
@@ -144,8 +154,8 @@ watch(selectedBranchId, async (id) => {
   }
 })
 
-function toggleEquip(deviceInfoId: number) {
-  expandedEquip.value = expandedEquip.value === deviceInfoId ? null : deviceInfoId
+function toggleEquip(idx: number) {
+  expandedEquipIdx.value = expandedEquipIdx.value === idx ? null : idx
 }
 
 // 이벤트: API가 events_by_category 딕셔너리를 직접 반환
@@ -418,21 +428,41 @@ function togglePaper(id: number) {
     <!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Tab 1: 지점별 -->
     <div v-if="activeTab === 'branch'" class="space-y-4">
 
-      <!-- 지점 선택 -->
-      <div class="flex items-center gap-3">
-        <FilterSelect
-          v-model="selectedBranchId"
-          :options="branchOptions"
-          placeholder="지점 선택..."
+      <!-- 지점 선택: 검색 + 카드 그리드 -->
+      <div v-if="!selectedBranchId">
+        <input
+          v-model="branchSearchQuery"
+          type="text"
+          placeholder="지점명 검색..."
+          class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white
+                 focus:outline-none focus:ring-1 focus:ring-blue-500 mb-3"
         />
-        <span v-if="branchStore.loading" class="text-xs text-slate-400">목록 로딩 중...</span>
+        <div class="grid grid-cols-6 gap-2">
+          <button
+            v-for="b in filteredBranches"
+            :key="b.id"
+            @click="selectedBranchId = String(b.id); branchSearchQuery = ''"
+            class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700
+                   hover:border-blue-400 hover:bg-blue-50 transition text-center truncate"
+          >
+            {{ b.name }}
+          </button>
+        </div>
+        <p v-if="filteredBranches.length === 0" class="text-sm text-slate-400 mt-2">검색 결과 없음</p>
       </div>
 
-      <!-- 지점 미선택 -->
-      <EmptyState
-        v-if="!selectedBranchId"
-        message="지점을 선택하면 보유장비 · 이벤트 · 순위 정보를 탐색합니다"
-      />
+      <!-- 선택된 지점: 뒤로가기 버튼 -->
+      <div v-if="selectedBranchId" class="flex items-center gap-2">
+        <button
+          @click="selectedBranchId = ''"
+          class="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          지점 목록으로
+        </button>
+      </div>
 
       <!-- 로딩 -->
       <div v-else-if="branchLoading" class="flex justify-center py-10">
@@ -452,25 +482,31 @@ function togglePaper(id: number) {
             </span>
           </h3>
           <div class="grid grid-cols-5 gap-3">
-            <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
+            <button @click="toggleBranch('equip')"
+              class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-blue-300 transition">
               <p class="text-xl font-bold text-blue-600">{{ branchData.equipment?.length ?? 0 }}</p>
               <p class="text-xs text-slate-400 mt-0.5">장비</p>
-            </div>
-            <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
+            </button>
+            <button @click="toggleBranch('events')"
+              class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-amber-300 transition">
               <p class="text-xl font-bold text-amber-500">{{ eventCount }}</p>
               <p class="text-xs text-slate-400 mt-0.5">이벤트</p>
-            </div>
-            <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
+            </button>
+            <button @click="toggleBranch('blogs')"
+              class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-emerald-300 transition">
               <p class="text-xl font-bold text-emerald-600">{{ branchData.recent_blogs?.length ?? 0 }}</p>
               <p class="text-xs text-slate-400 mt-0.5">블로그</p>
-            </div>
-            <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
-              <p class="text-xl font-bold text-sky-600">
+            </button>
+            <button @click="toggleBranch('place')"
+              class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-sky-300 transition">
+              <p class="text-lg font-bold text-sky-600">
                 {{ branchData.place_rank?.success_today ?? 0 }}
-                <span class="text-sm font-normal text-slate-400">/{{ branchData.place_rank?.total ?? 0 }}</span>
+                <span class="text-xs font-normal text-slate-400">성공</span>
+                <span class="text-red-400 font-bold ml-0.5">{{ branchData.place_rank?.fail_today ?? 0 }}</span>
+                <span class="text-xs font-normal text-slate-400">실패</span>
               </p>
               <p class="text-xs text-slate-400 mt-0.5">플레이스</p>
-            </div>
+            </button>
             <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
               <p class="text-xl font-bold text-rose-500">{{ branchData.complaints_open ?? 0 }}</p>
               <p class="text-xs text-slate-400 mt-0.5">미처리 민원</p>
@@ -499,27 +535,27 @@ function togglePaper(id: number) {
           <div v-if="openBranch.equip" class="divide-y divide-slate-100 bg-white">
             <template v-if="branchData.equipment?.length">
               <div
-                v-for="e in branchData.equipment"
-                :key="e.id ?? e.name"
+                v-for="(e, idx) in branchData.equipment"
+                :key="idx"
+                class="border-b border-slate-50 last:border-0"
               >
                 <div
-                  @click="e.device_info_id ? toggleEquip(e.device_info_id) : null"
+                  @click="e.device_info_id ? toggleEquip(idx as number) : null"
                   :class="[
                     'flex items-center justify-between px-4 py-2.5 transition',
-                    e.device_info_id
-                      ? 'cursor-pointer hover:bg-blue-50'
-                      : 'cursor-default'
+                    e.device_info_id ? 'cursor-pointer hover:bg-blue-50' : 'cursor-default',
+                    expandedEquipIdx === idx ? 'bg-blue-50' : ''
                   ]"
                 >
                   <div>
                     <span class="text-sm font-medium text-slate-700">{{ e.name }}</span>
-                    <span v-if="e.category" class="ml-2 text-xs text-slate-400">{{ e.category }}</span>
+                    <span v-if="e.device_category" class="ml-2 text-xs text-slate-400">{{ e.device_category }}</span>
                   </div>
                   <div class="flex items-center gap-2 text-xs text-slate-400">
                     <span>{{ e.quantity }}대</span>
                     <svg v-if="e.device_info_id"
                       class="w-3.5 h-3.5 text-slate-300 transition-transform"
-                      :class="{ 'rotate-180': expandedEquip === e.device_info_id }"
+                      :class="{ 'rotate-180': expandedEquipIdx === idx }"
                       fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
@@ -527,7 +563,7 @@ function togglePaper(id: number) {
                 </div>
                 <!-- 인라인 확장 -->
                 <div
-                  v-if="e.device_info_id && expandedEquip === e.device_info_id"
+                  v-if="e.device_info_id && expandedEquipIdx === idx"
                   class="px-4 pb-4 pt-1 bg-slate-50 border-t border-slate-100"
                 >
                   <ExplorerDeviceInline :device-id="e.device_info_id" :current-branch-name="branchData?.branch?.name" />
@@ -600,39 +636,51 @@ function togglePaper(id: number) {
             </svg>
           </button>
           <div v-if="openBranch.place" class="bg-white px-4 pb-3 space-y-3 pt-1">
-            <!-- 플레이스 -->
-            <div v-if="branchData.place_rank" class="p-3 bg-sky-50 border border-sky-100 rounded">
-              <p class="text-xs font-semibold text-sky-700 mb-1">플레이스 노출 (최신)</p>
-              <div class="flex gap-4 text-sm">
-                <div>
-                  <span class="font-bold text-sky-600">{{ branchData.place_rank.success_today }}</span>
-                  <span class="text-xs text-slate-400 ml-1">노출</span>
-                </div>
-                <div>
-                  <span class="font-bold text-slate-500">{{ branchData.place_rank.fail_today }}</span>
-                  <span class="text-xs text-slate-400 ml-1">미노출</span>
-                </div>
-                <div>
-                  <span class="font-bold text-slate-700">{{ branchData.place_rank.total }}</span>
-                  <span class="text-xs text-slate-400 ml-1">전체</span>
+            <!-- 플레이스 키워드별 순위 -->
+            <div v-if="branchData.place_keywords?.length">
+              <p class="text-xs font-semibold text-sky-700 mb-2">플레이스 키워드별 순위</p>
+              <div class="space-y-1">
+                <div
+                  v-for="kw in branchData.place_keywords"
+                  :key="kw.keyword"
+                  class="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded text-sm"
+                >
+                  <span class="text-slate-700 text-xs">{{ kw.keyword }}</span>
+                  <div class="flex items-center gap-2">
+                    <span v-if="kw.rank" class="font-bold text-sm"
+                      :class="kw.rank <= 5 ? 'text-sky-600' : kw.rank <= 10 ? 'text-amber-500' : 'text-slate-400'">
+                      {{ kw.rank }}위
+                    </span>
+                    <span v-if="kw.is_exposed"
+                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-100 text-sky-600">노출</span>
+                    <span v-else
+                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-500">미노출</span>
+                  </div>
                 </div>
               </div>
             </div>
-            <!-- 웹페이지 -->
-            <div v-if="branchData.webpage_rank" class="p-3 bg-indigo-50 border border-indigo-100 rounded">
-              <p class="text-xs font-semibold text-indigo-700 mb-1">웹페이지 노출 (최신)</p>
-              <div class="flex gap-4 text-sm">
-                <div>
-                  <span class="font-bold text-indigo-600">{{ branchData.webpage_rank.success_today }}</span>
-                  <span class="text-xs text-slate-400 ml-1">노출</span>
-                </div>
-                <div>
-                  <span class="font-bold text-slate-500">{{ branchData.webpage_rank.fail_today }}</span>
-                  <span class="text-xs text-slate-400 ml-1">미노출</span>
-                </div>
-                <div>
-                  <span class="font-bold text-slate-700">{{ branchData.webpage_rank.total }}</span>
-                  <span class="text-xs text-slate-400 ml-1">전체</span>
+            <p v-else class="text-xs text-slate-400">플레이스 데이터 없음</p>
+
+            <!-- 웹페이지 키워드별 순위 -->
+            <div v-if="branchData.webpage_keywords?.length" class="mt-3">
+              <p class="text-xs font-semibold text-indigo-700 mb-2">웹페이지 키워드별 순위</p>
+              <div class="space-y-1">
+                <div
+                  v-for="kw in branchData.webpage_keywords"
+                  :key="kw.keyword"
+                  class="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded text-sm"
+                >
+                  <span class="text-slate-700 text-xs">{{ kw.keyword }}</span>
+                  <div class="flex items-center gap-2">
+                    <span v-if="kw.rank" class="font-bold text-sm"
+                      :class="kw.rank <= 5 ? 'text-indigo-600' : kw.rank <= 10 ? 'text-amber-500' : 'text-slate-400'">
+                      {{ kw.rank }}위
+                    </span>
+                    <span v-if="kw.is_exposed"
+                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-600">노출</span>
+                    <span v-else
+                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-500">미노출</span>
+                  </div>
                 </div>
               </div>
             </div>

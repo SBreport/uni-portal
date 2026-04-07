@@ -109,9 +109,24 @@ async def explore_by_branch(
                     "discount_rate": r["discount_rate"],
                 })
 
-        # ── 최근 블로그 15건 (evt_branch_id FK) ──
+        # ── 블로그 전체 건수 (브랜드/최적 분리) + 최근 15건 ──
+        blog_counts = conn.execute("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN blog_channel = 'br' THEN 1 ELSE 0 END) AS brand_count,
+                SUM(CASE WHEN blog_channel = 'opt' THEN 1 ELSE 0 END) AS optimal_count
+            FROM blog_posts
+            WHERE evt_branch_id = ?
+        """, (branch_id,)).fetchone()
+        blog_summary = {
+            "total": blog_counts["total"] or 0,
+            "brand_count": blog_counts["brand_count"] or 0,
+            "optimal_count": blog_counts["optimal_count"] or 0,
+        }
+
         blog_rows = conn.execute("""
-            SELECT id, title, keyword, published_at, author
+            SELECT id, title, keyword, published_at, author,
+                   blog_channel, post_type, published_url
             FROM blog_posts
             WHERE evt_branch_id = ?
             ORDER BY published_at DESC
@@ -222,6 +237,7 @@ async def explore_by_branch(
             "branch": branch_dict,
             "equipment": equipment_list,
             "events_by_category": events_by_category,
+            "blog_summary": blog_summary,
             "recent_blogs": recent_blogs,
             "cafe_summary": cafe_summary,
             "place_keywords": place_keywords,

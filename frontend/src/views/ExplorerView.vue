@@ -127,8 +127,8 @@ const branchData = ref<any>(null)
 
 // 지점별 섹션 토글 상태
 const openBranch = ref<Record<string, boolean>>({
-  equip: true,
-  events: true,
+  equip: false,
+  events: false,
   blogs: false,
   place: false,
 })
@@ -160,6 +160,15 @@ function toggleEquip(idx: number) {
 
 // 이벤트: API가 events_by_category 딕셔너리를 직접 반환
 const eventsByCategory = computed(() => branchData.value?.events_by_category ?? {})
+
+// 플레이스 평균 순위 (어제 기준)
+const placeAvgRank = computed(() => {
+  const kws = branchData.value?.place_keywords
+  if (!kws?.length) return null
+  const ranks = kws.filter((k: any) => k.rank && k.rank > 0).map((k: any) => k.rank)
+  if (!ranks.length) return null
+  return Math.round(ranks.reduce((a: number, b: number) => a + b, 0) / ranks.length)
+})
 
 const eventCount = computed(() => {
   const bycat = branchData.value?.events_by_category
@@ -495,16 +504,15 @@ function togglePaper(id: number) {
             </button>
             <button @click="toggleBranch('blogs')"
               class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-emerald-300 transition">
-              <p class="text-xl font-bold text-emerald-600">{{ branchData.recent_blogs?.length ?? 0 }}</p>
-              <p class="text-xs text-slate-400 mt-0.5">블로그</p>
+              <p class="text-lg font-bold text-emerald-600">{{ branchData.blog_summary?.total ?? 0 }}</p>
+              <p class="text-[10px] text-slate-400 mt-0.5">
+                브블 {{ branchData.blog_summary?.brand_count ?? 0 }} · 최블 {{ branchData.blog_summary?.optimal_count ?? 0 }}
+              </p>
             </button>
             <button @click="toggleBranch('place')"
               class="bg-white border border-slate-200 rounded-lg p-3 text-center hover:border-sky-300 transition">
               <p class="text-lg font-bold text-sky-600">
-                {{ branchData.place_rank?.success_today ?? 0 }}
-                <span class="text-xs font-normal text-slate-400">성공</span>
-                <span class="text-red-400 font-bold ml-0.5">{{ branchData.place_rank?.fail_today ?? 0 }}</span>
-                <span class="text-xs font-normal text-slate-400">실패</span>
+                {{ placeAvgRank ?? '-' }}<span class="text-xs font-normal text-slate-400">위</span>
               </p>
               <p class="text-xs text-slate-400 mt-0.5">플레이스</p>
             </button>
@@ -620,9 +628,59 @@ function togglePaper(id: number) {
           </div>
         </section>
 
+        <!-- 블로그 (접이식) -->
+        <section class="border border-slate-200 rounded-lg overflow-hidden">
+          <button
+            @click="toggleBranch('blogs')"
+            class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition text-left"
+          >
+            <span class="font-semibold text-sm text-slate-700">블로그</span>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] bg-emerald-50 text-emerald-600 font-medium px-1.5 py-0.5 rounded-full">
+                브블 {{ branchData.blog_summary?.brand_count ?? 0 }}
+              </span>
+              <span class="text-[10px] bg-violet-50 text-violet-600 font-medium px-1.5 py-0.5 rounded-full">
+                최블 {{ branchData.blog_summary?.optimal_count ?? 0 }}
+              </span>
+              <svg class="w-4 h-4 text-slate-400 transition-transform"
+                :class="{ 'rotate-180': openBranch.blogs }"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+          <div v-if="openBranch.blogs" class="bg-white px-4 pb-3">
+            <template v-if="branchData.recent_blogs?.length">
+              <div class="divide-y divide-slate-50">
+                <div v-for="b in branchData.recent_blogs" :key="b.id" class="py-2">
+                  <div class="flex items-start gap-2">
+                    <span class="shrink-0 mt-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                      :class="b.blog_channel === 'br'
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : 'bg-violet-50 text-violet-600'">
+                      {{ b.blog_channel === 'br' ? '브블' : '최블' }}
+                    </span>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-xs text-slate-700 leading-snug truncate">{{ b.title }}</p>
+                      <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                        <span v-if="b.keyword" class="text-blue-500">{{ b.keyword }}</span>
+                        <span v-if="b.published_at">{{ b.published_at.slice(0, 10) }}</span>
+                        <span v-if="b.author">{{ b.author }}</span>
+                        <a v-if="b.published_url" :href="b.published_url" target="_blank"
+                          class="text-blue-400 hover:text-blue-600" @click.stop>링크</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <p v-else class="py-2 text-sm text-slate-400">블로그 없음</p>
+          </div>
+        </section>
+
         <!-- 플레이스/웹페이지 순위 (접이식) -->
         <section
-          v-if="branchData.place_rank || branchData.webpage_rank"
+          v-if="branchData.place_keywords?.length || branchData.webpage_keywords?.length"
           class="border border-slate-200 rounded-lg overflow-hidden"
         >
           <button

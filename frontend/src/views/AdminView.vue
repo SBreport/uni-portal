@@ -3,6 +3,7 @@ import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
 import { useBranchStore } from '@/stores/branches'
 import UserManagement from '@/components/admin/UserManagement.vue'
 import SyncSettings from '@/components/admin/SyncSettings.vue'
+import DataQualityLog from '@/components/admin/DataQualityLog.vue'
 import RankChecker from '@/components/admin/RankChecker.vue'
 import EncyclopediaAdmin from '@/components/admin/EncyclopediaAdmin.vue'
 import TabBar from '@/components/common/TabBar.vue'
@@ -14,16 +15,17 @@ const EventsView = defineAsyncComponent(() => import('@/views/EventsView.vue'))
 const TreatmentInfoView = defineAsyncComponent(() => import('@/views/TreatmentInfoView.vue'))
 
 const branchStore = useBranchStore()
-type AdminTab = 'users' | 'sync' | 'rank-checker' | 'encyclopedia' | 'info'
-const activeTab = ref<AdminTab>('users')
+type AdminTab = 'sync' | 'quality' | 'info' | 'encyclopedia' | 'rank-checker' | 'users'
+const activeTab = ref<AdminTab>('sync')
 const branches = computed(() => branchStore.branches)
 
 const tabs = [
-  { key: 'users', label: '사용자' },
   { key: 'sync', label: '데이터 동기화' },
-  { key: 'rank-checker', label: 'SB체커' },
+  { key: 'quality', label: '데이터 로그' },
+  { key: 'info', label: '정보 관리' },
   { key: 'encyclopedia', label: '백과사전 관리' },
-  { key: 'info', label: '정보관리' },
+  { key: 'rank-checker', label: 'SB체커' },
+  { key: 'users', label: '사용자 관리' },
 ]
 
 // 정보관리 서브탭
@@ -45,10 +47,11 @@ onMounted(() => branchStore.loadBranches())
 
     <TabBar :model-value="activeTab" :tabs="tabs" @update:model-value="(v: string) => activeTab = v as AdminTab" />
 
-    <UserManagement v-if="activeTab === 'users'" :branches="branches" />
     <SyncSettings v-if="activeTab === 'sync'" :branches="branches" />
+    <DataQualityLog v-if="activeTab === 'quality'" />
     <RankChecker v-if="activeTab === 'rank-checker'" :branches="branches" />
     <EncyclopediaAdmin v-if="activeTab === 'encyclopedia'" />
+    <UserManagement v-if="activeTab === 'users'" :branches="branches" />
 
     <!-- 정보관리: 기존 개별 뷰를 서브탭으로 배치 -->
     <div v-if="activeTab === 'info'" class="mt-4">

@@ -80,30 +80,6 @@ const topItems: MenuItem[] = [
     roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
   },
   {
-    path: '/branch-info',
-    label: '지점 정보',
-    icon: 'B',
-    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
-  },
-  {
-    path: '/equipment',
-    label: '보유장비',
-    icon: 'E',
-    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
-  },
-  {
-    path: '/events',
-    label: '이벤트',
-    icon: 'V',
-    roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
-  },
-  {
-    path: '/treatment-info',
-    label: '시술정보',
-    icon: 'T',
-    roles: ['admin', 'editor'],
-  },
-  {
     path: '/complaints',
     label: '민원관리',
     icon: 'M',

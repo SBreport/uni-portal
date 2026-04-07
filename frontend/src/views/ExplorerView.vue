@@ -148,19 +148,14 @@ function toggleEquip(deviceInfoId: number) {
   expandedEquip.value = expandedEquip.value === deviceInfoId ? null : deviceInfoId
 }
 
-// 이벤트를 카테고리별로 그룹화
-const eventsByCategory = computed(() => {
-  if (!branchData.value?.events?.length) return {}
-  const map: Record<string, any[]> = {}
-  for (const ev of branchData.value.events) {
-    const cat = ev.category || '기타'
-    if (!map[cat]) map[cat] = []
-    map[cat].push(ev)
-  }
-  return map
-})
+// 이벤트: API가 events_by_category 딕셔너리를 직접 반환
+const eventsByCategory = computed(() => branchData.value?.events_by_category ?? {})
 
-const eventCount = computed(() => branchData.value?.events?.length ?? 0)
+const eventCount = computed(() => {
+  const bycat = branchData.value?.events_by_category
+  if (!bycat) return 0
+  return Object.values(bycat).reduce((sum: number, arr: any) => sum + (arr?.length ?? 0), 0)
+})
 
 // ── Tab 2: 시술별 (카테고리별) ───────────────────────────────────────────────
 const CATEGORIES = [
@@ -466,7 +461,7 @@ function togglePaper(id: number) {
               <p class="text-xs text-slate-400 mt-0.5">이벤트</p>
             </div>
             <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
-              <p class="text-xl font-bold text-emerald-600">{{ branchData.blog_count ?? 0 }}</p>
+              <p class="text-xl font-bold text-emerald-600">{{ branchData.recent_blogs?.length ?? 0 }}</p>
               <p class="text-xs text-slate-400 mt-0.5">블로그</p>
             </div>
             <div class="bg-white border border-slate-200 rounded-lg p-3 text-center">
@@ -535,7 +530,7 @@ function togglePaper(id: number) {
                   v-if="e.device_info_id && expandedEquip === e.device_info_id"
                   class="px-4 pb-4 pt-1 bg-slate-50 border-t border-slate-100"
                 >
-                  <ExplorerDeviceInline :device-id="e.device_info_id" />
+                  <ExplorerDeviceInline :device-id="e.device_info_id" :current-branch-name="branchData?.branch?.name" />
                 </div>
               </div>
             </template>

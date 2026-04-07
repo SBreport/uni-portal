@@ -209,6 +209,15 @@ async def explore_by_branch(
             WHERE branch_id = ? AND status NOT IN ('resolved', 'closed')
         """, (branch_id,)).fetchone()["cnt"]
 
+        # ── 요약 집계 ──
+        def _rank_summary(keywords: list[dict]) -> dict | None:
+            if not keywords:
+                return None
+            total = len(keywords)
+            success = sum(1 for k in keywords if k.get("is_exposed"))
+            fail = total - success
+            return {"success_today": success, "fail_today": fail, "total": total}
+
         return {
             "branch": branch_dict,
             "equipment": equipment_list,
@@ -217,6 +226,8 @@ async def explore_by_branch(
             "cafe_summary": cafe_summary,
             "place_keywords": place_keywords,
             "webpage_keywords": webpage_keywords,
+            "place_rank": _rank_summary(place_keywords),
+            "webpage_rank": _rank_summary(webpage_keywords),
             "complaints_open": complaints_open,
         }
     finally:

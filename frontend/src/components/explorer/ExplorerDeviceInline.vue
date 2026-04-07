@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { getByDevice } from '@/api/explorer'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 const props = defineProps<{
   deviceId: number
+  currentBranchName?: string  // 현재 보고 있는 지점명 (지점별 탭에서 넘어온 경우)
 }>()
 
 interface DeviceData {
@@ -68,6 +69,26 @@ async function load(id: number) {
     loading.value = false
   }
 }
+
+// 현재 지점 vs 타 지점 분리
+const currentBranchEvents = computed(() => {
+  if (!data.value?.events || !props.currentBranchName) return []
+  return data.value.events.filter(e => e.branch_name === props.currentBranchName)
+})
+const otherBranchEvents = computed(() => {
+  if (!data.value?.events) return data.value?.events ?? []
+  if (!props.currentBranchName) return data.value.events
+  return data.value.events.filter(e => e.branch_name !== props.currentBranchName)
+})
+const currentBranchBlogs = computed(() => {
+  if (!data.value?.blog_posts || !props.currentBranchName) return []
+  return data.value.blog_posts.filter(b => b.branch_name === props.currentBranchName)
+})
+const otherBranchBlogs = computed(() => {
+  if (!data.value?.blog_posts) return data.value?.blog_posts ?? []
+  if (!props.currentBranchName) return data.value.blog_posts
+  return data.value.blog_posts.filter(b => b.branch_name !== props.currentBranchName)
+})
 
 watch(() => props.deviceId, (id) => {
   if (id) load(id)
@@ -139,41 +160,68 @@ function blogKeywords(posts: DeviceData['blog_posts']): string[] {
 
     <!-- 이벤트 테이블 -->
     <div v-if="data.events?.length">
-      <p class="text-xs font-semibold text-slate-500 mb-1">
-        이벤트
-        <span class="ml-1 font-normal text-slate-400">({{ data.events.length }}건)</span>
-      </p>
-      <div class="border border-slate-200 rounded overflow-hidden">
-        <table class="w-full text-xs">
-          <thead class="bg-slate-50">
-            <tr>
-              <th class="text-left px-3 py-1.5 text-slate-500 font-medium w-24">지점</th>
-              <th class="text-left px-3 py-1.5 text-slate-500 font-medium">이벤트명</th>
-              <th class="text-right px-3 py-1.5 text-slate-500 font-medium w-16">가격</th>
-              <th class="text-right px-3 py-1.5 text-slate-500 font-medium w-14">할인</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100">
-            <tr v-for="(ev, idx) in data.events" :key="idx" class="hover:bg-slate-50">
-              <td class="px-3 py-1.5 text-slate-500 truncate max-w-[6rem]">{{ ev.branch_name }}</td>
-              <td class="px-3 py-1.5 text-slate-700 leading-snug">{{ ev.display_name }}</td>
-              <td class="px-3 py-1.5 text-right text-red-500 font-bold whitespace-nowrap">
-                {{ formatPrice(ev.event_price) }}
-              </td>
-              <td class="px-3 py-1.5 text-right">
-                <span v-if="ev.discount_rate" class="text-emerald-600 font-medium">
-                  {{ ev.discount_rate }}%
-                </span>
-                <span v-else class="text-slate-300">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 현재 지점 이벤트 (지점별 탭에서 진입한 경우) -->
+      <div v-if="currentBranchEvents.length">
+        <p class="text-xs font-semibold text-blue-600 mb-1">
+          📍 {{ currentBranchName }} 이벤트
+          <span class="ml-1 font-normal text-slate-400">({{ currentBranchEvents.length }}건)</span>
+        </p>
+        <div class="border border-blue-200 rounded overflow-hidden mb-2">
+          <table class="w-full text-xs">
+            <thead class="bg-blue-50">
+              <tr>
+                <th class="text-left px-3 py-1.5 text-blue-500 font-medium">이벤트명</th>
+                <th class="text-right px-3 py-1.5 text-blue-500 font-medium w-16">가격</th>
+                <th class="text-right px-3 py-1.5 text-blue-500 font-medium w-14">할인</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-blue-50">
+              <tr v-for="(ev, idx) in currentBranchEvents" :key="'c'+idx" class="hover:bg-blue-50/50">
+                <td class="px-3 py-1.5 text-slate-700 leading-snug">{{ ev.display_name }}</td>
+                <td class="px-3 py-1.5 text-right text-red-500 font-bold whitespace-nowrap">
+                  {{ formatPrice(ev.event_price) }}
+                </td>
+                <td class="px-3 py-1.5 text-right">
+                  <span v-if="ev.discount_rate" class="text-emerald-600 font-medium">{{ ev.discount_rate }}%</span>
+                  <span v-else class="text-slate-300">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <!-- 타 지점 가격 비교 (2개 이상 지점) -->
-      <div v-if="data.owning_branches?.length >= 2" class="mt-2 p-2 bg-amber-50 border border-amber-100 rounded text-xs text-amber-700">
-        이 장비는 {{ data.owning_branches.length }}개 지점에서 운영 중입니다. 가격 정책이 지점별로 다를 수 있습니다.
+      <!-- 타 지점 이벤트 -->
+      <div v-if="otherBranchEvents.length">
+        <p class="text-xs font-semibold text-slate-500 mb-1">
+          {{ currentBranchName ? '타 지점 이벤트' : '이벤트' }}
+          <span class="ml-1 font-normal text-slate-400">({{ otherBranchEvents.length }}건)</span>
+        </p>
+        <div class="border border-slate-200 rounded overflow-hidden">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-50">
+              <tr>
+                <th class="text-left px-3 py-1.5 text-slate-500 font-medium w-24">지점</th>
+                <th class="text-left px-3 py-1.5 text-slate-500 font-medium">이벤트명</th>
+                <th class="text-right px-3 py-1.5 text-slate-500 font-medium w-16">가격</th>
+                <th class="text-right px-3 py-1.5 text-slate-500 font-medium w-14">할인</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-for="(ev, idx) in otherBranchEvents" :key="'o'+idx" class="hover:bg-slate-50">
+                <td class="px-3 py-1.5 text-slate-500 truncate max-w-[6rem]">{{ ev.branch_name }}</td>
+                <td class="px-3 py-1.5 text-slate-700 leading-snug">{{ ev.display_name }}</td>
+                <td class="px-3 py-1.5 text-right text-red-500 font-bold whitespace-nowrap">
+                  {{ formatPrice(ev.event_price) }}
+                </td>
+                <td class="px-3 py-1.5 text-right">
+                  <span v-if="ev.discount_rate" class="text-emerald-600 font-medium">{{ ev.discount_rate }}%</span>
+                  <span v-else class="text-slate-300">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -204,34 +252,51 @@ function blogKeywords(posts: DeviceData['blog_posts']): string[] {
       </div>
     </div>
 
-    <!-- 블로그 키워드 + 최근 글 -->
-    <div v-if="data.blog_posts?.length">
-      <p class="text-xs font-semibold text-slate-500 mb-1">
-        관련 블로그
-        <span class="ml-1 font-normal text-slate-400">({{ data.blog_posts.length }}건)</span>
+    <!-- 블로그: 현재 지점 -->
+    <div v-if="currentBranchBlogs.length">
+      <p class="text-xs font-semibold text-blue-600 mb-1">
+        📍 {{ currentBranchName }} 블로그
+        <span class="ml-1 font-normal text-slate-400">({{ currentBranchBlogs.length }}건)</span>
       </p>
-      <!-- 키워드 요약 -->
-      <div v-if="blogKeywords(data.blog_posts).length" class="flex flex-wrap gap-1 mb-2">
-        <span
-          v-for="kw in blogKeywords(data.blog_posts).slice(0, 8)"
-          :key="kw"
-          class="px-2 py-0.5 bg-blue-50 text-blue-600 text-[11px] rounded-full border border-blue-100"
-        >
+      <div v-if="blogKeywords(currentBranchBlogs).length" class="flex flex-wrap gap-1 mb-2">
+        <span v-for="kw in blogKeywords(currentBranchBlogs).slice(0, 8)" :key="kw"
+          class="px-2 py-0.5 bg-blue-50 text-blue-600 text-[11px] rounded-full border border-blue-100">
           {{ kw }}
         </span>
       </div>
-      <!-- 최근 3건 -->
-      <div class="space-y-1">
-        <div
-          v-for="b in data.blog_posts.slice(0, 3)"
-          :key="b.id"
-          class="px-3 py-1.5 bg-slate-50 rounded text-xs"
-        >
+      <div class="space-y-1 mb-3">
+        <div v-for="b in currentBranchBlogs.slice(0, 5)" :key="b.id"
+          class="px-3 py-1.5 bg-blue-50/50 rounded text-xs border border-blue-100">
           <p class="text-slate-700 leading-snug">{{ b.title }}</p>
           <div class="flex gap-2 mt-0.5 text-[11px] text-slate-400">
             <span v-if="b.keyword" class="text-blue-500">{{ b.keyword }}</span>
             <span v-if="b.published_at">{{ b.published_at.slice(0, 10) }}</span>
             <span v-if="b.author">{{ b.author }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 블로그: 타 지점 -->
+    <div v-if="otherBranchBlogs.length">
+      <p class="text-xs font-semibold text-slate-500 mb-1">
+        {{ currentBranchName ? '타 지점 블로그' : '관련 블로그' }}
+        <span class="ml-1 font-normal text-slate-400">({{ otherBranchBlogs.length }}건)</span>
+      </p>
+      <div v-if="blogKeywords(otherBranchBlogs).length" class="flex flex-wrap gap-1 mb-2">
+        <span v-for="kw in blogKeywords(otherBranchBlogs).slice(0, 8)" :key="kw"
+          class="px-2 py-0.5 bg-slate-100 text-slate-500 text-[11px] rounded-full border border-slate-200">
+          {{ kw }}
+        </span>
+      </div>
+      <div class="space-y-1">
+        <div v-for="b in otherBranchBlogs.slice(0, 5)" :key="b.id"
+          class="px-3 py-1.5 bg-slate-50 rounded text-xs">
+          <p class="text-slate-700 leading-snug">{{ b.title }}</p>
+          <div class="flex gap-2 mt-0.5 text-[11px] text-slate-400">
+            <span v-if="b.branch_name" class="text-slate-500 font-medium">[{{ b.branch_name }}]</span>
+            <span v-if="b.keyword" class="text-blue-500">{{ b.keyword }}</span>
+            <span v-if="b.published_at">{{ b.published_at.slice(0, 10) }}</span>
           </div>
         </div>
       </div>

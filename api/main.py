@@ -36,6 +36,14 @@ async def lifespan(app: FastAPI):
     from init_db import init_db
     init_db()
 
+    # DB 마이그레이션 — 새 컬럼/데이터 정규화 (이미 완료된 단계는 자동 건너뜀)
+    try:
+        from scripts.migrate_all import run_migration
+        run_migration(check_only=False)
+    except Exception as e:
+        import logging
+        logging.getLogger("startup").warning(f"마이그레이션 스킵: {e}")
+
     from api.scheduler import setup_scheduler, scheduler
     setup_scheduler()
 

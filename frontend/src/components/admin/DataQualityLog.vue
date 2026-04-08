@@ -172,8 +172,11 @@ onMounted(() => {
         <div class="flex items-center justify-between py-2 px-3 bg-slate-50 rounded">
           <div>
             <p class="text-xs font-medium text-slate-700">블로그 Notion 동기화</p>
-            <p v-if="notionStatus" class="text-[10px] text-slate-400">
-              {{ notionStatus.last_sync || '-' }} · {{ notionStatus.total_posts ?? '-' }}건
+            <p v-if="notionStatus?.last_sync" class="text-[10px] text-slate-400">
+              {{ notionStatus.last_sync.synced_at?.slice(0, 16) || '-' }}
+              · {{ notionStatus.last_sync.sync_type === 'incremental' ? '증분' : '전체' }}
+              · 신규 {{ notionStatus.last_sync.new_posts ?? 0 }}건
+              · 갱신 {{ notionStatus.last_sync.updated ?? 0 }}건
             </p>
           </div>
           <div class="flex gap-2">

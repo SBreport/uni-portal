@@ -67,7 +67,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl">
+  <div class="max-w-3xl">
     <!-- 헤더 -->
     <div class="flex items-center justify-between mb-3">
       <p class="text-xs text-slate-400">총 {{ summary?.total?.toLocaleString() ?? '-' }}건 기준</p>
@@ -111,38 +111,29 @@ onMounted(() => {
       </div>
 
       <div v-else-if="details?.items?.length" class="overflow-auto" style="max-height: 500px;">
-        <table class="w-full text-xs">
-          <thead class="bg-slate-50 sticky top-0">
-            <tr>
-              <th class="text-left px-3 py-2 text-slate-500 font-medium w-12">채널</th>
-              <th class="text-left px-3 py-2 text-slate-500 font-medium">제목 / 키워드</th>
-              <th class="text-left px-3 py-2 text-slate-500 font-medium w-24">지점</th>
-              <th class="text-left px-3 py-2 text-slate-500 font-medium w-20">날짜</th>
-              <th class="text-left px-3 py-2 text-slate-500 font-medium w-14">상태</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-50">
-            <tr v-for="item in details.items" :key="item.id" class="hover:bg-slate-50">
-              <td class="px-3 py-2">
-                <span class="px-1.5 py-0.5 rounded-full text-[10px] font-medium" :class="channelClass(item.blog_channel)">
-                  {{ channelLabel(item.blog_channel) }}
-                </span>
-              </td>
-              <td class="px-3 py-2">
+        <div class="divide-y divide-slate-50">
+            <div v-for="item in details.items" :key="item.id"
+              class="px-3 py-2.5 hover:bg-slate-50 flex items-start gap-2">
+              <span class="shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                :class="channelClass(item.blog_channel)">
+                {{ channelLabel(item.blog_channel) }}
+              </span>
+              <div class="min-w-0 flex-1">
                 <a v-if="item.published_url" :href="item.published_url" target="_blank"
-                  class="text-slate-700 hover:text-blue-600 block truncate">
+                  class="text-xs text-slate-700 hover:text-blue-600 block truncate leading-snug">
                   {{ item.title || item.keyword || '(없음)' }}
                 </a>
-                <span v-else class="text-slate-400 block truncate">{{ item.title || item.keyword || '(없음)' }}</span>
-              </td>
-              <td class="px-3 py-2 text-slate-400 truncate">{{ item.branch_name || '-' }}</td>
-              <td class="px-3 py-2 text-slate-400">{{ item.published_at?.slice(0, 10) || '-' }}</td>
-              <td class="px-3 py-2">
-                <span :class="statusClass(item)">{{ statusText(item) }}</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                <span v-else class="text-xs text-slate-400 block truncate leading-snug">
+                  {{ item.title || item.keyword || '(없음)' }}
+                </span>
+                <div class="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
+                  <span v-if="item.branch_name">{{ item.branch_name }}</span>
+                  <span>{{ item.published_at?.slice(0, 10) || '-' }}</span>
+                  <span :class="statusClass(item)">{{ statusText(item) }}</span>
+                </div>
+              </div>
+            </div>
+        </div>
       </div>
 
       <div v-else class="flex items-center justify-center py-16 text-sm text-slate-400">

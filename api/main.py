@@ -7,7 +7,8 @@ import sys
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from api.deps import get_current_user
 from fastapi.middleware.cors import CORSMiddleware
 
 # 허용 도메인: 환경변수 ALLOWED_ORIGINS (콤마 구분) 또는 기본값
@@ -92,3 +93,54 @@ async def dashboard():
     """HOME 대시보드 — 전체 현황 요약."""
     from blog.post_queries import get_home_dashboard
     return get_home_dashboard()
+
+
+@app.post("/daily-sync")
+async def daily_sync_all(user: dict = Depends(get_current_user)):
+    """일간 동기화 전체 실행 — 노션 + 플웹 스냅샷 + 제목 스크래핑."""
+    from api.deps import ROLE_HIERARCHY
+    if ROLE_HIERARCHY.get(user["role"], 0) < ROLE_HIERARCHY.get("admin", 3):
+        from fastapi import HTTPException, status as st
+        raise HTTPException(st.HTTP_403_FORBIDDEN, "관리자 권한 필요")
+
+    results = {}
+
+    # 1. 블로그 노션 동기화
+    try:
+        from blog.sync_notion import incremental_sync
+        from blog.post_queries import get_notion_token, get_notion_db_id
+        token = get_notion_token()
+        db_id = get_notion_db_id()
+        if token and db_id:
+            r = incremental_sync(token, db_id)
+            results["blog_sync"] = {"ok": True, **r}
+        else:
+            results["blog_sync"] = {"ok": False, "message": "노션 토큰/DB ID 미설정"}
+    except Exception as e:
+        results["blog_sync"] = {"ok": False, "message": str(e)}
+
+    # 2. 플레이스 스냅샷
+    try:
+        from place.daily_snapshot import take_snapshot as place_snap
+        r = place_snap()
+        results["place_snapshot"] = {"ok": True, **(r if isinstance(r, dict) else {"message": str(r)})}
+    except Exception as e:
+        results["place_snapshot"] = {"ok": False, "message": str(e)}
+
+    # 3. 웹페이지 스냅샷
+    try:
+        from webpage.daily_snapshot import take_snapshot as web_snap
+        r = web_snap()
+        results["webpage_snapshot"] = {"ok": True, **(r if isinstance(r, dict) else {"message": str(r)})}
+    except Exception as e:
+        results["webpage_snapshot"] = {"ok": False, "message": str(e)}
+
+    # 4. 블로그 제목 스크래핑 (새로 들어온 것만)
+    try:
+        from blog.scrape_titles import scrape_missing_titles
+        r = scrape_missing_titles(limit=50, delay=0.2)
+        results["title_scrape"] = {"ok": True, **r}
+    except Exception as e:
+        results["title_scrape"] = {"ok": False, "message": str(e)}
+
+    return results

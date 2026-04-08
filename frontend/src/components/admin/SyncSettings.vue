@@ -10,6 +10,29 @@ const props = defineProps<{ branches: { id: number; name: string }[] }>()
 
 const { loading: syncing, message: syncMsg, error: syncError, execute: executeSync } = useAsyncAction()
 
+// 일간 동기화
+const dailyRunning = ref(false)
+const dailyResult = ref<any>(null)
+const dailyLabels: Record<string, string> = {
+  blog_sync: '블로그 노션 동기화',
+  place_snapshot: '플레이스 스냅샷',
+  webpage_snapshot: '웹페이지 스냅샷',
+  title_scrape: '제목 스크래핑',
+}
+
+async function runDaily() {
+  dailyRunning.value = true
+  dailyResult.value = null
+  try {
+    const { data } = await blogApi.runDailySync()
+    dailyResult.value = data
+  } catch (e: any) {
+    dailyResult.value = { error: { ok: false, message: e.response?.data?.detail || '실행 실패' } }
+  } finally {
+    dailyRunning.value = false
+  }
+}
+
 // 장비
 async function syncEquipment() {
   await executeSync(async () => {
@@ -63,126 +86,6 @@ async function syncCafe() {
     const errors = data.errors || []
     return `카페 원고 완료: ${data.processed}개 지점, ${data.total_articles}건` + (errors.length ? ` (오류 ${errors.length}건)` : '')
   })
-}
-
-// 블로그 Notion 동기화
-const notionToken = ref('')
-const notionSyncing = ref(false)
-const notionSyncResult = ref<any>(null)
-const notionSyncStatus = ref<any>(null)
-const notionTokenStatus = ref<any>(null)
-const notionTokenSaving = ref(false)
-const showNotionTokenInput = ref(false)
-
-async function loadNotionSyncStatus() {
-  try {
-    const [syncRes, tokenRes] = await Promise.all([
-      blogApi.getNotionSyncStatus(),
-      blogApi.getNotionTokenStatus(),
-    ])
-    notionSyncStatus.value = syncRes.data?.last_sync || null
-    notionTokenStatus.value = tokenRes.data
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-async function saveNotionToken() {
-  if (!notionToken.value.trim()) return
-  notionTokenSaving.value = true
-  try {
-    const { data } = await blogApi.saveNotionToken(notionToken.value.trim())
-    notionTokenStatus.value = { saved: true, masked: data.masked }
-    notionToken.value = ''
-    showNotionTokenInput.value = false
-    notionSyncResult.value = { message: data.message, updated: true }
-  } catch (e: any) {
-    notionSyncResult.value = { message: e.response?.data?.detail || '토큰 저장 실패' }
-  } finally {
-    notionTokenSaving.value = false
-  }
-}
-
-async function syncNotion() {
-  notionSyncing.value = true
-  notionSyncResult.value = null
-  try {
-    const token = notionToken.value.trim() || undefined
-    const { data } = await blogApi.syncNotion(token)
-    notionSyncResult.value = data
-    loadNotionSyncStatus()
-  } catch (e: any) {
-    notionSyncResult.value = { message: e.response?.data?.detail || '동기화 실패' }
-  } finally {
-    notionSyncing.value = false
-  }
-}
-
-// 블로그 제목 스크래핑
-const scrapeStatus = ref<any>(null)
-const scraping = ref(false)
-const scrapeResult = ref<any>(null)
-
-async function loadScrapeStatus() {
-  try {
-    const { data } = await blogApi.getScrapeTitlesStatus()
-    scrapeStatus.value = data
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-async function runScrape(includeCafe: boolean = false) {
-  scraping.value = true
-  scrapeResult.value = null
-  try {
-    const { data } = await blogApi.scrapeTitles({ limit: 0, delay: 0.3, include_cafe: includeCafe })
-    scrapeResult.value = data
-    loadScrapeStatus()
-  } catch (e: any) {
-    scrapeResult.value = { message: e.response?.data?.detail || '스크래핑 실패' }
-  } finally {
-    scraping.value = false
-  }
-}
-
-// 블로그 데이터 임포트 (로컬 덤프 → 서버 DB)
-const importing = ref(false)
-const importResult = ref<any>(null)
-
-async function importBlogData() {
-  importing.value = true
-  importResult.value = null
-  try {
-    const { data } = await blogApi.importBlogData()
-    importResult.value = { ok: true, message: data.message }
-    loadScrapeStatus()
-  } catch (e: any) {
-    importResult.value = { ok: false, message: e.response?.data?.detail || '임포트 실패' }
-  } finally {
-    importing.value = false
-  }
-}
-
-// 블로그 CSV 업로드
-const blogCsvMsg = ref('')
-const blogCsvUploading = ref(false)
-
-async function uploadBlogCsv(e: Event) {
-  const target = e.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-  blogCsvUploading.value = true
-  blogCsvMsg.value = ''
-  try {
-    const { data } = await blogApi.uploadBlogCsv(file)
-    blogCsvMsg.value = data.output || data.message || '업로드 완료'
-  } catch (err: any) {
-    blogCsvMsg.value = '오류: ' + (err.response?.data?.detail || err.message)
-  } finally {
-    blogCsvUploading.value = false
-    target.value = ''
-  }
 }
 
 // DB 파일 관리
@@ -249,10 +152,7 @@ async function uploadCred(event: Event) {
   }
 }
 
-onMounted(() => {
-  loadNotionSyncStatus()
-  loadScrapeStatus()
-})
+onMounted(() => {})
 </script>
 
 <template>
@@ -260,6 +160,28 @@ onMounted(() => {
     <!-- 전역 알림 -->
     <div v-if="syncMsg" class="px-3 py-2 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700">{{ syncMsg }}</div>
     <div v-if="syncError" class="px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{{ syncError }}</div>
+
+    <!-- 일간 동기화 -->
+    <div class="border border-blue-200 rounded-lg bg-blue-50 p-4 mb-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-blue-800">일간 동기화</h3>
+          <p class="text-xs text-blue-500 mt-0.5">블로그 노션 동기화 + 플레이스/웹페이지 스냅샷 + 제목 스크래핑</p>
+        </div>
+        <button @click="runDaily" :disabled="dailyRunning"
+          class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+          {{ dailyRunning ? '실행 중...' : '전체 실행' }}
+        </button>
+      </div>
+      <!-- Results display after running -->
+      <div v-if="dailyResult" class="mt-3 space-y-1 text-xs">
+        <div v-for="(val, key) in dailyResult" :key="key" class="flex items-center gap-2">
+          <span :class="val.ok ? 'text-emerald-600' : 'text-red-500'">{{ val.ok ? '✓' : '✗' }}</span>
+          <span class="text-slate-600">{{ dailyLabels[key] || key }}</span>
+          <span class="text-slate-400">{{ val.message || '' }}</span>
+        </div>
+      </div>
+    </div>
 
     <!-- ═══ E 보유장비 ═══ -->
     <div class="space-y-1.5">
@@ -359,114 +281,6 @@ onMounted(() => {
         <input v-model="cafeSheetUrl" placeholder="Google Sheets URL"
           class="w-full px-2.5 py-1.5 border border-slate-300 rounded text-sm focus:border-blue-400 focus:outline-none" />
       </div>
-    </div>
-
-    </div>
-
-    <!-- ═══ B 블로그 ═══ -->
-    <div class="space-y-1.5">
-    <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">B 블로그</div>
-    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
-      <div class="flex items-center gap-3">
-        <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
-        <div>
-          <div class="text-sm font-semibold text-slate-700">블로그 Notion 동기화</div>
-          <div class="text-xs text-slate-400">
-            <template v-if="notionSyncStatus">{{ notionSyncStatus.synced_at?.slice(0, 16) }} · {{ notionSyncStatus.notion_pages?.toLocaleString() }}건</template>
-            <template v-else-if="notionTokenStatus?.saved">동기화 기록 없음</template>
-            <template v-else>토큰 미등록 — 아래에서 토큰을 저장해주세요</template>
-          </div>
-        </div>
-        <div class="ml-auto flex items-center gap-2">
-          <button v-if="notionTokenStatus?.saved" @click="showNotionTokenInput = !showNotionTokenInput"
-            class="px-2 py-1 text-slate-400 hover:text-slate-600 text-xs">{{ showNotionTokenInput ? '닫기' : '토큰 변경' }}</button>
-          <button @click="syncNotion" :disabled="notionSyncing || (!notionTokenStatus?.saved && !notionToken.trim())"
-            class="px-4 py-1.5 bg-slate-700 text-white text-xs rounded hover:bg-slate-800 disabled:opacity-40 whitespace-nowrap">
-            {{ notionSyncing ? '동기화 중...' : '증분 동기화' }}
-          </button>
-        </div>
-      </div>
-      <div v-if="!notionTokenStatus?.saved || showNotionTokenInput" class="mt-2 ml-4">
-        <div class="flex items-center gap-2">
-          <input v-model="notionToken" type="password" placeholder="Notion 토큰 (ntn_...)"
-            class="flex-1 border border-slate-300 rounded px-2.5 py-1.5 text-sm focus:border-blue-400 focus:outline-none" />
-          <button v-if="notionToken.trim()" @click="saveNotionToken" :disabled="notionTokenSaving"
-            class="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 disabled:opacity-40 whitespace-nowrap">
-            {{ notionTokenSaving ? '저장 중...' : '토큰 저장' }}
-          </button>
-        </div>
-        <p class="text-xs text-slate-400 mt-1">
-          <a href="https://www.notion.so/profile/integrations" target="_blank" class="text-blue-500 hover:underline">Notion 내 통합 관리</a>에서
-          Internal Integration 생성 후 토큰(ntn_...)을 복사하세요. 대상 DB 페이지에서 연결(Connect)도 필요합니다.
-        </p>
-      </div>
-      <div v-if="notionSyncResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
-        :class="notionSyncResult.updated != null ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">{{ notionSyncResult.message }}</div>
-    </div>
-
-    <!-- B 블로그 원고 제목 수집 -->
-    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
-      <div class="flex items-center gap-3">
-        <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
-        <div>
-          <div class="text-sm font-semibold text-slate-700">블로그 원고 제목 수집</div>
-          <div v-if="scrapeStatus" class="text-xs text-slate-400">
-            수집 {{ scrapeStatus.already_scraped?.toLocaleString() }}건
-            <template v-if="scrapeStatus.remaining > 0">
-              / 남은 블로그 <span class="text-amber-600 font-medium">{{ scrapeStatus.remaining_blog?.toLocaleString() }}건</span>
-              <template v-if="scrapeStatus.remaining_cafe > 0"> · 카페 {{ scrapeStatus.remaining_cafe?.toLocaleString() }}건</template>
-            </template>
-          </div>
-        </div>
-        <div class="ml-auto flex gap-2">
-          <button @click="runScrape(false)" :disabled="scraping || !scrapeStatus?.remaining_blog"
-            class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40 whitespace-nowrap">
-            {{ scraping ? '수집 중...' : '블로그만' }}
-          </button>
-          <button @click="runScrape(true)" :disabled="scraping || !scrapeStatus?.remaining"
-            class="px-3 py-1.5 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 disabled:opacity-40 whitespace-nowrap">카페 포함</button>
-        </div>
-      </div>
-      <div v-if="scrapeResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
-        :class="scrapeResult.scraped != null ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">
-        {{ scrapeResult.message }}
-        <span v-if="scrapeResult.scraped != null" class="text-slate-500 ml-1">({{ scrapeResult.scraped }}수집 / {{ scrapeResult.failed }}실패 / {{ scrapeResult.deleted }}삭제)</span>
-      </div>
-    </div>
-
-    <!-- B 블로그 데이터 임포트 -->
-    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
-      <div class="flex items-center gap-3">
-        <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
-        <div>
-          <div class="text-sm font-semibold text-slate-700">블로그 데이터 임포트</div>
-          <div class="text-xs text-slate-400">로컬에서 수집한 블로그 데이터를 서버 DB에 반영합니다</div>
-        </div>
-        <button @click="importBlogData" :disabled="importing"
-          class="ml-auto px-4 py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:opacity-40 whitespace-nowrap">
-          {{ importing ? '임포트 중...' : '데이터 임포트' }}
-        </button>
-      </div>
-      <div v-if="importResult" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block"
-        :class="importResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'">{{ importResult.message }}</div>
-    </div>
-
-    <!-- B 블로그 CSV 업로드 -->
-    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
-      <div class="flex items-center gap-3">
-        <span class="w-1 self-stretch rounded-full bg-sky-400 flex-shrink-0"></span>
-        <div>
-          <div class="text-sm font-semibold text-slate-700">블로그 게시글 CSV 업로드</div>
-          <div class="text-xs text-slate-400">노션에서 내보낸 CSV 파일 · 중복 항목은 자동 건너뜀</div>
-        </div>
-        <label class="ml-auto px-4 py-1.5 bg-blue-600 text-white text-xs rounded cursor-pointer hover:bg-blue-700 whitespace-nowrap"
-          :class="{ 'opacity-50 pointer-events-none': blogCsvUploading }">
-          {{ blogCsvUploading ? '업로드 중...' : 'CSV 파일 선택' }}
-          <input type="file" accept=".csv" class="hidden" @change="uploadBlogCsv" :disabled="blogCsvUploading" />
-        </label>
-      </div>
-      <div v-if="blogCsvMsg" class="mt-2 ml-4 text-xs px-2 py-1 rounded inline-block whitespace-pre-line"
-        :class="blogCsvMsg.startsWith('오류') ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'">{{ blogCsvMsg }}</div>
     </div>
 
     </div>

@@ -60,9 +60,79 @@ function statusClass(item: any) {
   return 'text-slate-300'
 }
 
+// 블로그 데이터 관리
+const notionStatus = ref<any>(null)
+const notionSyncing = ref(false)
+const scrapeStatus = ref<any>(null)
+const scraping = ref(false)
+const importingData = ref(false)
+const blogActionMsg = ref('')
+const blogActionError = ref(false)
+
+function showMsg(msg: string, isError = false) {
+  blogActionMsg.value = msg
+  blogActionError.value = isError
+  setTimeout(() => { blogActionMsg.value = '' }, 5000)
+}
+
+async function loadBlogStatus() {
+  try {
+    const [notion, scrape] = await Promise.all([
+      blogApi.getNotionSyncStatus(),
+      blogApi.getScrapeTitlesStatus(),
+    ])
+    notionStatus.value = notion.data
+    scrapeStatus.value = scrape.data
+  } catch {}
+}
+
+async function syncNotion() {
+  notionSyncing.value = true
+  try {
+    const { data } = await blogApi.syncNotion()
+    showMsg(data.message || '동기화 완료')
+    loadBlogStatus()
+  } catch (e: any) { showMsg(e.response?.data?.detail || '실패', true) }
+  finally { notionSyncing.value = false }
+}
+
+async function runScrape(includeCafe: boolean) {
+  scraping.value = true
+  try {
+    const { data } = await blogApi.scrapeTitles({ limit: 0, delay: 0.3, include_cafe: includeCafe })
+    showMsg(`수집 ${data.scraped}건 완료 (${data.scraped}수집 / ${data.failed}실패 / ${data.deleted}삭제)`)
+    loadBlogStatus()
+    loadSummary()
+  } catch (e: any) { showMsg(e.response?.data?.detail || '실패', true) }
+  finally { scraping.value = false }
+}
+
+async function importData() {
+  importingData.value = true
+  try {
+    const { data } = await blogApi.importBlogData()
+    showMsg(data.message || '임포트 완료')
+    loadBlogStatus()
+  } catch (e: any) { showMsg(e.response?.data?.detail || '실패', true) }
+  finally { importingData.value = false }
+}
+
+async function uploadCsv(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  try {
+    const { data } = await blogApi.uploadBlogCsv(file)
+    showMsg(data.message || 'CSV 업로드 완료')
+    loadBlogStatus()
+  } catch (e: any) { showMsg(e.response?.data?.detail || 'CSV 업로드 실패', true) }
+  finally { target.value = '' }
+}
+
 onMounted(() => {
   loadSummary()
   selectCategory('deleted')
+  loadBlogStatus()
 })
 </script>
 
@@ -92,6 +162,71 @@ onMounted(() => {
         </p>
         <p class="text-[11px] text-slate-500 whitespace-nowrap">{{ cat.label }}</p>
       </button>
+    </div>
+
+    <!-- 블로그 데이터 관리 -->
+    <div class="border border-slate-200 rounded-lg bg-white p-4 mb-4">
+      <h3 class="text-sm font-semibold text-slate-700 mb-3">블로그 데이터 관리</h3>
+      <div class="space-y-2">
+        <!-- Notion 동기화 -->
+        <div class="flex items-center justify-between py-2 px-3 bg-slate-50 rounded">
+          <div>
+            <p class="text-xs font-medium text-slate-700">블로그 Notion 동기화</p>
+            <p v-if="notionStatus" class="text-[10px] text-slate-400">
+              {{ notionStatus.last_sync || '-' }} · {{ notionStatus.total_posts ?? '-' }}건
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <button @click="syncNotion" :disabled="notionSyncing"
+              class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50">
+              {{ notionSyncing ? '동기화 중...' : '증분 동기화' }}
+            </button>
+          </div>
+        </div>
+        <!-- 제목 스크래핑 -->
+        <div class="flex items-center justify-between py-2 px-3 bg-slate-50 rounded">
+          <div>
+            <p class="text-xs font-medium text-slate-700">블로그 원고 제목 수집</p>
+            <p v-if="scrapeStatus" class="text-[10px] text-slate-400">
+              수집 {{ scrapeStatus.already_scraped?.toLocaleString() }}건
+              / 남은 블로그 {{ scrapeStatus.remaining_blog }}건 · 카페 {{ scrapeStatus.remaining_cafe }}건
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <button @click="runScrape(false)" :disabled="scraping"
+              class="px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:opacity-50">블로그만</button>
+            <button @click="runScrape(true)" :disabled="scraping"
+              class="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 disabled:opacity-50">카페 포함</button>
+          </div>
+        </div>
+        <!-- 데이터 임포트 -->
+        <div class="flex items-center justify-between py-2 px-3 bg-slate-50 rounded">
+          <div>
+            <p class="text-xs font-medium text-slate-700">블로그 데이터 임포트</p>
+            <p class="text-[10px] text-slate-400">로컬에서 수집한 데이터를 서버 DB에 반영</p>
+          </div>
+          <button @click="importData" :disabled="importingData"
+            class="px-3 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700 disabled:opacity-50">
+            {{ importingData ? '임포트 중...' : '데이터 임포트' }}
+          </button>
+        </div>
+        <!-- CSV 업로드 -->
+        <div class="flex items-center justify-between py-2 px-3 bg-slate-50 rounded">
+          <div>
+            <p class="text-xs font-medium text-slate-700">블로그 게시글 CSV 업로드</p>
+            <p class="text-[10px] text-slate-400">노션에서 내보낸 CSV 파일 · 중복 항목은 자동 건너뜀</p>
+          </div>
+          <label class="px-3 py-1 bg-slate-600 text-white text-xs rounded cursor-pointer hover:bg-slate-700">
+            CSV 파일 선택
+            <input type="file" accept=".csv" class="hidden" @change="uploadCsv" />
+          </label>
+        </div>
+        <!-- Result message -->
+        <div v-if="blogActionMsg" class="text-xs px-3 py-1 rounded"
+          :class="blogActionError ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'">
+          {{ blogActionMsg }}
+        </div>
+      </div>
     </div>
 
     <!-- 상세 테이블 -->

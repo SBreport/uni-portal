@@ -107,10 +107,10 @@ async def daily_sync_all(user: dict = Depends(get_current_user)):
 
     # 1. 블로그 노션 동기화
     try:
-        from blog.sync_notion import incremental_sync
-        from blog.post_queries import get_notion_token, get_notion_db_id
+        from blog.sync_notion import incremental_sync, NOTION_BLOG_DB_ID
+        from blog.post_queries import get_notion_token
         token = get_notion_token()
-        db_id = get_notion_db_id()
+        db_id = NOTION_BLOG_DB_ID
         if token and db_id:
             r = incremental_sync(token, db_id)
             results["blog_sync"] = {"ok": True, **r}

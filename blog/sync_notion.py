@@ -241,8 +241,13 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
             "author": d["author"],
         })
 
-        # Notion에서 가져온 제목이 있으면 그걸 우선 사용
+        # 제목 우선순위: Notion 원본 > 기존 scraped_title > enrich fallback(keyword)
         clean_title = d["title"] if d["title"] else enriched["clean_title"]
+        # 기존에 스크래핑된 제목이 있으면 keyword fallback보다 우선
+        if existing and not d["title"]:
+            existing_scraped = existing.get("scraped_title") or ""
+            if existing_scraped and existing_scraped not in ("(삭제됨)", "(카페-수집불가)"):
+                clean_title = existing_scraped
 
         if existing:
             # 기존 레코드 업데이트

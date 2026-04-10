@@ -150,8 +150,9 @@ def clean_title(title: str, keyword: str = "", content_number: str = "") -> dict
     content_number = content_number.strip()
 
     if not original:
+        # scraped_title이 있으면 우선 사용 (스크래핑으로 수집된 실제 제목)
         fallback = keyword or content_number
-        return {"clean_title": fallback, "needs_review": 1 if not keyword else 0}
+        return {"clean_title": fallback, "needs_review": 1}
 
     cleaned = original
 

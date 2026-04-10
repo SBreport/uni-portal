@@ -95,8 +95,13 @@ def run_migration(check_only=False):
     if di_count < 200:
         try:
             conn.close()
+            # argparse 충돌 방지: sys.argv를 임시로 비움
+            import sys as _sys
+            _orig_argv = _sys.argv
+            _sys.argv = [_sys.argv[0]]
             from scripts.expand_device_info import main as expand_main
             expand_main()
+            _sys.argv = _orig_argv
             conn = get_conn(EQUIPMENT_DB)
             di_count2 = conn.execute("SELECT COUNT(*) FROM device_info").fetchone()[0]
             print(f"  {di_count} → {di_count2}건")
@@ -115,8 +120,10 @@ def run_migration(check_only=False):
     if total_treat > 0 and classified < total_treat * 0.5:
         try:
             conn.close()
+            _sys.argv = [_sys.argv[0]]
             from scripts.normalize_treatments import main as normalize_main
             normalize_main()
+            _sys.argv = _orig_argv
             conn = get_conn(EQUIPMENT_DB)
         except Exception as e:
             print(f"  분류 실패: {e}")

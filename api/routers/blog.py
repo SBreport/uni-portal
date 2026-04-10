@@ -314,6 +314,48 @@ def import_blog_data(user: dict = Depends(require_role("admin"))):
         raise HTTPException(500, f"임포트 실패: {str(e)}")
 
 
+# ── 활성 블로그 계정 (지점별, 3개월 내 브랜드블로그 발행) ──
+@router.get("/active-accounts")
+def get_active_accounts(
+    branch_filter: str = Query("uandi"),
+    user: dict = Depends(get_current_user),
+):
+    """지점별 활성 블로그 계정 (3개월 내 브랜드블로그 발행 계정)."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        rows = conn.execute("""
+            SELECT bp.blog_id, COUNT(*) as post_count,
+                   ba.blog_nickname, eb.name as branch_name
+            FROM blog_posts bp
+            LEFT JOIN blog_accounts ba ON bp.blog_id = ba.blog_id
+            LEFT JOIN evt_branches eb ON bp.evt_branch_id = eb.id
+            WHERE bp.blog_channel = 'br'
+            AND bp.published_at >= date('now', '-3 months')
+            AND bp.blog_id IS NOT NULL AND bp.blog_id != ''
+            AND bp.evt_branch_id IS NOT NULL
+            GROUP BY bp.evt_branch_id, bp.blog_id
+            ORDER BY eb.name, post_count DESC
+        """).fetchall()
+
+        branch_map: dict[str, list] = {}
+        for r in rows:
+            bn = r["branch_name"] or "미지정"
+            branch_map.setdefault(bn, []).append({
+                "blog_id": r["blog_id"],
+                "nickname": r["blog_nickname"] or r["blog_id"],
+                "post_count": r["post_count"],
+            })
+
+        branches = [
+            {"branch_name": k, "accounts": v}
+            for k, v in sorted(branch_map.items())
+        ]
+        return {"branches": branches}
+    finally:
+        conn.close()
+
+
 # ── 스케줄러 상태/트리거 ──
 @router.get("/scheduler/status")
 async def scheduler_status(user: Annotated[dict, Depends(_admin)]):

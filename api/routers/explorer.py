@@ -79,7 +79,8 @@ async def explore_by_branch(
             SELECT COALESCE(di.name, e.name) AS name, e.quantity,
                    di.id   AS device_info_id,
                    di.category AS device_category,
-                   di.summary  AS device_summary
+                   di.summary  AS device_summary,
+                   COALESCE(di.device_type, 'equipment') AS device_type
             FROM equipment e
             LEFT JOIN device_info di ON e.device_info_id = di.id
             WHERE e.evt_branch_id = ?

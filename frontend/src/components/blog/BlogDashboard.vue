@@ -18,6 +18,10 @@ const syncStatus = ref<any>(null)
 const branchShowAll = ref(false)
 const authorShowAll = ref(false)
 
+// 운영 계정 (활성 블로그 계정)
+const activeAccounts = ref<any[]>([])
+const activeAccountsLoading = ref(false)
+
 // 월간 토글: 지점
 const branchMonthMode = ref<'all' | 'monthly'>('monthly')
 const branchMonth = ref('')
@@ -52,6 +56,18 @@ function apiParams(extra?: Record<string, string>) {
   if (props.branchFilter) p.branch_filter = props.branchFilter
   if (extra) Object.assign(p, extra)
   return p
+}
+
+async function loadActiveAccounts() {
+  activeAccountsLoading.value = true
+  try {
+    const { data } = await blogApi.getActiveAccounts(apiParams())
+    activeAccounts.value = data.branches || []
+  } catch (e) {
+    console.error('운영 계정 로드 실패:', e)
+  } finally {
+    activeAccountsLoading.value = false
+  }
 }
 
 async function loadDashboard() {
@@ -255,7 +271,10 @@ const canNextType = computed(() => {
   return idx > 0
 })
 
-onMounted(loadDashboard)
+onMounted(() => {
+  loadDashboard()
+  loadActiveAccounts()
+})
 </script>
 
 <template>
@@ -410,6 +429,32 @@ onMounted(loadDashboard)
                   class="mt-2 text-[11px] text-blue-500 hover:underline">
             {{ branchShowAll ? '상위 15개만 보기' : `전체 ${displayBranchData.length}개 지점 보기` }}
           </button>
+        </div>
+
+        <!-- Row 3b: 운영 계정 (3개월 내 브랜드블로그 발행 계정) -->
+        <div class="bg-white border border-slate-200 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-slate-700 mb-3">
+            운영 계정
+            <span class="text-[10px] text-slate-400 font-normal ml-1">최근 3개월 내 브랜드블로그 발행</span>
+          </h3>
+          <div v-if="activeAccountsLoading" class="text-center py-4 text-slate-400 text-xs">로딩...</div>
+          <div v-else-if="activeAccounts.length === 0" class="text-xs text-slate-400 text-center py-3">데이터 없음</div>
+          <div v-else class="space-y-3">
+            <div v-for="branch in activeAccounts" :key="branch.branch_name">
+              <p class="text-[11px] font-semibold text-slate-500 mb-1">{{ branch.branch_name }}</p>
+              <div class="flex flex-wrap gap-1.5">
+                <span
+                  v-for="acc in branch.accounts"
+                  :key="acc.blog_id"
+                  class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100"
+                  :title="acc.blog_id"
+                >
+                  {{ acc.nickname }}
+                  <span class="text-[10px] text-blue-400 font-normal">{{ acc.post_count }}</span>
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Row 4: 이번주 발행글 | 지난주 발행글 -->

@@ -161,6 +161,18 @@ function toggleEquip(idx: number) {
   expandedEquipIdx.value = expandedEquipIdx.value === idx ? null : idx
 }
 
+// 장비: equipment/injection·care 분리
+const hardwareEquipment = computed(() =>
+  (branchData.value?.equipment ?? []).filter((e: any) =>
+    !e.device_type || e.device_type === 'equipment' || e.device_type === 'material'
+  )
+)
+const treatmentEquipment = computed(() =>
+  (branchData.value?.equipment ?? []).filter((e: any) =>
+    e.device_type === 'injection' || e.device_type === 'care'
+  )
+)
+
 // 블로그: 브블/최블 분리
 const brandBlogs = computed(() =>
   (branchData.value?.recent_blogs ?? []).filter((b: any) => b.blog_channel === 'br')
@@ -592,41 +604,86 @@ function togglePaper(id: number) {
           </button>
           <div v-if="openBranch.equip" class="divide-y divide-slate-100 bg-white">
             <template v-if="branchData.equipment?.length">
-              <div
-                v-for="(e, idx) in branchData.equipment"
-                :key="idx"
-                class="border-b border-slate-50 last:border-0"
-              >
+              <!-- 장비 그룹 -->
+              <template v-if="hardwareEquipment.length">
+                <div class="px-4 py-1.5 bg-slate-50 border-b border-slate-100">
+                  <span class="text-[11px] font-bold text-slate-500">장비 ({{ hardwareEquipment.length }})</span>
+                </div>
                 <div
-                  @click="e.device_info_id ? toggleEquip(idx as number) : null"
-                  :class="[
-                    'flex items-center justify-between px-4 py-2.5 transition',
-                    e.device_info_id ? 'cursor-pointer hover:bg-blue-50' : 'cursor-default',
-                    expandedEquipIdx === idx ? 'bg-blue-50' : ''
-                  ]"
+                  v-for="(e, idx) in hardwareEquipment"
+                  :key="'hw-' + idx"
+                  class="border-b border-slate-50 last:border-0"
                 >
-                  <div>
-                    <span class="text-sm font-medium text-slate-700">{{ e.name }}</span>
-                    <span v-if="e.device_category" class="ml-2 text-xs text-slate-400">{{ e.device_category }}</span>
+                  <div
+                    @click="e.device_info_id ? toggleEquip(branchData.equipment.indexOf(e)) : null"
+                    :class="[
+                      'flex items-center justify-between px-4 py-2.5 transition',
+                      e.device_info_id ? 'cursor-pointer hover:bg-blue-50' : 'cursor-default',
+                      expandedEquipIdx === branchData.equipment.indexOf(e) ? 'bg-blue-50' : ''
+                    ]"
+                  >
+                    <div>
+                      <span class="text-sm font-medium text-slate-700">{{ e.name }}</span>
+                      <span v-if="e.device_category" class="ml-2 text-xs text-slate-400">{{ e.device_category }}</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-slate-400">
+                      <span>{{ e.quantity }}대</span>
+                      <svg v-if="e.device_info_id"
+                        class="w-3.5 h-3.5 text-slate-300 transition-transform"
+                        :class="{ 'rotate-180': expandedEquipIdx === branchData.equipment.indexOf(e) }"
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-2 text-xs text-slate-400">
-                    <span>{{ e.quantity }}대</span>
-                    <svg v-if="e.device_info_id"
-                      class="w-3.5 h-3.5 text-slate-300 transition-transform"
-                      :class="{ 'rotate-180': expandedEquipIdx === idx }"
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
+                  <div
+                    v-if="e.device_info_id && expandedEquipIdx === branchData.equipment.indexOf(e)"
+                    class="px-4 pb-4 pt-1 bg-slate-50 border-t border-slate-100"
+                  >
+                    <ExplorerDeviceInline :device-id="e.device_info_id" :current-branch-name="branchData?.branch?.name" />
                   </div>
                 </div>
-                <!-- 인라인 확장 -->
-                <div
-                  v-if="e.device_info_id && expandedEquipIdx === idx"
-                  class="px-4 pb-4 pt-1 bg-slate-50 border-t border-slate-100"
-                >
-                  <ExplorerDeviceInline :device-id="e.device_info_id" :current-branch-name="branchData?.branch?.name" />
+              </template>
+              <!-- 시술/주사 그룹 -->
+              <template v-if="treatmentEquipment.length">
+                <div class="px-4 py-1.5 bg-violet-50 border-b border-violet-100">
+                  <span class="text-[11px] font-bold text-violet-500">시술/주사 ({{ treatmentEquipment.length }})</span>
                 </div>
-              </div>
+                <div
+                  v-for="(e, idx) in treatmentEquipment"
+                  :key="'tr-' + idx"
+                  class="border-b border-slate-50 last:border-0"
+                >
+                  <div
+                    @click="e.device_info_id ? toggleEquip(branchData.equipment.indexOf(e)) : null"
+                    :class="[
+                      'flex items-center justify-between px-4 py-2.5 transition',
+                      e.device_info_id ? 'cursor-pointer hover:bg-violet-50' : 'cursor-default',
+                      expandedEquipIdx === branchData.equipment.indexOf(e) ? 'bg-violet-50' : ''
+                    ]"
+                  >
+                    <div>
+                      <span class="text-sm font-medium text-slate-700">{{ e.name }}</span>
+                      <span v-if="e.device_category" class="ml-2 text-xs text-slate-400">{{ e.device_category }}</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-slate-400">
+                      <span>{{ e.quantity }}대</span>
+                      <svg v-if="e.device_info_id"
+                        class="w-3.5 h-3.5 text-slate-300 transition-transform"
+                        :class="{ 'rotate-180': expandedEquipIdx === branchData.equipment.indexOf(e) }"
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div
+                    v-if="e.device_info_id && expandedEquipIdx === branchData.equipment.indexOf(e)"
+                    class="px-4 pb-4 pt-1 bg-slate-50 border-t border-slate-100"
+                  >
+                    <ExplorerDeviceInline :device-id="e.device_info_id" :current-branch-name="branchData?.branch?.name" />
+                  </div>
+                </div>
+              </template>
             </template>
             <p v-else class="px-4 py-3 text-sm text-slate-400">보유 장비 없음</p>
           </div>

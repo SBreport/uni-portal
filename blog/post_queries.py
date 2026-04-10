@@ -456,7 +456,7 @@ def get_home_dashboard() -> dict:
 
 
 def _get_home_dashboard_impl(conn):
-    branch_count = conn.execute("SELECT COUNT(*) FROM branches").fetchone()[0]
+    branch_count = conn.execute("SELECT COUNT(*) FROM evt_branches WHERE is_active = 1").fetchone()[0]
     equip_total = conn.execute("SELECT COUNT(*) FROM equipment").fetchone()[0]
     equip_photo = conn.execute("SELECT COUNT(*) FROM equipment WHERE photo_status = 1").fetchone()[0]
 

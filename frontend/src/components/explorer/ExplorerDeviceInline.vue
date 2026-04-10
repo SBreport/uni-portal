@@ -42,6 +42,7 @@ interface DeviceData {
     title: string
     keyword?: string
     published_at?: string
+    published_url?: string
     branch_name?: string
     author?: string
   }>
@@ -267,7 +268,9 @@ function blogKeywords(posts: DeviceData['blog_posts']): string[] {
       <div class="space-y-1 mb-3">
         <div v-for="b in currentBranchBlogs.slice(0, 5)" :key="b.id"
           class="px-3 py-1.5 bg-blue-50/50 rounded text-xs border border-blue-100">
-          <p class="text-slate-700 leading-snug">{{ b.title }}</p>
+          <a v-if="b.published_url" :href="b.published_url" target="_blank"
+            class="text-slate-700 leading-snug hover:text-blue-600 transition block">{{ b.title }}</a>
+          <p v-else class="text-slate-700 leading-snug">{{ b.title }}</p>
           <div class="flex gap-2 mt-0.5 text-[11px] text-slate-400">
             <span v-if="b.keyword" class="text-blue-500">{{ b.keyword }}</span>
             <span v-if="b.published_at">{{ b.published_at.slice(0, 10) }}</span>
@@ -292,7 +295,9 @@ function blogKeywords(posts: DeviceData['blog_posts']): string[] {
       <div class="space-y-1">
         <div v-for="b in otherBranchBlogs.slice(0, 5)" :key="b.id"
           class="px-3 py-1.5 bg-slate-50 rounded text-xs">
-          <p class="text-slate-700 leading-snug">{{ b.title }}</p>
+          <a v-if="b.published_url" :href="b.published_url" target="_blank"
+            class="text-slate-700 leading-snug hover:text-blue-600 transition block">{{ b.title }}</a>
+          <p v-else class="text-slate-700 leading-snug">{{ b.title }}</p>
           <div class="flex gap-2 mt-0.5 text-[11px] text-slate-400">
             <span v-if="b.branch_name" class="text-slate-500 font-medium">[{{ b.branch_name }}]</span>
             <span v-if="b.keyword" class="text-blue-500">{{ b.keyword }}</span>

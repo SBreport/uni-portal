@@ -478,7 +478,7 @@ onMounted(() => { loadData(); loadLastSync() })
                               </tr>
                             </thead>
                             <tbody>
-                              <tr v-for="c in comparisonData.comparisons" :key="c.keyword"
+                              <tr v-for="c in comparisonData.comparisons.filter((c: any) => !expandedBranch || filteredBranches.some((fb: any) => fb.branch === expandedBranch && fb.keyword === c.keyword))" :key="c.keyword"
                                 :class="c.mismatch ? 'bg-red-50/80' : ''">
                                 <td class="px-2 py-1 text-slate-700 font-medium">{{ c.keyword }}</td>
                                 <td class="px-2 py-1 text-center" :class="c.checker?.rank && c.checker.rank <= (c.checker.guaranteed_rank || 5) ? 'text-emerald-600 font-semibold' : 'text-red-500'">

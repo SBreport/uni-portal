@@ -76,7 +76,7 @@ async def explore_by_branch(
 
         # ── 장비 목록 (device_info FK JOIN) ──
         equipment_rows = conn.execute("""
-            SELECT e.name, e.quantity,
+            SELECT COALESCE(di.name, e.name) AS name, e.quantity,
                    di.id   AS device_info_id,
                    di.category AS device_category,
                    di.summary  AS device_summary
@@ -491,7 +491,7 @@ async def explore_by_device(
         blog_rows = conn.execute(f"""
             SELECT bp.id, COALESCE(bp.clean_title, bp.scraped_title, bp.title, bp.keyword) AS title,
                    bp.keyword, bp.published_at, bp.author,
-                   eb.name AS branch_name
+                   bp.published_url, eb.name AS branch_name
             FROM blog_posts bp
             LEFT JOIN evt_branches eb ON bp.evt_branch_id = eb.id
             WHERE {like_clauses}

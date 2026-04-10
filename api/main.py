@@ -36,13 +36,29 @@ async def lifespan(app: FastAPI):
     from init_db import init_db
     init_db()
 
-    # DB 마이그레이션 — 새 컬럼/데이터 정규화 (이미 완료된 단계는 자동 건너뜀)
+    # DB 마이그레이션 — 컬럼 추가만 (안전, 빠름)
     try:
-        from scripts.migrate_all import run_migration
-        run_migration(check_only=False)
+        import sqlite3 as _sql
+        from shared.db import get_conn as _gc, EQUIPMENT_DB as _db
+        _c = _gc(_db)
+        for _t, _col, _ct in [
+            ("equipment", "evt_branch_id", "INTEGER"),
+            ("equipment", "device_info_id", "INTEGER"),
+            ("evt_treatments", "item_type", "TEXT"),
+            ("evt_treatments", "device_info_id", "INTEGER"),
+            ("blog_posts", "evt_branch_id", "INTEGER"),
+            ("place_daily", "evt_branch_id", "INTEGER"),
+            ("webpage_daily", "evt_branch_id", "INTEGER"),
+        ]:
+            try:
+                _c.execute(f"ALTER TABLE {_t} ADD COLUMN {_col} {_ct}")
+            except _sql.OperationalError:
+                pass
+        _c.commit()
+        _c.close()
     except Exception as e:
         import logging
-        logging.getLogger("startup").warning(f"마이그레이션 스킵: {e}")
+        logging.getLogger("startup").warning(f"컬럼 추가 스킵: {e}")
 
     from api.scheduler import setup_scheduler, scheduler
     setup_scheduler()

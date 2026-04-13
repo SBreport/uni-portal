@@ -157,6 +157,15 @@ def sync_all_to_db(max_months: int = 3) -> dict:
 
             sheets_processed += 1
 
+            # nosul_map 저장 (AF열 노출일수)
+            nosul_map = result.get("nosul_map", {})
+            for branch_name, nosul_val in nosul_map.items():
+                conn.execute("""
+                    INSERT OR REPLACE INTO place_branch_monthly
+                    (year, month, branch_name, nosul_count, updated_at)
+                    VALUES (?, ?, ?, ?, datetime('now'))
+                """, (year, month, branch_name, nosul_val))
+
         # Update agency_map_place in DB
         if latest_agency_map:
             # Load current map from DB

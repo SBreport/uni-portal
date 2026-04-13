@@ -83,6 +83,15 @@ def take_snapshot():
             ranking = result["ranking"]
             branches = ranking.get("branches", [])
 
+            # nosul_map 저장 (AF열 노출일수)
+            nosul_map = result.get("nosul_map", {})
+            for branch_name, nosul_val in nosul_map.items():
+                conn.execute("""
+                    INSERT OR REPLACE INTO place_branch_monthly
+                    (year, month, branch_name, nosul_count, updated_at)
+                    VALUES (?, ?, ?, ?, datetime('now'))
+                """, (year, month, branch_name, nosul_val))
+
             # 이 월에서 갱신할 날짜들
             days_in_month = [d for d in missing_days if d.year == year and d.month == month]
 

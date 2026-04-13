@@ -614,6 +614,21 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_place_daily_branch ON place_daily(branch_id)")
 
     # ============================================================
+    # 플레이스 월별 지점 통계 (place_branch_monthly) — AF열 노출일수
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS place_branch_monthly (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        branch_name TEXT NOT NULL,
+        nosul_count INTEGER DEFAULT 0,
+        updated_at TEXT DEFAULT (datetime('now','localtime')),
+        UNIQUE(year, month, branch_name)
+    )
+    """)
+
+    # ============================================================
     # 웹페이지 일별 데이터 (webpage_daily)
     # ============================================================
     c.execute("""

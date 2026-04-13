@@ -284,6 +284,7 @@ def get_ranking_by_agency(sheet_name: str) -> dict:
     if not all_branches:
         return {
             "agency_map": agency_map,
+            "nosul_map": {},
             "ranking": {
                 "year": 0,
                 "month": 0,
@@ -307,7 +308,14 @@ def get_ranking_by_agency(sheet_name: str) -> dict:
         "summary": build_summary(all_branches),
     }
 
-    return {"agency_map": agency_map, "ranking": merged_result}
+    # Build nosul_map: branch_name → nosul_count (from AF column)
+    nosul_map = {}
+    for b in all_branches:
+        branch = b.get("branch", "")
+        if "유앤아이" in branch:
+            nosul_map[branch] = b.get("nosul_count", 0)
+
+    return {"agency_map": agency_map, "ranking": merged_result, "nosul_map": nosul_map}
 
 
 def list_months_from_agency() -> list[str]:

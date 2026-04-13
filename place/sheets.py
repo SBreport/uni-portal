@@ -146,7 +146,19 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
     year, month = _parse_sheet_name(sheet_name)
 
     header = values[0]
-    num_day_cols = len(header) - 2
+
+    # "노출일수" 헤더 위치를 직접 찾아서 일별 컬럼 수 계산
+    nosul_header_idx = None
+    for idx, h in enumerate(header):
+        if "노출" in str(h).strip():
+            nosul_header_idx = idx
+            break
+
+    if nosul_header_idx and nosul_header_idx > 1:
+        num_day_cols = nosul_header_idx - 1
+    else:
+        num_day_cols = len(header) - 2
+
     if num_day_cols <= 0:
         logger.warning("_parse_sheet 헤더 컬럼 부족 (day_cols=%d): %s", num_day_cols, sheet_name)
         return {"year": year, "month": month, "days": 0, "today_index": 0,
@@ -167,8 +179,8 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
         branch_name = success_row[0].strip()
         keyword = rank_row[0].strip() if rank_row else ""
 
-        # 노출일수: success_row의 마지막 컬럼
-        nosul_idx = num_day_cols + 1
+        # 노출일수: 헤더에서 찾은 위치 또는 일별 데이터 다음 열
+        nosul_idx = nosul_header_idx if nosul_header_idx else (num_day_cols + 1)
         nosul_raw = success_row[nosul_idx] if len(success_row) > nosul_idx else "0"
         nosul_count = safe_int(nosul_raw, 0)
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useBranchStore } from '@/stores/branches'
 import { useAuthStore } from '@/stores/auth'
 import * as explorerApi from '@/api/explorer'
@@ -10,9 +11,25 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import ExplorerDeviceInline from '@/components/explorer/ExplorerDeviceInline.vue'
 
 // ── 스토어 ──────────────────────────────────────────────────────────────────
+const router = useRouter()
 const branchStore = useBranchStore()
 const auth = useAuthStore()
 const canSeeAuthor = computed(() => ['admin', 'editor'].includes(auth.effectiveRole))
+
+// ── 블로그 페이지 이동 ──────────────────────────────────────────────────────
+function goToBrandBlog() {
+  const branch = branchStore.branches.find(b => b.id === Number(selectedBranchId.value))
+  if (branch?.name) {
+    router.push({ path: '/blog', query: { channel: 'br', branch_name: branch.name } })
+  }
+}
+
+function goToOptimalBlog() {
+  const branch = branchStore.branches.find(b => b.id === Number(selectedBranchId.value))
+  if (branch?.name) {
+    router.push({ path: '/blog', query: { channel: 'opt', branch_name: branch.name } })
+  }
+}
 
 onMounted(async () => {
   await branchStore.loadBranches()
@@ -85,6 +102,12 @@ function goToDevice(id: number) {
   activeTab.value = 'device'
   closeDropdown()
   clearSearch()
+  if (expandedDeviceId.value === id) {
+    nextTick(() => {
+      const el = document.querySelector(`[data-device-id="${id}"]`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
 }
 
 function goToPaper(id: number) {
@@ -246,11 +269,15 @@ async function selectCategory(catId: number) {
   if (selectedCategoryId.value === catId) {
     selectedCategoryId.value = null
     categoryData.value = null
+    selectedTag.value = null
+    tagDetailData.value = null
     return
   }
   selectedCategoryId.value = catId
   categoryLoading.value = true
   categoryData.value = null
+  selectedTag.value = null
+  tagDetailData.value = null
   try {
     categoryData.value = await explorerApi.getByCategory(catId)
   } catch (e) {
@@ -260,9 +287,45 @@ async function selectCategory(catId: number) {
   }
 }
 
+// ── 태그 칩 클릭 상태 ────────────────────────────────────────────────────────
+const selectedTag = ref<{ type: string; value: string } | null>(null)
+const tagDetailLoading = ref(false)
+const tagDetailData = ref<any>(null)
+
+async function selectTag(type: string, value: string) {
+  if (selectedTag.value?.type === type && selectedTag.value?.value === value) {
+    selectedTag.value = null
+    tagDetailData.value = null
+    return
+  }
+  selectedTag.value = { type, value }
+  tagDetailLoading.value = true
+  tagDetailData.value = null
+  try {
+    if (type === 'body_part') {
+      tagDetailData.value = await explorerApi.getEncyclopediaByBodyPart(value)
+    } else if (type === 'purpose') {
+      tagDetailData.value = await explorerApi.getEncyclopediaByPurpose(value)
+    }
+  } catch (e) {
+    console.error('[Explorer] 태그 상세 로드 실패:', e)
+  } finally {
+    tagDetailLoading.value = false
+  }
+}
+
+function goToDeviceByMaterial(materialName: string) {
+  deviceSearch.value = materialName
+  activeTab.value = 'device'
+}
+
 function goToDeviceFromCategory(deviceInfoId: number) {
   expandedDeviceId.value = deviceInfoId
   activeTab.value = 'device'
+  nextTick(() => {
+    const el = document.querySelector(`[data-device-id="${deviceInfoId}"]`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
 }
 
 function goToPapersFromCategory() {
@@ -791,9 +854,12 @@ function togglePaper(id: number) {
               <div class="grid grid-cols-2 gap-4">
                 <!-- 좌: 브랜드블로그 -->
                 <div>
-                  <p class="text-[11px] font-semibold text-emerald-600 mb-2 pb-1 border-b border-emerald-100">
-                    브랜드블로그 ({{ branchData.blog_summary?.brand_count ?? 0 }})
-                  </p>
+                  <button
+                    @click="goToBrandBlog()"
+                    class="text-[11px] font-semibold text-emerald-600 mb-2 pb-1 border-b border-emerald-100 w-full text-left hover:text-emerald-800 hover:underline transition"
+                  >
+                    브랜드블로그 ({{ branchData.blog_summary?.brand_count ?? 0 }}) →
+                  </button>
                   <div class="space-y-1.5">
                     <div v-for="b in brandBlogs" :key="b.id">
                       <a v-if="b.published_url" :href="b.published_url" target="_blank"
@@ -814,9 +880,12 @@ function togglePaper(id: number) {
                 </div>
                 <!-- 우: 최적블로그 -->
                 <div>
-                  <p class="text-[11px] font-semibold text-violet-600 mb-2 pb-1 border-b border-violet-100">
-                    최적블로그 ({{ branchData.blog_summary?.optimal_count ?? 0 }})
-                  </p>
+                  <button
+                    @click="goToOptimalBlog()"
+                    class="text-[11px] font-semibold text-violet-600 mb-2 pb-1 border-b border-violet-100 w-full text-left hover:text-violet-800 hover:underline transition"
+                  >
+                    최적블로그 ({{ branchData.blog_summary?.optimal_count ?? 0 }}) →
+                  </button>
                   <div class="space-y-1.5">
                     <div v-for="b in optimalBlogs" :key="b.id">
                       <a v-if="b.published_url" :href="b.published_url" target="_blank"
@@ -969,47 +1038,123 @@ function togglePaper(id: number) {
 
           <!-- 적용 부위 -->
           <div v-if="categoryData.tags_body_parts?.length" class="mb-4">
-            <p class="text-xs font-semibold text-slate-500 mb-2">적용 부위</p>
+            <p class="text-xs font-semibold text-slate-500 mb-2">적용 부위 <span class="font-normal text-slate-400">(클릭하면 관련 목적/장비 표시)</span></p>
             <div class="flex flex-wrap gap-1.5">
-              <span
+              <button
                 v-for="tag in categoryData.tags_body_parts.slice(0, 20)"
                 :key="'bp-'+tag.value"
-                class="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs rounded-full border border-emerald-200"
+                @click="selectTag('body_part', tag.value)"
+                :class="[
+                  'px-2.5 py-1 text-xs rounded-full border transition',
+                  selectedTag?.type === 'body_part' && selectedTag?.value === tag.value
+                    ? 'bg-emerald-200 text-emerald-800 border-emerald-400'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                ]"
               >
                 {{ tag.value }}
                 <span class="text-emerald-400 ml-0.5">({{ tag.count }})</span>
-              </span>
+              </button>
             </div>
           </div>
 
           <!-- 시술 목적 -->
           <div v-if="categoryData.tags_purposes?.length" class="mb-4">
-            <p class="text-xs font-semibold text-slate-500 mb-2">시술 목적</p>
+            <p class="text-xs font-semibold text-slate-500 mb-2">시술 목적 <span class="font-normal text-slate-400">(클릭하면 관련 부위/장비 표시)</span></p>
             <div class="flex flex-wrap gap-1.5">
-              <span
+              <button
                 v-for="tag in categoryData.tags_purposes.slice(0, 20)"
                 :key="'pp-'+tag.value"
-                class="px-2.5 py-1 bg-amber-50 text-amber-700 text-xs rounded-full border border-amber-200"
+                @click="selectTag('purpose', tag.value)"
+                :class="[
+                  'px-2.5 py-1 text-xs rounded-full border transition',
+                  selectedTag?.type === 'purpose' && selectedTag?.value === tag.value
+                    ? 'bg-amber-200 text-amber-800 border-amber-400'
+                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                ]"
               >
                 {{ tag.value }}
                 <span class="text-amber-400 ml-0.5">({{ tag.count }})</span>
-              </span>
+              </button>
             </div>
           </div>
 
           <!-- 사용 재료 -->
           <div v-if="categoryData.tags_materials?.length" class="mb-4">
-            <p class="text-xs font-semibold text-slate-500 mb-2">사용 재료</p>
+            <p class="text-xs font-semibold text-slate-500 mb-2">사용 재료 <span class="font-normal text-slate-400">(클릭하면 장비별 탭으로 이동)</span></p>
             <div class="flex flex-wrap gap-1.5">
-              <span
+              <button
                 v-for="tag in categoryData.tags_materials.slice(0, 15)"
                 :key="'mt-'+tag.value"
-                class="px-2.5 py-1 bg-violet-50 text-violet-700 text-xs rounded-full border border-violet-200"
+                @click="goToDeviceByMaterial(tag.value)"
+                class="px-2.5 py-1 bg-violet-50 text-violet-700 text-xs rounded-full border border-violet-200 hover:bg-violet-100 transition"
               >
                 {{ tag.value }}
                 <span class="text-violet-400 ml-0.5">({{ tag.count }})</span>
-              </span>
+              </button>
             </div>
+          </div>
+
+          <!-- 태그 상세 패널 -->
+          <div v-if="selectedTag && (tagDetailLoading || tagDetailData)" class="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs font-bold text-slate-600">
+                {{ selectedTag.type === 'body_part' ? '부위' : '목적' }}: {{ selectedTag.value }} 상세
+              </p>
+              <button @click="selectedTag = null; tagDetailData = null" class="text-xs text-slate-400 hover:text-slate-600">x 닫기</button>
+            </div>
+
+            <div v-if="tagDetailLoading" class="flex justify-center py-3">
+              <LoadingSpinner message="로딩 중..." size="sm" />
+            </div>
+
+            <template v-else-if="tagDetailData">
+              <!-- 부위 상세: 관련 목적 목록 + 각 목적의 장비 -->
+              <template v-if="selectedTag.type === 'body_part'">
+                <div v-if="tagDetailData.purposes?.length">
+                  <div v-for="purposeGroup in tagDetailData.purposes.slice(0, 5)" :key="purposeGroup.purpose" class="mb-3">
+                    <p class="text-xs font-semibold text-amber-700 mb-1">{{ purposeGroup.purpose }}</p>
+                    <div v-if="purposeGroup.equipment?.length" class="flex flex-wrap gap-1">
+                      <button
+                        v-for="eq in purposeGroup.equipment.slice(0, 8)"
+                        :key="eq.name"
+                        @click="goToDeviceByMaterial(eq.name)"
+                        class="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-200 hover:bg-blue-100 transition"
+                      >
+                        {{ eq.name }}
+                        <span v-if="eq.branch_count" class="text-blue-400">({{ eq.branch_count }}지점)</span>
+                      </button>
+                    </div>
+                    <p v-else class="text-xs text-slate-400">장비/재료 정보 없음</p>
+                  </div>
+                </div>
+                <p v-else class="text-xs text-slate-400">연결된 목적 정보가 없습니다</p>
+              </template>
+
+              <!-- 목적 상세: 관련 부위 목록 + 각 부위의 장비 -->
+              <template v-if="selectedTag.type === 'purpose'">
+                <div v-if="tagDetailData.body_parts?.length">
+                  <div v-for="partGroup in tagDetailData.body_parts.slice(0, 5)" :key="partGroup.part" class="mb-3">
+                    <p class="text-xs font-semibold text-emerald-700 mb-1">
+                      {{ partGroup.part }}
+                      <span v-if="partGroup.region" class="font-normal text-slate-400 ml-1">({{ partGroup.region }})</span>
+                    </p>
+                    <div v-if="partGroup.equipment?.length" class="flex flex-wrap gap-1">
+                      <button
+                        v-for="eq in partGroup.equipment.slice(0, 8)"
+                        :key="eq.name"
+                        @click="goToDeviceByMaterial(eq.name)"
+                        class="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-200 hover:bg-blue-100 transition"
+                      >
+                        {{ eq.name }}
+                        <span v-if="eq.branch_count" class="text-blue-400">({{ eq.branch_count }}지점)</span>
+                      </button>
+                    </div>
+                    <p v-else class="text-xs text-slate-400">장비/재료 정보 없음</p>
+                  </div>
+                </div>
+                <p v-else class="text-xs text-slate-400">연결된 부위 정보가 없습니다</p>
+              </template>
+            </template>
           </div>
 
           <!-- 지점별 이벤트 -->
@@ -1040,9 +1185,13 @@ function togglePaper(id: number) {
                     </span>
                   </div>
                 </div>
-                <p v-if="(group.items?.length ?? 0) > 5" class="text-xs text-slate-400 pt-0.5">
-                  외 {{ group.items.length - 5 }}건
-                </p>
+                <router-link
+                  v-if="(group.items?.length ?? 0) > 5"
+                  :to="{ path: '/info', query: { tab: 'events' } }"
+                  class="text-xs text-blue-500 hover:text-blue-700 hover:underline pt-0.5 inline-block"
+                >
+                  외 {{ group.items.length - 5 }}건 더 보기 →
+                </router-link>
               </div>
             </div>
           </div>
@@ -1096,7 +1245,7 @@ function togglePaper(id: number) {
 
       <!-- 장비 목록 (인라인 확장) -->
       <div v-else class="space-y-2">
-        <div v-for="d in filteredDevices" :key="d.id">
+        <div v-for="d in filteredDevices" :key="d.id" :data-device-id="d.id">
           <div
             @click="toggleDevice(d.id)"
             :class="[

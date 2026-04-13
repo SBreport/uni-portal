@@ -36,3 +36,11 @@ export async function getCategorySummary() {
   const { data } = await api.get('/explorer/category-summary')
   return data
 }
+export async function getEncyclopediaByBodyPart(part: string) {
+  const { data } = await api.get('/encyclopedia/by-body-part', { params: { part } })
+  return data
+}
+export async function getEncyclopediaByPurpose(purpose: string) {
+  const { data } = await api.get('/encyclopedia/by-purpose', { params: { purpose } })
+  return data
+}

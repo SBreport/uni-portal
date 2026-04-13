@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import BlogDashboard from '@/components/blog/BlogDashboard.vue'
 import BlogListTab from '@/components/blog/BlogListTab.vue'
 import BlogAccounts from '@/components/blog/BlogAccounts.vue'
@@ -8,6 +9,8 @@ import TabBar from '@/components/common/TabBar.vue'
 const props = defineProps<{
   mode?: 'uandi' | 'all'
 }>()
+
+const route = useRoute()
 
 const isUandi = computed(() => props.mode !== 'all')
 const pageTitle = computed(() => isUandi.value ? '블로그 관리' : '블로그 관리 (전체)')
@@ -38,6 +41,18 @@ function onTabClick(tab: string) {
     listFilters.value = undefined
   }
 }
+
+// URL query에서 필터 읽기 (탐색기 등 외부에서 이동 시)
+onMounted(() => {
+  if (route.query.channel || route.query.branch_name) {
+    const filter: Record<string, any> = {}
+    if (route.query.channel) filter.channel = route.query.channel as string
+    if (route.query.branch_name) filter.branch_name = route.query.branch_name as string
+    listFilters.value = filter
+    listMounted.value = true
+    activeTab.value = 'list'
+  }
+})
 </script>
 
 <template>

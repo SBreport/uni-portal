@@ -50,6 +50,12 @@ const router = createRouter({
       component: () => import('@/views/ExplorerView.vue'),
     },
     {
+      path: '/info',
+      name: 'info',
+      component: () => import('@/views/InfoView.vue'),
+      meta: { roles: ['admin', 'editor'] },
+    },
+    {
       path: '/branch-info',
       name: 'branch-info',
       component: () => import('@/views/BranchInfoView.vue'),

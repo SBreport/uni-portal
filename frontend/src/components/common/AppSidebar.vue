@@ -80,12 +80,24 @@ const topItems: MenuItem[] = [
     roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
   },
   {
+    path: '/info',
+    label: '정보관리',
+    icon: 'I',
+    roles: ['admin', 'editor'],
+  },
+]
+
+// 마케팅과 보고서 사이 메뉴
+const middleItems: MenuItem[] = [
+  {
     path: '/complaints',
     label: '민원관리',
     icon: 'M',
     roles: ['admin', 'editor', 'viewer-hq', 'viewer-branch'],
   },
 ]
+
+const visibleMiddleItems = computed(() => middleItems.filter(canSee))
 
 const visibleTopItems = computed(() => topItems.filter(canSee))
 
@@ -181,6 +193,23 @@ function handleLogout() {
           </div>
         </transition>
       </div>
+
+      <!-- 민원관리 -->
+      <router-link
+        v-for="item in visibleMiddleItems" :key="item.path"
+        :to="item.path"
+        :class="[
+          'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition',
+          isActive(item.path)
+            ? 'bg-blue-600 text-white font-semibold'
+            : 'text-slate-600 hover:bg-slate-50'
+        ]"
+      >
+        <span class="w-5 h-5 flex items-center justify-center text-xs font-bold rounded"
+          :class="isActive(item.path) ? (item.colorActive || 'bg-blue-500 text-white') : (item.color || 'bg-slate-100 text-slate-500')"
+        >{{ item.icon }}</span>
+        {{ item.label }}
+      </router-link>
 
       <!-- 구분선 -->
       <div class="!my-2 border-t border-slate-100"></div>

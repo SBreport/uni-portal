@@ -364,10 +364,14 @@ onUnmounted(() => {
                 <span>평균연속 {{ a.avg_streak }}일</span>
                 <span class="ml-auto" :class="a.trend === '↑' ? 'text-blue-500' : a.trend === '↓' ? 'text-red-500' : 'text-slate-400'">추이 {{ a.trend }}</span>
               </div>
-              <!-- 월별 미니 바 -->
+              <!-- 월별 미니 바 + 수치 -->
               <div class="flex gap-0.5 mt-2">
-                <div v-for="m in allMonths" :key="m" class="flex-1 text-center">
-                  <div class="h-8 bg-slate-50 rounded-sm relative overflow-hidden">
+                <div v-for="m in allMonths" :key="m" class="flex-1 text-center" :title="`${m}: ${a.monthly[m] || 0}%`">
+                  <div class="text-[9px] font-medium tabular-nums mb-0.5"
+                    :class="(a.monthly[m] || 0) >= 80 ? 'text-blue-600' : (a.monthly[m] || 0) >= 50 ? 'text-slate-500' : (a.monthly[m] || 0) > 0 ? 'text-red-500' : 'text-slate-300'">
+                    {{ a.monthly[m] != null ? a.monthly[m] + '%' : '-' }}
+                  </div>
+                  <div class="h-6 bg-slate-50 rounded-sm relative overflow-hidden">
                     <div class="absolute bottom-0 w-full rounded-sm transition-all" :class="(a.monthly[m] || 0) >= 50 ? 'bg-blue-300' : 'bg-red-300'" :style="{ height: (a.monthly[m] || 0) + '%' }"></div>
                   </div>
                   <div class="text-[9px] text-slate-400 mt-0.5">{{ m.split('-')[1] }}월</div>

@@ -8,7 +8,7 @@ const props = defineProps<{ branches: { id: number; name: string }[] }>()
 
 // Sub-tabs
 type SubTab = 'mapping' | 'place-stats' | 'webpage-stats' | 'rank-checker'
-const subTab = ref<SubTab>('mapping')
+const subTab = ref<SubTab>('place-stats')
 
 // ════════════════════════════════════════════
 // 매핑 관리 (from SyncSettings — agency mapping section)
@@ -342,6 +342,7 @@ function getChangeInfo(branch: string): string {
 onMounted(() => {
   loadAgencyMaps()
   loadAgencySheets()
+  loadStats('place')  // 기본 탭: 플레이스 성과
   document.addEventListener('click', handleClickOutside, true)
 })
 onUnmounted(() => {
@@ -354,9 +355,9 @@ onUnmounted(() => {
     <!-- Sub-tabs -->
     <div class="flex gap-1 mb-4 border-b border-slate-200">
       <button v-for="t in [
-        { key: 'mapping', label: '매핑 관리' },
         { key: 'place-stats', label: '플레이스 성과' },
         { key: 'webpage-stats', label: '웹페이지 성과' },
+        { key: 'mapping', label: '매핑 관리' },
         { key: 'rank-checker', label: 'SB체커' },
       ]" :key="t.key"
         @click="subTab = t.key as SubTab; if (t.key === 'place-stats') loadStats('place'); if (t.key === 'webpage-stats') loadStats('webpage')"

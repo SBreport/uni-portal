@@ -258,12 +258,14 @@ async def get_agency_stats(
             if current_agency not in agencies:
                 agencies[current_agency] = {"branches": [], "total_days": 0, "exposed_days": 0}
 
-            rate = round(bdata["exposed_days"] / bdata["total_days"] * 100, 1) if bdata["total_days"] > 0 else 0
+            at_total = alltime_total.get(bname, bdata["total_days"])
+            at_exposed = alltime_exposed.get(bname, bdata["exposed_days"])
+            rate = round(at_exposed / at_total * 100, 1) if at_total > 0 else 0
             agencies[current_agency]["branches"].append({
                 "branch": bname,
-                "total_days": alltime_total.get(bname, bdata["total_days"]),      # 전체 기간
-                "exposed_days": alltime_exposed.get(bname, bdata["exposed_days"]), # 전체 기간
-                "rate": rate,                                                      # 선택 기간 내 성공률
+                "total_days": at_total,       # 전체 기간
+                "exposed_days": at_exposed,   # 전체 기간
+                "rate": rate,                 # 전체 기간 성공률
                 "streak": streaks.get(bname, 0),                                   # 전체 기간
                 "monthly": bdata["monthly"],
                 "monthly_agency": monthly_ag,
@@ -280,7 +282,10 @@ async def get_agency_stats(
         # 실행사 요약
         result = []
         for agency_name, adata in agencies.items():
-            rate = round(adata["exposed_days"] / adata["total_days"] * 100, 1) if adata["total_days"] > 0 else 0
+            # 전체 기간 성공률: 소속 지점의 alltime 합산
+            ag_total = sum(b["total_days"] for b in adata["branches"])
+            ag_exposed = sum(b["exposed_days"] for b in adata["branches"])
+            rate = round(ag_exposed / ag_total * 100, 1) if ag_total > 0 else 0
             avg_streak = round(sum(b["streak"] for b in adata["branches"]) / len(adata["branches"]), 1) if adata["branches"] else 0
 
             # 월별 추이 — 해당 월에 이 실행사가 담당한 지점만 집계

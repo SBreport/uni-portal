@@ -197,6 +197,37 @@ async def get_agency_stats(
         if current_branch:
             streaks[current_branch] = current_streak
 
+        # 변경 이력 로드 → 월별 담당 실행사 역추적
+        history_rows = conn.execute(
+            "SELECT branch_name, from_agency, to_agency, changed_at FROM agency_map_history WHERE map_type = ? ORDER BY changed_at",
+            (type,)
+        ).fetchall()
+        history_by_branch: dict[str, list] = {}
+        for hr in history_rows:
+            history_by_branch.setdefault(hr["branch_name"], []).append(dict(hr))
+
+        def _get_monthly_agency(bname: str, current_ag: str, months: list[str]) -> dict[str, str]:
+            """변경 이력으로 월별 담당 실행사 역추적."""
+            changes = history_by_branch.get(bname, [])
+            if not changes:
+                return {m: current_ag for m in months}
+            # 변경 이력을 날짜순 정렬 (이미 정렬됨)
+            result = {}
+            for m in months:
+                month_end = f"{m}-28"
+                # 이 월 이전의 마지막 변경 찾기
+                agency = current_ag
+                for c in reversed(changes):
+                    if c["changed_at"] <= month_end:
+                        agency = c["to_agency"]
+                        break
+                else:
+                    # 모든 변경이 이 월 이후 → 첫 변경의 from_agency
+                    if changes and changes[0]["changed_at"] > month_end:
+                        agency = changes[0]["from_agency"]
+                result[m] = agency
+            return result
+
         # 실행사별 집계
         agencies = {}
         for bname, bdata in branch_data.items():
@@ -205,6 +236,8 @@ async def get_agency_stats(
                 agencies[agency] = {"branches": [], "total_days": 0, "exposed_days": 0}
 
             rate = round(bdata["exposed_days"] / bdata["total_days"] * 100, 1) if bdata["total_days"] > 0 else 0
+            all_m = sorted(bdata["monthly"].keys())
+            monthly_ag = _get_monthly_agency(bname, agency, all_m)
             agencies[agency]["branches"].append({
                 "branch": bname,
                 "total_days": bdata["total_days"],
@@ -212,6 +245,7 @@ async def get_agency_stats(
                 "rate": rate,
                 "streak": streaks.get(bname, 0),
                 "monthly": bdata["monthly"],
+                "monthly_agency": monthly_ag,
             })
             agencies[agency]["total_days"] += bdata["total_days"]
             agencies[agency]["exposed_days"] += bdata["exposed_days"]

@@ -169,6 +169,7 @@ interface AgencyStatDetail {
     rate: number
     streak: number
     monthly: Record<string, { total: number; exposed: number; rate: number }>
+    monthly_agency?: Record<string, string>
   }[]
 }
 
@@ -250,13 +251,14 @@ interface FlatBranch {
   rate: number
   streak: number
   monthly: Record<string, { total: number; exposed: number; rate: number }>
+  monthly_agency: Record<string, string>
 }
 
 const flatBranches = computed<FlatBranch[]>(() => {
   const list: FlatBranch[] = []
   for (const a of filteredAgencies.value) {
     for (const b of a.branches) {
-      list.push({ branch: b.branch, agency: a.agency, rate: b.rate, streak: b.streak, monthly: b.monthly })
+      list.push({ branch: b.branch, agency: a.agency, rate: b.rate, streak: b.streak, monthly: b.monthly, monthly_agency: b.monthly_agency || {} })
     }
   }
   // 정렬
@@ -491,7 +493,7 @@ onUnmounted(() => {
                     지점 <span class="text-[10px]">{{ statsSortIcon('branch') }}</span>
                   </th>
                   <th @click="toggleStatsSort('agency')" class="text-left px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700">
-                    실행사 <span class="text-[10px]">{{ statsSortIcon('agency') }}</span>
+                    현 실행사 <span class="text-[10px]">{{ statsSortIcon('agency') }}</span>
                   </th>
                   <th v-for="m in allMonths" :key="m" @click="toggleStatsSort(m)" class="text-center px-2 py-2 font-medium text-slate-500 w-16 cursor-pointer hover:text-slate-700">
                     {{ m.split('-')[1] }}월 <span class="text-[10px]">{{ statsSortIcon(m) }}</span>
@@ -516,9 +518,18 @@ onUnmounted(() => {
                   <td class="px-2 py-1.5">
                     <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium" :class="agencyColor(b.agency).badge">{{ b.agency }}</span>
                   </td>
-                  <td v-for="m in allMonths" :key="m" class="text-center py-1.5 tabular-nums"
-                    :class="(b.monthly[m]?.rate || 0) >= 80 ? 'text-blue-600 font-medium' : (b.monthly[m]?.rate || 0) >= 50 ? 'text-slate-600' : (b.monthly[m]?.rate || 0) > 0 ? 'text-red-500' : 'text-slate-300'">
-                    {{ b.monthly[m] ? b.monthly[m].rate + '%' : '-' }}
+                  <td v-for="m in allMonths" :key="m" class="text-center py-1 tabular-nums leading-tight">
+                    <template v-if="b.monthly[m]">
+                      <div class="text-[11px] font-medium"
+                        :class="b.monthly[m].rate >= 80 ? 'text-blue-600' : b.monthly[m].rate >= 50 ? 'text-slate-600' : 'text-red-500'">
+                        {{ b.monthly[m].rate }}%
+                      </div>
+                      <div v-if="b.monthly_agency[m]" class="text-[9px] mt-0.5"
+                        :class="b.monthly_agency[m] !== b.agency ? 'text-amber-500 font-medium' : 'text-slate-300'">
+                        {{ b.monthly_agency[m] !== b.agency ? b.monthly_agency[m] : '' }}
+                      </div>
+                    </template>
+                    <span v-else class="text-slate-300 text-[11px]">-</span>
                   </td>
                   <td class="text-center py-1.5 font-semibold tabular-nums" :class="b.rate >= 50 ? 'text-blue-600' : 'text-red-500'">{{ b.rate }}%</td>
                   <td class="text-center py-1.5 text-slate-500 tabular-nums">{{ b.streak }}일</td>

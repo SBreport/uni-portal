@@ -928,6 +928,12 @@ function togglePaper(id: number) {
             <!-- 플레이스 -->
             <div>
               <p class="text-xs font-semibold text-sky-700 mb-2">플레이스 순위</p>
+              <p v-if="branchData.place_not_updated" class="text-xs text-amber-600 mb-1">
+                금일 데이터는 아직 갱신되지 않았습니다
+              </p>
+              <p v-else-if="branchData.place_data_date" class="text-xs text-slate-400 mb-1">
+                {{ branchData.place_data_date?.slice(5).replace('-', '/') }} 기준
+              </p>
               <template v-if="branchData.place_keywords?.length">
                 <div class="space-y-1">
                   <div
@@ -957,6 +963,12 @@ function togglePaper(id: number) {
             <!-- 웹페이지 -->
             <div>
               <p class="text-xs font-semibold text-indigo-700 mb-2">웹페이지 노출 여부</p>
+              <p v-if="branchData.webpage_not_updated" class="text-xs text-amber-600 mb-1">
+                금일 데이터는 아직 갱신되지 않았습니다
+              </p>
+              <p v-else-if="branchData.webpage_data_date" class="text-xs text-slate-400 mb-1">
+                {{ branchData.webpage_data_date?.slice(5).replace('-', '/') }} 기준
+              </p>
               <template v-if="branchData.webpage_keywords?.length">
                 <div class="space-y-1">
                   <div

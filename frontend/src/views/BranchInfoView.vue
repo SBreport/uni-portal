@@ -4,6 +4,10 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api/client'
 
+const props = withDefaults(defineProps<{
+  embedded?: boolean
+}>(), { embedded: false })
+
 const router = useRouter()
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
@@ -72,7 +76,7 @@ onMounted(loadBranches)
 
 <template>
   <div :class="[branchData ? 'px-6 py-6' : 'max-w-3xl mx-auto py-6 px-4']">
-    <h2 class="text-xl font-bold text-slate-800 mb-2">지점 정보</h2>
+    <h2 v-if="!embedded" class="text-xl font-bold text-slate-800 mb-2">지점 정보</h2>
     <p v-if="!branchData" class="text-sm text-slate-400 mb-6">지점을 선택하면 보유장비, 이벤트, 민원을 한눈에 확인합니다.</p>
 
     <!-- Branch selector (when no branch selected) -->
@@ -94,28 +98,19 @@ onMounted(loadBranches)
       </div>
 
       <!-- 카드 그리드 -->
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
         <div
           v-for="b in filteredBranches" :key="b.branch_id"
           @click="selectBranch(b.branch_id)"
-          class="p-4 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-blue-400 hover:shadow-sm transition group"
+          class="p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-blue-400 hover:shadow-sm transition group"
         >
-          <div class="font-semibold text-slate-800 text-sm mb-3 group-hover:text-blue-600 transition">
+          <p class="text-sm font-semibold text-slate-700 group-hover:text-blue-600 transition truncate mb-1">
             {{ b.branch_name }}
-          </div>
-          <div class="flex gap-4 text-xs">
-            <div class="text-center">
-              <div class="text-base font-bold text-blue-600">{{ b.equipment_count }}</div>
-              <div class="text-slate-400">장비</div>
-            </div>
-            <div class="text-center">
-              <div class="text-base font-bold text-purple-600">{{ b.event_count }}</div>
-              <div class="text-slate-400">이벤트</div>
-            </div>
-            <div v-if="b.open_complaints" class="text-center">
-              <div class="text-base font-bold text-orange-500">{{ b.open_complaints }}</div>
-              <div class="text-orange-400">민원</div>
-            </div>
+          </p>
+          <div class="flex gap-2 flex-wrap">
+            <span class="text-xs text-blue-500">장비 {{ b.equipment_count }}</span>
+            <span class="text-xs text-purple-500">이벤트 {{ b.event_count }}</span>
+            <span v-if="b.open_complaints" class="text-xs text-orange-500">민원 {{ b.open_complaints }}</span>
           </div>
         </div>
       </div>

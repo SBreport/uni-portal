@@ -161,6 +161,11 @@ const midalBranches = computed(() =>
   data.value?.branches.filter(b => b.status === '미달') ?? []
 )
 
+const allFailed = computed(() => {
+  if (!data.value?.branches.length) return false
+  return data.value.branches.every((b: BranchRanking) => b.status === 'fail')
+})
+
 // 실행사별 성과 집계
 interface AgencyStat {
   name: string
@@ -333,6 +338,15 @@ onMounted(async () => {
     </div>
 
     <template v-else-if="data">
+      <!-- ─── 전체 실패: 중앙 안내 오버레이 ─── -->
+      <div v-if="allFailed" class="flex flex-col items-center justify-center flex-1">
+        <div class="text-center">
+          <p class="text-lg font-semibold text-slate-600 mb-1">금일 데이터는 아직 갱신되지 않았습니다</p>
+          <p class="text-sm text-slate-400">다른 날짜를 선택하여 이전 데이터를 확인할 수 있습니다</p>
+        </div>
+      </div>
+
+      <template v-else>
       <!-- ─── ROW 2: 실패 · 미달 태그 ─── -->
       <div class="px-5 pb-1.5 shrink-0">
         <div class="bg-white border border-slate-200 rounded-lg px-3 py-2">
@@ -531,6 +545,7 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+      </template>
     </template>
   </div>
 </template>

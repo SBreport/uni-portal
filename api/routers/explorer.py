@@ -5,6 +5,7 @@ FK 기반 조인으로 완전한 연결 데이터 반환.
 """
 
 import json
+from datetime import date as date_mod
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Query
 
@@ -161,74 +162,185 @@ async def explore_by_branch(
                         "pending": totals["pending"] or 0,
                     }
 
-        # ── 플레이스 키워드 최신 날짜 (evt_branch_id FK) ──
+        # ── 플레이스 키워드 최신 날짜 (evt_branch_id FK → branch_id → branch_name 폴백) ──
         place_keywords: list[dict] = []
-        place_latest = conn.execute("""
-            SELECT MAX(date) AS latest_date
-            FROM place_daily
-            WHERE evt_branch_id = ?
-        """, (branch_id,)).fetchone()
-        if place_latest and place_latest["latest_date"]:
-            pk_rows = conn.execute("""
-                SELECT keyword, rank, is_exposed
-                FROM place_daily
-                WHERE evt_branch_id = ? AND date = ?
-                ORDER BY rank
-            """, (branch_id, place_latest["latest_date"])).fetchall()
-            # 5위 밖인 키워드: 가장 최근 5위 이내였던 날짜 추가
+
+        def _fetch_place_keywords(conn, where_col: str, where_val, top5_col: str) -> tuple[list[dict], str | None]:
+            """주어진 컬럼·값으로 place_daily 최신 날짜 키워드 조회 + last_top5_date 첨부.
+            Returns (keywords, latest_date)."""
+            latest = conn.execute(
+                f"SELECT MAX(date) AS latest_date FROM place_daily WHERE {where_col} = ?",
+                (where_val,)
+            ).fetchone()
+            if not (latest and latest["latest_date"]):
+                return [], None
+            pk_rows = conn.execute(
+                f"""SELECT keyword, rank, is_exposed
+                    FROM place_daily
+                    WHERE {where_col} = ? AND date = ?
+                    ORDER BY is_exposed DESC, rank ASC""",
+                (where_val, latest["latest_date"])
+            ).fetchall()
+            result = []
             for r in pk_rows:
                 d = dict(r)
                 if not d["rank"] or d["rank"] > 5:
-                    last_top5 = conn.execute("""
-                        SELECT MAX(date) AS d FROM place_daily
-                        WHERE evt_branch_id = ? AND keyword = ? AND rank > 0 AND rank <= 5
-                    """, (branch_id, d["keyword"])).fetchone()
+                    last_top5 = conn.execute(
+                        f"""SELECT MAX(date) AS d FROM place_daily
+                            WHERE {top5_col} = ? AND keyword = ? AND rank > 0 AND rank <= 5""",
+                        (where_val, d["keyword"])
+                    ).fetchone()
                     d["last_top5_date"] = last_top5["d"] if last_top5 else None
                 else:
                     d["last_top5_date"] = None
-                place_keywords.append(d)
-        else:
+                result.append(d)
+            return result, latest["latest_date"]
+
+        # 1차: evt_branch_id
+        place_keywords, place_latest_date = _fetch_place_keywords(conn, "evt_branch_id", branch_id, "evt_branch_id")
+        # 2차 폴백: branch_id
+        if not place_keywords:
+            place_keywords, place_latest_date = _fetch_place_keywords(conn, "branch_id", branch_id, "branch_id")
+        # 3차 폴백: branch_name LIKE short_name
+        if not place_keywords:
+            short = branch_dict.get("short_name") or branch_dict["name"].replace("점", "")
+            like_pat = f"%{short}%"
             place_latest_fb = conn.execute("""
-                SELECT MAX(date) AS latest_date
-                FROM place_daily WHERE branch_id = ?
-            """, (branch_id,)).fetchone()
+                SELECT MAX(date) AS latest_date FROM place_daily
+                WHERE branch_name LIKE ?
+            """, (like_pat,)).fetchone()
             if place_latest_fb and place_latest_fb["latest_date"]:
+                place_latest_date = place_latest_fb["latest_date"]
                 pk_rows = conn.execute("""
                     SELECT keyword, rank, is_exposed
                     FROM place_daily
-                    WHERE branch_id = ? AND date = ?
-                    ORDER BY rank
-                """, (branch_id, place_latest_fb["latest_date"])).fetchall()
-                place_keywords = [dict(r) for r in pk_rows]
+                    WHERE branch_name LIKE ? AND date = ?
+                    ORDER BY is_exposed DESC, rank ASC
+                """, (like_pat, place_latest_date)).fetchall()
+                for r in pk_rows:
+                    d = dict(r)
+                    if not d["rank"] or d["rank"] > 5:
+                        last_top5 = conn.execute("""
+                            SELECT MAX(date) AS d FROM place_daily
+                            WHERE branch_name LIKE ? AND keyword = ? AND rank > 0 AND rank <= 5
+                        """, (like_pat, d["keyword"])).fetchone()
+                        d["last_top5_date"] = last_top5["d"] if last_top5 else None
+                    else:
+                        d["last_top5_date"] = None
+                    place_keywords.append(d)
 
-        # ── 웹페이지 키워드 최신 날짜 (evt_branch_id FK) ──
+        # ── 금일 전부 미노출이면 전일 데이터로 폴백 ──
+        today_str = date_mod.today().isoformat()
+        place_data_date = place_latest_date
+        place_not_updated = False
+
+        if place_keywords and place_latest_date == today_str:
+            all_not_exposed = all(k.get("is_exposed", 0) == 0 for k in place_keywords)
+            if all_not_exposed:
+                # 3단계 중 어느 경로였는지 무관하게, 전일 데이터를 branch_name LIKE로 조회
+                short = branch_dict.get("short_name") or branch_dict["name"].replace("점", "")
+                like_pat = f"%{short}%"
+                prev_date_row = conn.execute("""
+                    SELECT MAX(date) AS prev_date FROM place_daily
+                    WHERE branch_name LIKE ? AND date < ?
+                """, (like_pat, today_str)).fetchone()
+                if prev_date_row and prev_date_row["prev_date"]:
+                    prev_date = prev_date_row["prev_date"]
+                    pk_rows = conn.execute("""
+                        SELECT keyword, rank, is_exposed
+                        FROM place_daily
+                        WHERE branch_name LIKE ? AND date = ?
+                        ORDER BY is_exposed DESC, rank ASC
+                    """, (like_pat, prev_date)).fetchall()
+                    place_keywords_prev = []
+                    for r in pk_rows:
+                        d = dict(r)
+                        if not d["rank"] or d["rank"] > 5:
+                            last_top5 = conn.execute("""
+                                SELECT MAX(date) AS d FROM place_daily
+                                WHERE branch_name LIKE ? AND keyword = ? AND rank > 0 AND rank <= 5
+                            """, (like_pat, d["keyword"])).fetchone()
+                            d["last_top5_date"] = last_top5["d"] if last_top5 else None
+                        else:
+                            d["last_top5_date"] = None
+                        place_keywords_prev.append(d)
+                    if place_keywords_prev:
+                        place_keywords = place_keywords_prev
+                        place_data_date = prev_date
+                else:
+                    place_not_updated = True
+
+        # ── 웹페이지 키워드 최신 날짜 (evt_branch_id FK → branch_id → branch_name 폴백) ──
         webpage_keywords: list[dict] = []
-        web_latest = conn.execute("""
-            SELECT MAX(date) AS latest_date
-            FROM webpage_daily
-            WHERE evt_branch_id = ?
-        """, (branch_id,)).fetchone()
-        if web_latest and web_latest["latest_date"]:
-            wk_rows = conn.execute("""
-                SELECT keyword, rank, is_exposed
-                FROM webpage_daily
-                WHERE evt_branch_id = ? AND date = ?
-                ORDER BY rank
-            """, (branch_id, web_latest["latest_date"])).fetchall()
-            webpage_keywords = [dict(r) for r in wk_rows]
-        else:
+
+        def _fetch_webpage_keywords(conn, where_col: str, where_val) -> tuple[list[dict], str | None]:
+            """주어진 컬럼·값으로 webpage_daily 최신 날짜 키워드 조회.
+            Returns (keywords, latest_date)."""
+            latest = conn.execute(
+                f"SELECT MAX(date) AS latest_date FROM webpage_daily WHERE {where_col} = ?",
+                (where_val,)
+            ).fetchone()
+            if not (latest and latest["latest_date"]):
+                return [], None
+            wk_rows = conn.execute(
+                f"""SELECT keyword, rank, is_exposed
+                    FROM webpage_daily
+                    WHERE {where_col} = ? AND date = ?
+                    ORDER BY is_exposed DESC, rank ASC""",
+                (where_val, latest["latest_date"])
+            ).fetchall()
+            return [dict(r) for r in wk_rows], latest["latest_date"]
+
+        # 1차: evt_branch_id
+        webpage_keywords, webpage_latest_date = _fetch_webpage_keywords(conn, "evt_branch_id", branch_id)
+        # 2차 폴백: branch_id
+        if not webpage_keywords:
+            webpage_keywords, webpage_latest_date = _fetch_webpage_keywords(conn, "branch_id", branch_id)
+        # 3차 폴백: branch_name LIKE short_name
+        if not webpage_keywords:
+            short = branch_dict.get("short_name") or branch_dict["name"].replace("점", "")
+            like_pat = f"%{short}%"
             web_latest_fb = conn.execute("""
-                SELECT MAX(date) AS latest_date
-                FROM webpage_daily WHERE branch_id = ?
-            """, (branch_id,)).fetchone()
+                SELECT MAX(date) AS latest_date FROM webpage_daily
+                WHERE branch_name LIKE ?
+            """, (like_pat,)).fetchone()
             if web_latest_fb and web_latest_fb["latest_date"]:
+                webpage_latest_date = web_latest_fb["latest_date"]
                 wk_rows = conn.execute("""
                     SELECT keyword, rank, is_exposed
                     FROM webpage_daily
-                    WHERE branch_id = ? AND date = ?
-                    ORDER BY rank
-                """, (branch_id, web_latest_fb["latest_date"])).fetchall()
+                    WHERE branch_name LIKE ? AND date = ?
+                    ORDER BY is_exposed DESC, rank ASC
+                """, (like_pat, webpage_latest_date)).fetchall()
                 webpage_keywords = [dict(r) for r in wk_rows]
+
+        # ── 금일 전부 미노출이면 전일 데이터로 폴백 ──
+        webpage_data_date = webpage_latest_date
+        webpage_not_updated = False
+
+        if webpage_keywords and webpage_latest_date == today_str:
+            all_not_exposed_web = all(k.get("is_exposed", 0) == 0 for k in webpage_keywords)
+            if all_not_exposed_web:
+                short = branch_dict.get("short_name") or branch_dict["name"].replace("점", "")
+                like_pat = f"%{short}%"
+                prev_date_row_web = conn.execute("""
+                    SELECT MAX(date) AS prev_date FROM webpage_daily
+                    WHERE branch_name LIKE ? AND date < ?
+                """, (like_pat, today_str)).fetchone()
+                if prev_date_row_web and prev_date_row_web["prev_date"]:
+                    prev_date_web = prev_date_row_web["prev_date"]
+                    wk_rows = conn.execute("""
+                        SELECT keyword, rank, is_exposed
+                        FROM webpage_daily
+                        WHERE branch_name LIKE ? AND date = ?
+                        ORDER BY is_exposed DESC, rank ASC
+                    """, (like_pat, prev_date_web)).fetchall()
+                    webpage_keywords_prev = [dict(r) for r in wk_rows]
+                    if webpage_keywords_prev:
+                        webpage_keywords = webpage_keywords_prev
+                        webpage_data_date = prev_date_web
+                else:
+                    webpage_not_updated = True
 
         # ── 열린 민원 수 ──
         complaints_open = conn.execute("""
@@ -253,7 +365,11 @@ async def explore_by_branch(
             "recent_blogs": recent_blogs,
             "cafe_summary": cafe_summary,
             "place_keywords": place_keywords,
+            "place_data_date": place_data_date,
+            "place_not_updated": place_not_updated,
             "webpage_keywords": webpage_keywords,
+            "webpage_data_date": webpage_data_date,
+            "webpage_not_updated": webpage_not_updated,
             "place_rank": _rank_summary(place_keywords),
             "webpage_rank": _rank_summary(webpage_keywords),
             "complaints_open": complaints_open,

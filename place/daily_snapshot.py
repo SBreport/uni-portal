@@ -26,17 +26,18 @@ def take_snapshot():
         ).fetchone()
         last_date_str = row["last_date"] if row and row["last_date"] else None
 
+        # 최근 3일은 항상 재갱신 (원본 시트 수정분 반영)
+        REFRESH_DAYS = 3
+        refresh_start = today - timedelta(days=REFRESH_DAYS - 1)
+
         if last_date_str:
             last_date = date.fromisoformat(last_date_str)
-            # 마지막 날짜의 다음 날부터 오늘까지
-            start_date = last_date + timedelta(days=1)
+            # 마지막 날짜의 다음 날 vs 최근 3일 중 더 이른 날짜
+            incremental_start = last_date + timedelta(days=1)
+            start_date = min(incremental_start, refresh_start)
         else:
             # 데이터 없으면 이번 달 1일부터
             start_date = today.replace(day=1)
-
-        if start_date > today:
-            logger.info(f"[place_snapshot] 이미 최신 ({last_date_str}까지 존재)")
-            return {"ok": True, "message": "이미 최신", "date": last_date_str, "count": 0}
 
         # 갱신할 날짜 범위
         missing_days = []

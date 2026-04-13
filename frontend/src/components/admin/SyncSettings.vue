@@ -189,6 +189,80 @@ async function saveAgencyMapHandler() {
 }
 
 onMounted(() => { loadAgencyMaps() })
+
+// ── 실행사 매핑 신규 computed / methods ──────────────────────────
+
+// 현재 양쪽 탭에서 사용 중인 실행사 이름 목록
+const agencyNames = computed(() => {
+  const names = new Set<string>()
+  for (const map of [agencyMaps.value.place, agencyMaps.value.webpage]) {
+    for (const v of Object.values(map)) {
+      if (v?.trim()) names.add(v.trim())
+    }
+  }
+  // 직접 추가한 이름도 포함
+  if (newAgencyName.value.trim()) names.add(newAgencyName.value.trim())
+  return [...names].sort()
+})
+
+// 현재 탭의 실행사별 그룹
+const agencyGroups = computed(() => {
+  const map = currentAgencyMap.value
+  const groups: Record<string, string[]> = {}
+  const unassigned: string[] = []
+
+  const allBranches = Object.keys(map).sort()
+
+  for (const branch of allBranches) {
+    const agency = map[branch]?.trim()
+    if (agency) {
+      if (!groups[agency]) groups[agency] = []
+      groups[agency].push(branch)
+    } else {
+      unassigned.push(branch)
+    }
+  }
+
+  return { groups, unassigned }
+})
+
+// 새 실행사 이름 입력
+const newAgencyName = ref('')
+
+function addAgency() {
+  const name = newAgencyName.value.trim()
+  if (!name) return
+  // 이름은 agencyNames computed 에 반영됨 — 실제 저장은 지점 배정 시
+  newAgencyName.value = ''
+}
+
+// 지점을 특정 실행사에 배정
+function assignBranch(branch: string, agency: string) {
+  agencyMaps.value[agencyTab.value][branch] = agency
+  assigningBranch.value = null
+}
+
+// 지점 배정 해제
+function unassignBranch(branch: string) {
+  agencyMaps.value[agencyTab.value][branch] = ''
+}
+
+// 실행사 전체 삭제 (소속 지점 모두 미배정)
+function removeAgency(agencyNameToRemove: string) {
+  const map = agencyMaps.value[agencyTab.value]
+  for (const branch of Object.keys(map)) {
+    if (map[branch]?.trim() === agencyNameToRemove) {
+      map[branch] = ''
+    }
+  }
+}
+
+// 미배정 지점 드롭다운 상태
+const assigningBranch = ref<string | null>(null)
+
+function toggleAssigning(branch: string) {
+  assigningBranch.value = assigningBranch.value === branch ? null : branch
+}
 </script>
 
 <template>
@@ -325,32 +399,137 @@ onMounted(() => { loadAgencyMaps() })
     <div class="space-y-1.5">
     <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">실행사 매핑</div>
     <div class="border border-slate-200 rounded-lg overflow-hidden">
-      <div class="px-4 py-3 bg-slate-50 border-b">
-        <div class="flex justify-between items-center">
-          <div>
-            <div class="text-sm font-semibold text-slate-700">실행사 매핑</div>
-            <div class="text-xs text-slate-400">플레이스/웹페이지 지점별 실행사 배정</div>
-          </div>
-          <div class="flex gap-2">
-            <button @click="agencyTab = 'place'" :class="agencyTab === 'place' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'" class="px-3 py-1 text-xs rounded border">플레이스</button>
-            <button @click="agencyTab = 'webpage'" :class="agencyTab === 'webpage' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'" class="px-3 py-1 text-xs rounded border">웹페이지</button>
-          </div>
+
+      <!-- 헤더: 제목 + 탭 -->
+      <div class="px-4 py-3 bg-slate-50 border-b flex justify-between items-center">
+        <div>
+          <div class="text-sm font-semibold text-slate-700">실행사 매핑</div>
+          <div class="text-xs text-slate-400">플레이스/웹페이지 지점별 실행사 배정</div>
+        </div>
+        <div class="flex gap-2">
+          <button @click="agencyTab = 'place'"
+            :class="agencyTab === 'place' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'"
+            class="px-3 py-1 text-xs rounded border">플레이스</button>
+          <button @click="agencyTab = 'webpage'"
+            :class="agencyTab === 'webpage' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'"
+            class="px-3 py-1 text-xs rounded border">웹페이지</button>
         </div>
       </div>
-      <div class="p-4">
-        <div v-if="Object.keys(currentAgencyMap).length === 0" class="text-xs text-slate-400 py-2">등록된 매핑이 없습니다.</div>
-        <div v-else class="space-y-1 max-h-60 overflow-auto">
-          <div v-for="(agency, branch) in currentAgencyMap" :key="branch"
-            class="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded text-xs">
-            <span class="text-slate-700">{{ branch }}</span>
-            <input v-model="agencyMaps[agencyTab][branch]" class="w-32 px-2 py-1 border rounded text-xs text-right" />
-          </div>
+
+      <div class="p-4 space-y-4">
+
+        <!-- 데이터 없음 안내 -->
+        <div v-if="Object.keys(currentAgencyMap).length === 0"
+          class="text-xs text-slate-400 py-4 text-center">
+          등록된 매핑이 없습니다. 데이터를 먼저 로드해주세요.
         </div>
-        <button @click="saveAgencyMapHandler" :disabled="savingAgency"
-          class="mt-3 px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50">
-          {{ savingAgency ? '저장 중...' : '저장' }}
-        </button>
-        <span v-if="agencySaveMsg" class="ml-2 text-xs" :class="agencySaveError ? 'text-red-500' : 'text-emerald-500'">{{ agencySaveMsg }}</span>
+
+        <template v-else>
+
+          <!-- 새 실행사 추가 -->
+          <div class="flex items-center gap-2 pb-3 border-b border-slate-100">
+            <span class="text-xs text-slate-500 whitespace-nowrap">새 실행사 추가</span>
+            <input
+              v-model="newAgencyName"
+              @keydown.enter="addAgency"
+              placeholder="실행사 이름"
+              class="flex-1 px-2.5 py-1 border border-slate-300 rounded text-xs focus:border-blue-400 focus:outline-none"
+            />
+            <button @click="addAgency"
+              class="px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700 whitespace-nowrap">
+              추가
+            </button>
+          </div>
+
+          <!-- 실행사별 그룹 -->
+          <div class="space-y-3">
+            <div
+              v-for="(branches, agencyName) in agencyGroups.groups"
+              :key="agencyName"
+              class="border-l-2 border-blue-300 pl-3"
+            >
+              <!-- 실행사 헤더 -->
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-xs font-semibold text-slate-700">
+                  {{ agencyName }}
+                  <span class="ml-1 font-normal text-slate-400">({{ branches.length }}개 지점)</span>
+                </span>
+                <button @click="removeAgency(agencyName)"
+                  title="실행사 삭제 (지점 미배정 처리)"
+                  class="text-xs text-slate-400 hover:text-red-500 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors">
+                  −
+                </button>
+              </div>
+              <!-- 지점 칩 -->
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="branch in branches"
+                  :key="branch"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-700 border border-blue-200"
+                >
+                  {{ branch }}
+                  <button @click="unassignBranch(branch)"
+                    class="text-blue-400 hover:text-red-500 leading-none font-bold"
+                    title="배정 해제">×</button>
+                </span>
+              </div>
+            </div>
+
+            <!-- 미배정 섹션 -->
+            <div v-if="agencyGroups.unassigned.length > 0" class="border-l-2 border-amber-300 pl-3">
+              <div class="text-xs font-semibold text-slate-500 mb-1.5">
+                미배정
+                <span class="ml-1 font-normal text-slate-400">({{ agencyGroups.unassigned.length }}개 지점)</span>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <div
+                  v-for="branch in agencyGroups.unassigned"
+                  :key="branch"
+                  class="relative"
+                >
+                  <button
+                    @click="toggleAssigning(branch)"
+                    class="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+                  >
+                    {{ branch }} ▾
+                  </button>
+                  <!-- 실행사 선택 드롭다운 -->
+                  <div
+                    v-if="assigningBranch === branch"
+                    class="absolute top-full left-0 mt-1 z-20 bg-white border border-slate-200 rounded shadow-md py-1 min-w-max"
+                  >
+                    <div v-if="agencyNames.length === 0"
+                      class="px-3 py-1.5 text-xs text-slate-400">
+                      실행사가 없습니다
+                    </div>
+                    <button
+                      v-for="name in agencyNames"
+                      :key="name"
+                      @click="assignBranch(branch, name)"
+                      class="block w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      {{ name }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </template>
+
+        <!-- 저장 버튼 -->
+        <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+          <button @click="saveAgencyMapHandler" :disabled="savingAgency"
+            class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50">
+            {{ savingAgency ? '저장 중...' : '저장' }}
+          </button>
+          <span v-if="agencySaveMsg" class="text-xs"
+            :class="agencySaveError ? 'text-red-500' : 'text-emerald-500'">
+            {{ agencySaveMsg }}
+          </span>
+        </div>
+
       </div>
     </div>
     </div>

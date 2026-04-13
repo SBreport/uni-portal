@@ -56,3 +56,60 @@ def update_agency_map(
         return {"ok": True}
     finally:
         conn.close()
+
+
+@router.get("/agency-sheets")
+async def get_agency_sheets(
+    user: Annotated[dict, Depends(get_current_user)],
+):
+    """실행사별 구글시트 설정 조회.
+
+    Returns: {"애드드림즈": "sheet_id_or_url", ...}
+    """
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = 'agency_sheets_place'"
+        ).fetchone()
+        if row is None:
+            return {}
+        return json.loads(row["value"])
+    finally:
+        conn.close()
+
+
+@router.post("/agency-sheets")
+def update_agency_sheets(
+    body: dict,
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    """실행사별 구글시트 설정 저장 (admin 전용).
+
+    Body: {"data": {"애드드림즈": "sheet_id_or_url", ...}}
+    """
+    import re
+    data = body.get("data", {})
+    # URL에서 시트 ID 추출
+    cleaned = {}
+    for name, val in data.items():
+        name = name.strip()
+        val = val.strip()
+        if not name or not val:
+            continue
+        # Google Sheets URL → ID 추출
+        m = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", val)
+        if m:
+            cleaned[name] = m.group(1)
+        else:
+            cleaned[name] = val  # Already an ID
+
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings(key, value, updated_at) VALUES(?, ?, datetime('now'))",
+            ("agency_sheets_place", json.dumps(cleaned, ensure_ascii=False)),
+        )
+        conn.commit()
+        return {"ok": True, "saved": cleaned}
+    finally:
+        conn.close()

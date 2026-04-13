@@ -23,6 +23,23 @@ AGENCY_SHEETS = {
 }
 
 
+def _get_agency_sheets_from_db() -> dict[str, str]:
+    """DB에서 실행사별 시트 ID 조회. 없으면 하드코딩 폴백."""
+    import json
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = 'agency_sheets_place'"
+        ).fetchone()
+        if row:
+            return json.loads(row["value"])
+        # Fallback to hardcoded
+        return AGENCY_SHEETS
+    finally:
+        conn.close()
+
+
 def list_months() -> list[str]:
     cached = get_cached("place__months__")
     if cached is not None:
@@ -241,7 +258,8 @@ def get_ranking_by_agency(sheet_name: str) -> dict:
     agency_map = {}  # branch_name → agency_name
     all_branches = []  # merged list of all branch data
 
-    for agency_name, sheet_id in AGENCY_SHEETS.items():
+    agency_sheets = _get_agency_sheets_from_db()
+    for agency_name, sheet_id in agency_sheets.items():
         try:
             spreadsheet = client.open_by_key(sheet_id)
             ws = spreadsheet.worksheet(sheet_name)
@@ -297,7 +315,10 @@ def list_months_from_agency() -> list[str]:
 
     client = get_client()
     # Use first agency sheet to get month list (all sheets have same tabs)
-    first_id = next(iter(AGENCY_SHEETS.values()))
+    agency_sheets = _get_agency_sheets_from_db()
+    if not agency_sheets:
+        return []
+    first_id = next(iter(agency_sheets.values()))
     spreadsheet = client.open_by_key(first_id)
     sheets = [ws.title for ws in spreadsheet.worksheets() if ws.title not in SKIP_SHEETS]
     # Filter only parseable month tabs

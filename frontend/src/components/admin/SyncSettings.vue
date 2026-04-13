@@ -4,7 +4,7 @@ import * as equipApi from '@/api/equipment'
 import * as eventsApi from '@/api/events'
 import * as cafeApi from '@/api/cafe'
 import * as blogApi from '@/api/blog'
-import { fetchAgencyMap, saveAgencyMap } from '@/api/branches'
+import { fetchAgencySheets, saveAgencySheets, fetchAgencyMap, saveAgencyMap } from '@/api/branches'
 import { useAsyncAction } from '@/composables/useAsyncAction'
 
 const props = defineProps<{ branches: { id: number; name: string }[] }>()
@@ -188,7 +188,42 @@ async function saveAgencyMapHandler() {
   }
 }
 
-onMounted(() => { loadAgencyMaps() })
+// 실행사 시트 관리
+const agencySheets = ref<Record<string, string>>({})
+const newSheetAgency = ref('')
+const newSheetUrl = ref('')
+const savingSheetsMsg = ref('')
+
+async function loadAgencySheets() {
+  try {
+    agencySheets.value = await fetchAgencySheets()
+  } catch {}
+}
+
+async function saveAgencySheetsHandler() {
+  try {
+    await saveAgencySheets(agencySheets.value)
+    savingSheetsMsg.value = '저장 완료'
+    setTimeout(() => { savingSheetsMsg.value = '' }, 3000)
+  } catch (e: any) {
+    savingSheetsMsg.value = '저장 실패'
+  }
+}
+
+function addSheetEntry() {
+  const name = newSheetAgency.value.trim()
+  const url = newSheetUrl.value.trim()
+  if (!name || !url) return
+  agencySheets.value[name] = url
+  newSheetAgency.value = ''
+  newSheetUrl.value = ''
+}
+
+function removeSheetEntry(name: string) {
+  delete agencySheets.value[name]
+}
+
+onMounted(() => { loadAgencyMaps(); loadAgencySheets() })
 
 // ── 실행사 매핑 신규 computed / methods ──────────────────────────
 
@@ -434,6 +469,38 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside, true
         </div>
 
         <template v-else>
+
+          <!-- 실행사 시트 링크 관리 -->
+          <div class="pb-3 border-b border-slate-100">
+            <p class="text-xs font-semibold text-slate-500 mb-2">실행사별 플레이스 시트</p>
+            <div class="space-y-1.5">
+              <div v-for="(url, name) in agencySheets" :key="name"
+                class="flex items-center gap-2 text-xs">
+                <span class="font-medium text-slate-700 w-20 shrink-0">{{ name }}</span>
+                <input v-model="agencySheets[name]"
+                  class="flex-1 px-2 py-1 border border-slate-200 rounded text-xs text-slate-500 focus:border-blue-400 focus:outline-none"
+                  placeholder="시트 URL 또는 ID" />
+                <button @click="removeSheetEntry(name)"
+                  class="text-slate-400 hover:text-red-500 px-1">×</button>
+              </div>
+            </div>
+            <!-- 새 시트 추가 -->
+            <div class="flex items-center gap-2 mt-2">
+              <input v-model="newSheetAgency" placeholder="실행사명"
+                class="w-20 px-2 py-1 border border-slate-300 rounded text-xs focus:border-blue-400 focus:outline-none" />
+              <input v-model="newSheetUrl" placeholder="Google Sheets URL"
+                @keydown.enter="addSheetEntry"
+                class="flex-1 px-2 py-1 border border-slate-300 rounded text-xs focus:border-blue-400 focus:outline-none" />
+              <button @click="addSheetEntry"
+                class="px-2 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700">추가</button>
+            </div>
+            <!-- 저장 -->
+            <div class="flex items-center gap-2 mt-2">
+              <button @click="saveAgencySheetsHandler"
+                class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">시트 저장</button>
+              <span v-if="savingSheetsMsg" class="text-xs text-emerald-500">{{ savingSheetsMsg }}</span>
+            </div>
+          </div>
 
           <!-- 새 실행사 추가 -->
           <div class="flex items-center gap-2 pb-3 border-b border-slate-100">

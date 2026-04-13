@@ -1100,6 +1100,22 @@ def _seed_agency_maps(conn):
     conn.commit()
     print("실행사 매핑 seed 데이터 삽입 완료")
 
+    # 실행사별 플레이스 시트 ID seed
+    c.execute("SELECT COUNT(*) FROM app_settings WHERE key = 'agency_sheets_place'")
+    if c.fetchone()[0] == 0:
+        agency_sheets = {
+            "애드드림즈": "1j3NELKYDICyENCzAbEiW6g_NgvEs8bxdAfqP1URlhKA",
+            "일프로": "1xBpyiUWvlSvvFqvirFKJwjHzk0vhlIcNHtYIyRUxzqk",
+            "간달프": "14uGBHtMElW99o0V14J5MOsqeIf0mx8DGRBa-sYh7a0Y",
+            "에이치": "1ZOsmK9pI2B8O92v2Mlsdc5AGje02ALBwwpir_ZsvThA",
+        }
+        c.execute(
+            "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)",
+            ("agency_sheets_place", json.dumps(agency_sheets, ensure_ascii=False)),
+        )
+        conn.commit()
+        print("실행사 시트 설정 seed 데이터 삽입 완료")
+
 
 if __name__ == "__main__":
     init_db()

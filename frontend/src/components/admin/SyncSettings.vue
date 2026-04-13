@@ -551,10 +551,10 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside, true
                     {{ branch }}
                     <span class="text-blue-400 text-[10px]">▾</span>
                   </button>
-                  <!-- 실행사 변경 드롭다운 -->
+                  <!-- 실행사 변경 드롭다운 (위쪽으로 열림) -->
                   <div
                     v-if="assigningBranch === branch"
-                    class="absolute top-full left-0 mt-1 z-20 bg-white border border-slate-200 rounded shadow-md py-1 min-w-max"
+                    class="absolute bottom-full left-0 mb-1 z-20 bg-white border border-slate-200 rounded shadow-md py-1 min-w-max"
                   >
                     <button
                       v-for="name in agencyNames.filter(n => n !== agencyName)"
@@ -594,10 +594,10 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside, true
                   >
                     {{ branch }} ▾
                   </button>
-                  <!-- 실행사 선택 드롭다운 -->
+                  <!-- 실행사 선택 드롭다운 (위쪽으로 열림) -->
                   <div
                     v-if="assigningBranch === branch"
-                    class="absolute top-full left-0 mt-1 z-20 bg-white border border-slate-200 rounded shadow-md py-1 min-w-max"
+                    class="absolute bottom-full left-0 mb-1 z-20 bg-white border border-slate-200 rounded shadow-md py-1 min-w-max"
                   >
                     <div v-if="agencyNames.length === 0"
                       class="px-3 py-1.5 text-xs text-slate-400">

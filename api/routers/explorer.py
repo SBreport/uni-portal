@@ -329,11 +329,44 @@ async def explore_by_category(
                 device_ids,
             ).fetchone()["cnt"]
 
+        # ── treatment_body_tags 집계 ──
+        # 해당 카테고리의 evt_items ID 통해 연결
+        tags_query = """
+            SELECT tbt.tag_type, tbt.tag_category, tbt.tag_value, COUNT(*) AS cnt
+            FROM treatment_body_tags tbt
+            JOIN evt_items ei ON tbt.source = 'evt_items' AND tbt.source_id = ei.id
+            WHERE ei.category_id = ?
+            GROUP BY tbt.tag_type, tbt.tag_category, tbt.tag_value
+            ORDER BY cnt DESC
+        """
+        tag_rows = conn.execute(tags_query, (category_id,)).fetchall()
+
+        tags_body_parts: list[dict] = []
+        tags_purposes: list[dict] = []
+        tags_equipment: list[dict] = []
+        tags_materials: list[dict] = []
+
+        for r in tag_rows:
+            item = {"value": r["tag_value"], "category": r["tag_category"], "count": r["cnt"]}
+            tt = r["tag_type"]
+            if tt == "body_part":
+                tags_body_parts.append(item)
+            elif tt == "purpose":
+                tags_purposes.append(item)
+            elif tt == "equipment":
+                tags_equipment.append(item)
+            elif tt == "material":
+                tags_materials.append(item)
+
         return {
             "category": category_dict,
             "events_by_branch": events_by_branch,
             "devices": devices_list,
             "papers_count": papers_count,
+            "tags_body_parts": tags_body_parts,
+            "tags_purposes": tags_purposes,
+            "tags_equipment": tags_equipment,
+            "tags_materials": tags_materials,
         }
     finally:
         conn.close()
@@ -699,7 +732,7 @@ async def explorer_search(
         """, (like, like)).fetchall()
 
         treatments = conn.execute("""
-            SELECT id, name, item_type FROM evt_treatments
+            SELECT id, name, item_type, category_id FROM evt_treatments
             WHERE name LIKE ? OR brand LIKE ?
             LIMIT 10
         """, (like, like)).fetchall()

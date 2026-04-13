@@ -24,7 +24,6 @@ interface BranchRanking {
   today_success: boolean
   streak: number
   status: 'active' | 'fail' | '미달' | 'stopped'
-  month_success_count: number
   work_days: number
   daily: DailyData[]
 }

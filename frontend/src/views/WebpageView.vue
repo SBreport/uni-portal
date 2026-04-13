@@ -20,7 +20,6 @@ interface BranchRanking {
   today_exposed: boolean
   streak: number
   status: 'active' | 'fail' | '미달' | 'stopped'
-  month_exposed_count: number
   work_days: number
   daily: DailyData[]
 }

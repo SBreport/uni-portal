@@ -133,9 +133,18 @@ function blogKeywords(posts: DeviceData['blog_posts']): string[] {
       <p v-if="data.device?.summary" class="text-xs text-slate-600 leading-relaxed">
         {{ data.device.summary }}
       </p>
-      <p v-if="data.device?.target" class="text-xs text-slate-500">
-        <span class="font-medium text-slate-600">적응증:</span> {{ data.device.target }}
-      </p>
+      <div v-if="data.device?.target" class="mb-1">
+        <p class="text-xs font-semibold text-slate-500 mb-1.5">적응증</p>
+        <div class="flex flex-wrap gap-1.5">
+          <span
+            v-for="(t, idx) in data.device.target.split(/[,，·\s]+/).filter((s: string) => s.trim())"
+            :key="idx"
+            class="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs rounded-full border border-emerald-200"
+          >
+            {{ t.trim() }}
+          </span>
+        </div>
+      </div>
       <p v-if="data.device?.mechanism" class="text-xs text-slate-500">
         <span class="font-medium text-slate-600">작용 원리:</span> {{ data.device.mechanism }}
       </p>

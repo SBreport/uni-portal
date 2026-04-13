@@ -189,7 +189,6 @@ async def get_ranking_daily(
                 "today_success": today_exposed,
                 "streak": streak,
                 "nosul_count": month_exposed,
-                "month_success_count": month_exposed,
                 "work_days": month_days,
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "daily": recent,
@@ -270,7 +269,6 @@ async def get_ranking_from_db(
                     break
 
             bdata["nosul_count"] = exposed
-            bdata["month_success_count"] = exposed
             bdata["work_days"] = total
             bdata["streak"] = streak
             bdata["today_rank"] = daily[-1]["rank"] if daily else None

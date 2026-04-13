@@ -18,6 +18,7 @@ onMounted(async () => {
   await branchStore.loadBranches()
   loadDeviceList()
   loadDevicesSummary()
+  loadCategories()
 })
 
 // ── 탭 ──────────────────────────────────────────────────────────────────────
@@ -91,6 +92,17 @@ function goToPaper(id: number) {
   activeTab.value = 'papers'
   closeDropdown()
   clearSearch()
+}
+
+function goToTreatment(categoryId: number) {
+  activeTab.value = 'treatment'
+  closeDropdown()
+  clearSearch()
+  // selectCategory는 같은 ID면 토글하므로, 이미 선택된 카테고리면 데이터 유지
+  if (selectedCategoryId.value === categoryId) {
+    return
+  }
+  selectCategory(categoryId)
 }
 
 const hasAnySearchResult = computed(() => {
@@ -211,24 +223,20 @@ const eventCount = computed(() => {
 })
 
 // ── Tab 2: 시술별 (카테고리별) ───────────────────────────────────────────────
-const CATEGORIES = [
-  { id: 1,  name: '리프팅' },
-  { id: 2,  name: '보톡스' },
-  { id: 3,  name: '필러' },
-  { id: 4,  name: '레이저' },
-  { id: 5,  name: '피부관리' },
-  { id: 6,  name: '실리프팅' },
-  { id: 7,  name: '지방분해' },
-  { id: 8,  name: '체형관리' },
-  { id: 9,  name: '탈모' },
-  { id: 10, name: '여드름' },
-  { id: 11, name: '흉터/모공' },
-  { id: 12, name: '미백/톤업' },
-  { id: 13, name: '눈/코' },
-  { id: 14, name: '안티에이징' },
-  { id: 15, name: '제모' },
-  { id: 16, name: '기타' },
-]
+const categories = ref<Array<{ id: number; name: string; display_name: string; event_count: number }>>([])
+const categoriesLoading = ref(false)
+
+async function loadCategories() {
+  categoriesLoading.value = true
+  try {
+    categories.value = await explorerApi.getCategorySummary()
+  } catch (e) {
+    console.error('[Explorer] 카테고리 로드 실패:', e)
+    categories.value = []
+  } finally {
+    categoriesLoading.value = false
+  }
+}
 
 const selectedCategoryId = ref<number | null>(null)
 const categoryLoading = ref(false)
@@ -255,6 +263,15 @@ async function selectCategory(catId: number) {
 function goToDeviceFromCategory(deviceInfoId: number) {
   expandedDeviceId.value = deviceInfoId
   activeTab.value = 'device'
+}
+
+function goToPapersFromCategory() {
+  // 카테고리에 연결된 첫 번째 장비로 논문 필터 설정
+  const firstDevice = categoryData.value?.devices?.[0]
+  if (firstDevice) {
+    paperDeviceFilter.value = String(firstDevice.device_info_id)
+  }
+  activeTab.value = 'papers'
 }
 
 // ── Tab 3: 장비별 ────────────────────────────────────────────────────────────
@@ -434,6 +451,20 @@ function togglePaper(id: number) {
                 <span v-if="ev.event_price" class="text-xs text-red-500 font-bold">{{ formatPrice(ev.event_price) }}</span>
               </div>
             </div>
+          </template>
+
+          <!-- 시술 -->
+          <template v-if="searchResults.treatments?.length">
+            <p class="px-3 py-1.5 text-xs font-bold text-slate-400 bg-slate-50 sticky top-0">시술</p>
+            <button
+              v-for="t in searchResults.treatments"
+              :key="'tr-'+t.id"
+              @click="goToTreatment(t.category_id)"
+              class="w-full text-left px-4 py-2 hover:bg-blue-50"
+            >
+              <span class="text-sm text-slate-700">{{ t.name }}</span>
+              <span v-if="t.item_type" class="ml-2 text-xs text-slate-400">{{ t.item_type }}</span>
+            </button>
           </template>
 
           <!-- 논문 -->
@@ -888,9 +919,12 @@ function togglePaper(id: number) {
     <div v-else-if="activeTab === 'treatment'">
 
       <!-- 카테고리 카드 그리드 (4열) -->
-      <div class="grid grid-cols-4 gap-3 mb-5">
+      <div v-if="categoriesLoading" class="flex justify-center py-8">
+        <LoadingSpinner message="카테고리 로딩 중..." />
+      </div>
+      <div v-else class="grid grid-cols-4 gap-3 mb-5">
         <button
-          v-for="cat in CATEGORIES"
+          v-for="cat in categories"
           :key="cat.id"
           @click="selectCategory(cat.id)"
           :class="[
@@ -900,7 +934,8 @@ function togglePaper(id: number) {
               : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-slate-50'
           ]"
         >
-          {{ cat.name }}
+          {{ cat.display_name || cat.name }}
+          <span v-if="cat.event_count" class="ml-1 text-xs text-slate-400 font-normal">({{ cat.event_count }})</span>
         </button>
       </div>
 
@@ -912,7 +947,7 @@ function togglePaper(id: number) {
 
         <template v-else-if="categoryData">
           <h3 class="text-sm font-bold text-slate-700 mb-3">
-            {{ CATEGORIES.find(c => c.id === selectedCategoryId)?.name }}
+            {{ categories.find(c => c.id === selectedCategoryId)?.display_name || categories.find(c => c.id === selectedCategoryId)?.name }}
             <span class="text-slate-400 font-normal ml-1">탐색 결과</span>
           </h3>
 
@@ -929,6 +964,51 @@ function togglePaper(id: number) {
               >
                 {{ d.name }}
               </button>
+            </div>
+          </div>
+
+          <!-- 적용 부위 -->
+          <div v-if="categoryData.tags_body_parts?.length" class="mb-4">
+            <p class="text-xs font-semibold text-slate-500 mb-2">적용 부위</p>
+            <div class="flex flex-wrap gap-1.5">
+              <span
+                v-for="tag in categoryData.tags_body_parts.slice(0, 20)"
+                :key="'bp-'+tag.value"
+                class="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs rounded-full border border-emerald-200"
+              >
+                {{ tag.value }}
+                <span class="text-emerald-400 ml-0.5">({{ tag.count }})</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- 시술 목적 -->
+          <div v-if="categoryData.tags_purposes?.length" class="mb-4">
+            <p class="text-xs font-semibold text-slate-500 mb-2">시술 목적</p>
+            <div class="flex flex-wrap gap-1.5">
+              <span
+                v-for="tag in categoryData.tags_purposes.slice(0, 20)"
+                :key="'pp-'+tag.value"
+                class="px-2.5 py-1 bg-amber-50 text-amber-700 text-xs rounded-full border border-amber-200"
+              >
+                {{ tag.value }}
+                <span class="text-amber-400 ml-0.5">({{ tag.count }})</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- 사용 재료 -->
+          <div v-if="categoryData.tags_materials?.length" class="mb-4">
+            <p class="text-xs font-semibold text-slate-500 mb-2">사용 재료</p>
+            <div class="flex flex-wrap gap-1.5">
+              <span
+                v-for="tag in categoryData.tags_materials.slice(0, 15)"
+                :key="'mt-'+tag.value"
+                class="px-2.5 py-1 bg-violet-50 text-violet-700 text-xs rounded-full border border-violet-200"
+              >
+                {{ tag.value }}
+                <span class="text-violet-400 ml-0.5">({{ tag.count }})</span>
+              </span>
             </div>
           </div>
 
@@ -972,7 +1052,7 @@ function togglePaper(id: number) {
             관련 논문
             <span class="font-bold text-purple-600 mx-1">{{ categoryData.papers_count }}</span>건 —
             <button
-              @click="activeTab = 'papers'"
+              @click="goToPapersFromCategory()"
               class="text-blue-600 underline text-xs ml-1"
             >논문 탭에서 보기</button>
           </p>

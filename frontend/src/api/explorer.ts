@@ -32,3 +32,7 @@ export async function getDevicesSummary() {
   const { data } = await api.get('/papers/devices-summary')
   return data
 }
+export async function getCategorySummary() {
+  const { data } = await api.get('/explorer/category-summary')
+  return data
+}

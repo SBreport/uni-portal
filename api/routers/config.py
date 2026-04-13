@@ -176,13 +176,14 @@ async def get_agency_stats(
             branch_data[bname]["total_days"] += r["total_days"]
             branch_data[bname]["exposed_days"] += r["exposed_days"]
 
-        # 연속일 조회 (최신 데이터 기준)
+        # 연속일 조회 — 미작업일(exposed=0, rank=NULL) 건너뛰고 실제 작업일만 카운트
         streak_rows = conn.execute(f"""
             SELECT branch_name, date, is_exposed
             FROM {table}
-            WHERE date >= ? AND date <= ?
+            WHERE date <= ?
+              AND NOT (is_exposed = 0 AND {"(rank IS NULL OR rank = 0)" if type == "place" else "(executor IS NULL OR executor = '')"})
             ORDER BY branch_name, date DESC
-        """, ((today - timedelta(days=60)).isoformat(), today.isoformat())).fetchall()
+        """, (today.isoformat(),)).fetchall()
 
         streaks = {}
         current_branch = None

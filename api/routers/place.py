@@ -132,16 +132,17 @@ async def get_ranking_daily(
             ORDER BY branch_name, date
         """, (range_from, range_to)).fetchall()
 
-        # 진행일수: 작업 시작일부터 총 일수 (전체 기간)
-        work_days_rows = conn.execute("""
+        # 전체 기간 통계: 총진행일 + 총노출(is_exposed=1 카운트)
+        alltime_rows = conn.execute("""
             SELECT branch_name,
                    COUNT(*) AS total_days,
-                   MIN(date) AS first_date
+                   SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS total_exposed
             FROM place_daily
             WHERE date <= ?
             GROUP BY branch_name
         """, (range_to,)).fetchall()
-        work_days_total = {r["branch_name"]: r["total_days"] for r in work_days_rows}
+        work_days_total = {r["branch_name"]: r["total_days"] for r in alltime_rows}
+        total_exposed_map = {r["branch_name"]: r["total_exposed"] for r in alltime_rows}
 
         # AF열 노출일수 조회
         target_year = target.year
@@ -208,8 +209,9 @@ async def get_ranking_daily(
                 "today_rank": today_rank,
                 "today_success": today_exposed,
                 "streak": streak,
-                "nosul_count": nosul_db.get(bname, month_exposed),
-                "work_days": work_days_total.get(bname, month_days),
+                "nosul_count": nosul_db.get(bname, month_exposed),   # 노출일수 (AF열)
+                "total_exposed": total_exposed_map.get(bname, 0),    # 총노출 (전체 이력)
+                "work_days": work_days_total.get(bname, month_days), # 총진행일
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "daily": recent,
             })

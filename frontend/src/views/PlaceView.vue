@@ -20,6 +20,7 @@ interface BranchRanking {
   branch_id: number
   keyword: string
   nosul_count: number
+  total_exposed: number
   today_rank: number | null
   today_success: boolean
   streak: number
@@ -92,7 +93,7 @@ async function toggleBranch(b: BranchRanking) {
 
 // 검색 + 정렬
 const searchQuery = ref('')
-type SortKey = 'branch' | 'keyword' | 'today_rank' | 'streak' | 'nosul_count' | 'work_days' | 'status' | 'agency'
+type SortKey = 'branch' | 'keyword' | 'today_rank' | 'streak' | 'nosul_count' | 'total_exposed' | 'work_days' | 'status' | 'agency'
 const sortKey = ref<SortKey>('nosul_count')
 const sortAsc = ref(false)
 
@@ -132,6 +133,7 @@ const filteredBranches = computed(() => {
       case 'today_rank': av = a.today_rank ?? 999; bv = b.today_rank ?? 999; break
       case 'streak': av = a.streak; bv = b.streak; break
       case 'nosul_count': av = a.nosul_count; bv = b.nosul_count; break
+      case 'total_exposed': av = a.total_exposed; bv = b.total_exposed; break
       case 'work_days': av = a.work_days; bv = b.work_days; break
       case 'agency': av = getAgency(a.branch); bv = getAgency(b.branch); break
       case 'status':
@@ -419,15 +421,16 @@ onMounted(async () => {
                     <th @click="toggleSort('today_rank')" class="th-cell text-center w-[44px]" title="오늘 1~5위 노출 성공 여부 (O/X)">오늘 <span class="sort-icon">{{ sortIcon('today_rank') }}</span></th>
                     <th class="th-cell text-center w-[100px]" title="최근 5일간 일별 성공 여부 (O/X)">최근 5일</th>
                     <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]" title="끊김 없이 연속 성공한 일수">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
-                    <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]" title="시트 AF열 기준 누적 노출일수">총노출 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
-                    <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]" title="작업 시작일부터 현재까지 총 진행일수">진행 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
+                    <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]" title="시트 AF열 기준 당월 노출일수">노출일수 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
+                    <th @click="toggleSort('total_exposed')" class="th-cell text-center w-[36px]" title="전체 이력 중 노출 성공한 총 일수">총노출 <span class="sort-icon">{{ sortIcon('total_exposed') }}</span></th>
+                    <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]" title="작업 시작일부터 현재까지 총 진행일수">총진행일 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
                     <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 실패: 오늘 미노출 / 미달: 데이터 없음">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
                     <th v-if="!isBranch" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]" title="해당 지점 담당 실행사">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="filteredBranches.length === 0">
-                    <td :colspan="isBranch ? 8 : 9" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
+                    <td :colspan="isBranch ? 9 : 10" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
                   <template v-for="b in filteredBranches" :key="b.branch">
                     <tr @click="isEditor && toggleBranch(b)"
@@ -454,6 +457,7 @@ onMounted(async () => {
                         :class="b.nosul_count >= 23 ? 'text-red-500' : b.nosul_count >= 15 ? 'text-amber-500' : 'text-blue-600'">
                         {{ b.nosul_count }}
                       </td>
+                      <td class="py-[5px] text-center text-blue-600 font-medium tabular-nums">{{ b.total_exposed || 0 }}</td>
                       <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
                       <td class="py-[5px] text-center">
                         <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusBadge(b.status).cls">
@@ -464,7 +468,7 @@ onMounted(async () => {
                     </tr>
                     <!-- SB체커 비교 하위 행 -->
                     <tr v-if="expandedBranch === b.branch && isEditor" class="bg-amber-50/50">
-                      <td :colspan="isBranch ? 8 : 9" class="px-3 py-2">
+                      <td :colspan="isBranch ? 9 : 10" class="px-3 py-2">
                         <div v-if="comparisonLoading" class="text-xs text-slate-400 py-2 text-center">비교 데이터 로딩 중...</div>
                         <div v-else-if="comparisonData && comparisonData.comparisons.length > 0">
                           <div class="flex items-center gap-2 mb-1.5">

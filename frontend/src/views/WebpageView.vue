@@ -188,7 +188,7 @@ function statusBadge(status: string): { text: string; cls: string } {
   switch (status) {
     case 'active': return { text: '노출', cls: 'bg-blue-100 text-blue-700' }
     case 'fail': return { text: '미노출', cls: 'bg-red-100 text-red-600' }
-    case '미달': return { text: '미달', cls: 'bg-slate-100 text-slate-500' }
+    case '미달': return { text: '미측정', cls: 'bg-slate-100 text-slate-400' }
     default: return { text: status, cls: 'bg-yellow-100 text-yellow-700' }
   }
 }
@@ -405,7 +405,8 @@ onMounted(async () => {
                     <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap">{{ shortName(b.branch) }}</td>
                     <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
                     <td class="py-[5px] text-center whitespace-nowrap">
-                      <span :class="b.today_exposed ? 'text-blue-600 font-semibold' : 'text-red-400'"
+                      <span v-if="b.status === '미달'" class="text-slate-300">-</span>
+                      <span v-else :class="b.today_exposed ? 'text-blue-600 font-semibold' : 'text-red-400'"
                       >{{ b.today_exposed ? 'O' : 'X' }}</span>
                     </td>
                     <td class="py-[5px] text-center whitespace-nowrap">

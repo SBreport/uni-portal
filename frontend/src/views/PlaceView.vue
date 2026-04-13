@@ -226,7 +226,7 @@ function statusBadge(status: string): { text: string; cls: string } {
   switch (status) {
     case 'active': return { text: '성공', cls: 'bg-blue-100 text-blue-700' }
     case 'fail': return { text: '실패', cls: 'bg-red-100 text-red-600' }
-    case '미달': return { text: '미달', cls: 'bg-slate-100 text-slate-500' }
+    case '미달': return { text: '미측정', cls: 'bg-slate-100 text-slate-400' }
     default: return { text: status, cls: 'bg-yellow-100 text-yellow-700' }
   }
 }
@@ -429,7 +429,7 @@ onMounted(async () => {
                   <tr class="bg-slate-50/95 border-b border-slate-200">
                     <th @click="toggleSort('branch')"   class="th-cell text-left pl-3 pr-2 w-[70px]" title="플레이스 등록 지점명">지점 <span class="sort-icon">{{ sortIcon('branch') }}</span></th>
                     <th @click="toggleSort('keyword')"   class="th-cell text-left px-2 w-[100px]" title="실제 작업 중인 검색 키워드">키워드 <span class="sort-icon">{{ sortIcon('keyword') }}</span></th>
-                    <th @click="toggleSort('today_rank')" class="th-cell text-center w-[44px]" title="오늘 1~5위 노출 성공 여부 (O/X)">오늘 <span class="sort-icon">{{ sortIcon('today_rank') }}</span></th>
+                    <th @click="toggleSort('today_rank')" class="th-cell text-center w-[44px]" title="오늘 측정된 플레이스 순위">오늘 <span class="sort-icon">{{ sortIcon('today_rank') }}</span></th>
                     <th class="th-cell text-center w-[100px]" title="최근 5일간 일별 성공 여부 (O/X)">최근 5일</th>
                     <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]" title="끊김 없이 연속 성공한 일수">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
                     <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]" title="시트 AF열 기준 당월 노출일수">노출일수 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>

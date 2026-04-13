@@ -70,10 +70,80 @@ def find_category_marker(row_text: str) -> str | None:
     return None
 
 
+_NAME_KEYWORDS = {"이벤트명", "시술명", "상품명", "항목", "메뉴명"}
+_REGULAR_KEYWORDS = {"정상가", "원가", "기본가", "정가"}
+_EVENT_KEYWORDS = {"이벤트가", "할인가", "프로모션가", "특가", "최종가"}
+_NOTES_KEYWORDS = {"비고", "참고", "메모", "설명"}
+
+
 def is_header_row(cells: list[str]) -> bool:
-    """헤더 행 여부 판별 (이벤트명/정상가/최종 이벤트가 포함)."""
+    """헤더 행 여부 판별.
+
+    이벤트/시술명 계열 컬럼과 가격 계열 컬럼(정상가 또는 이벤트가)이
+    모두 존재하는 행을 헤더로 인식한다.
+    """
     text = " ".join(cells)
-    return "이벤트명" in text and ("정상가" in text or "이벤트가" in text)
+    has_name_col = any(kw in text for kw in _NAME_KEYWORDS)
+    has_regular_col = any(kw in text for kw in _REGULAR_KEYWORDS)
+    has_event_col = any(kw in text for kw in _EVENT_KEYWORDS)
+    return has_name_col and (has_regular_col or has_event_col)
+
+
+def infer_columns_from_data(row: list[str]) -> dict | None:
+    """데이터 패턴으로 컬럼 위치를 추론하는 폴백 함수.
+
+    텍스트 셀 뒤에 가격처럼 보이는 셀이 1~2개 나타나면
+    첫 텍스트=이름, 첫 가격=정상가, 두 번째 가격=이벤트가로 추정한다.
+    나머지 셀은 비고로 취급한다.
+
+    반환: {"col_name": int, "col_regular": int, "col_event": int, "col_notes": int}
+    또는 패턴 불일치 시 None.
+    """
+    def _is_price_like(val: str) -> bool:
+        parsed = parse_price(val)
+        return parsed is not None and parsed >= 10_000
+
+    stripped = [cell.strip() for cell in row]
+
+    # 첫 번째 비어있지 않은 텍스트 셀 탐색
+    col_name: int | None = None
+    for i, val in enumerate(stripped):
+        if val and not _is_price_like(val):
+            col_name = i
+            break
+
+    if col_name is None:
+        return None
+
+    # 이름 셀 이후 가격 셀들 수집
+    price_cols: list[int] = []
+    for i in range(col_name + 1, len(stripped)):
+        if _is_price_like(stripped[i]):
+            price_cols.append(i)
+        elif stripped[i]:
+            # 가격이 아닌 유의미한 셀이 끼어있으면 중단
+            break
+
+    if not price_cols:
+        return None
+
+    col_regular = price_cols[0]
+    col_event = price_cols[1] if len(price_cols) >= 2 else price_cols[0]
+
+    # 비고: 가격 컬럼들 이후 첫 번째 비어있지 않은 셀
+    last_price_col = price_cols[-1]
+    col_notes = last_price_col + 1  # 기본값 (비어있을 수 있음)
+    for i in range(last_price_col + 1, len(stripped)):
+        if stripped[i]:
+            col_notes = i
+            break
+
+    return {
+        "col_name": col_name,
+        "col_regular": col_regular,
+        "col_event": col_event,
+        "col_notes": col_notes,
+    }
 
 
 def parse_branch_sheet(
@@ -111,19 +181,27 @@ def parse_branch_sheet(
         if is_header_row(row):
             for i, cell in enumerate(row):
                 cell_text = cell.strip()
-                if "이벤트명" in cell_text:
+                if any(kw in cell_text for kw in _NAME_KEYWORDS):
                     col_name = i
-                elif "정상가" in cell_text:
+                elif any(kw in cell_text for kw in _REGULAR_KEYWORDS):
                     col_regular = i
-                elif "이벤트가" in cell_text:
+                elif any(kw in cell_text for kw in _EVENT_KEYWORDS):
                     col_event = i
-                elif "비고" in cell_text:
+                elif any(kw in cell_text for kw in _NOTES_KEYWORDS):
                     col_notes = i
             header_found = True
             continue
 
         if not header_found:
-            continue
+            inferred = infer_columns_from_data(row)
+            if inferred:
+                col_name = inferred["col_name"]
+                col_regular = inferred["col_regular"]
+                col_event = inferred["col_event"]
+                col_notes = inferred["col_notes"]
+                header_found = True
+            else:
+                continue
 
         if "이벤트" in full_text and "월" in full_text and len(row[0].strip()) <= 3:
             continue
@@ -162,3 +240,16 @@ def parse_branch_sheet(
         ))
 
     return events
+
+
+def validate_parsed_events(events: list[ParsedEvent]) -> list[dict]:
+    """임포트 결과 검증. 이상치 목록을 반환."""
+    issues = []
+    for e in events:
+        if e.regular_price and e.regular_price < 1000:
+            issues.append({"event": e.display_name, "issue": f"정상가 이상 ({e.regular_price}원)"})
+        if e.regular_price and e.event_price and e.event_price > e.regular_price:
+            issues.append({"event": e.display_name, "issue": f"이벤트가({e.event_price}) > 정상가({e.regular_price})"})
+        if e.event_price and e.event_price < 1000:
+            issues.append({"event": e.display_name, "issue": f"이벤트가 이상 ({e.event_price}원)"})
+    return issues

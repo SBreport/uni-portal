@@ -36,7 +36,7 @@ def run_event_sync(year: int, start_month: int, end_month: int) -> dict:
     except ImportError:
         return {"processed": 0, "total_items": 0, "errors": ["gspread/google-auth 패키지가 설치되지 않았습니다."]}
 
-    from events.parser import parse_branch_sheet
+    from events.parser import parse_branch_sheet, validate_parsed_events
     from events.normalizer import CategoryNormalizer, ComponentParser
     from events.validators import validate_events
     from events.db import (
@@ -117,6 +117,10 @@ def run_event_sync(year: int, start_month: int, end_month: int) -> dict:
                 continue
 
             validation = validate_events(events, tab_name)
+            parse_issues = validate_parsed_events(events)
+            if parse_issues:
+                for issue in parse_issues:
+                    errors.append(f"{tab_name}: {issue['event']} — {issue['issue']}")
 
             count = insert_events(
                 conn, events, period_id, branch_id,
@@ -158,7 +162,7 @@ def _extract_sheet_id(url: str):
 
 def _process_branch_data(branch_data: dict, year: int, start_month: int, end_month: int, source_url: str = "") -> dict:
     """공통 처리 로직: 지점별 raw 데이터 → DB 저장."""
-    from events.parser import parse_branch_sheet
+    from events.parser import parse_branch_sheet, validate_parsed_events
     from events.normalizer import CategoryNormalizer, ComponentParser
     from events.db import (
         ensure_period,
@@ -192,6 +196,11 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
             events = parse_branch_sheet(rows, tab_name)
             if not events:
                 continue
+
+            parse_issues = validate_parsed_events(events)
+            if parse_issues:
+                for issue in parse_issues:
+                    errors.append(f"{tab_name}: {issue['event']} — {issue['issue']}")
 
             count = insert_events(
                 conn, events, period_id, branch_id,

@@ -276,6 +276,8 @@ interface FlatBranch {
   agency: string
   rate: number
   streak: number
+  total_days: number
+  exposed_days: number
   monthly: Record<string, { total: number; exposed: number; rate: number }>
   monthly_agency: Record<string, string>
 }
@@ -284,7 +286,7 @@ const flatBranches = computed<FlatBranch[]>(() => {
   const list: FlatBranch[] = []
   for (const a of filteredAgencies.value) {
     for (const b of a.branches) {
-      list.push({ branch: b.branch, agency: a.agency, rate: b.rate, streak: b.streak, monthly: b.monthly, monthly_agency: b.monthly_agency || {} })
+      list.push({ branch: b.branch, agency: a.agency, rate: b.rate, streak: b.streak, total_days: b.total_days, exposed_days: b.exposed_days, monthly: b.monthly, monthly_agency: b.monthly_agency || {} })
     }
   }
   // 정렬
@@ -299,6 +301,8 @@ const flatBranches = computed<FlatBranch[]>(() => {
       av = ai === -1 ? 99 : ai; bv = bi === -1 ? 99 : bi
     }
     else if (key === 'rate') { av = a.rate; bv = b.rate }
+    else if (key === 'total_days') { av = a.total_days; bv = b.total_days }
+    else if (key === 'exposed_days') { av = a.exposed_days; bv = b.exposed_days }
     else if (key === 'streak') { av = a.streak; bv = b.streak }
     else { av = a.monthly[key]?.rate ?? -1; bv = b.monthly[key]?.rate ?? -1 }  // month key
     if (av < bv) return desc ? 1 : -1
@@ -535,10 +539,16 @@ onUnmounted(() => {
                   <th v-for="m in allMonths" :key="m" @click="toggleStatsSort(m)" class="text-center px-2 py-2 font-medium text-slate-500 w-16 cursor-pointer hover:text-slate-700">
                     {{ m.split('-')[1] }}월 <span class="text-[10px]">{{ statsSortIcon(m) }}</span>
                   </th>
-                  <th @click="toggleStatsSort('rate')" class="text-center px-2 py-2 font-medium text-slate-500 w-16 cursor-pointer hover:text-slate-700">
+                  <th @click="toggleStatsSort('rate')" class="text-center px-2 py-2 font-medium text-slate-500 w-14 cursor-pointer hover:text-slate-700" title="전체 기간 성공률">
                     전체 <span class="text-[10px]">{{ statsSortIcon('rate') }}</span>
                   </th>
-                  <th @click="toggleStatsSort('streak')" class="text-center px-2 py-2 font-medium text-slate-500 w-12 cursor-pointer hover:text-slate-700">
+                  <th @click="toggleStatsSort('exposed_days')" class="text-center px-2 py-2 font-medium text-slate-500 w-14 cursor-pointer hover:text-slate-700" title="전체 기간 노출 성공 일수">
+                    총노출 <span class="text-[10px]">{{ statsSortIcon('exposed_days') }}</span>
+                  </th>
+                  <th @click="toggleStatsSort('total_days')" class="text-center px-2 py-2 font-medium text-slate-500 w-14 cursor-pointer hover:text-slate-700" title="전체 기간 작업 진행 일수">
+                    총진행 <span class="text-[10px]">{{ statsSortIcon('total_days') }}</span>
+                  </th>
+                  <th @click="toggleStatsSort('streak')" class="text-center px-2 py-2 font-medium text-slate-500 w-12 cursor-pointer hover:text-slate-700" title="연속 노출 일수">
                     연속 <span class="text-[10px]">{{ statsSortIcon('streak') }}</span>
                   </th>
                 </tr>
@@ -569,6 +579,8 @@ onUnmounted(() => {
                     <span v-else class="text-slate-300 text-[11px]">-</span>
                   </td>
                   <td class="text-center py-1.5 font-semibold tabular-nums" :class="b.rate >= 50 ? 'text-blue-600' : 'text-red-500'">{{ b.rate }}%</td>
+                  <td class="text-center py-1.5 text-blue-600 tabular-nums">{{ b.exposed_days }}</td>
+                  <td class="text-center py-1.5 text-slate-400 tabular-nums">{{ b.total_days }}</td>
                   <td class="text-center py-1.5 text-slate-500 tabular-nums">{{ b.streak }}일</td>
                 </tr>
               </tbody>

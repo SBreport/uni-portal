@@ -189,10 +189,20 @@ async function loadStats(type: 'place' | 'webpage') {
   }
 }
 
+// 실행사 카드 정렬 (플레이스 페이지와 동일)
+const AGENCY_ORDER = ['애드드림즈', '일프로', '간달프', '에이치']
+
 const filteredAgencies = computed(() => {
   if (!statsData.value) return []
-  if (!statsFilter.value) return statsData.value.agencies
-  return statsData.value.agencies.filter(a => a.agency === statsFilter.value)
+  let list = statsData.value.agencies
+  if (statsFilter.value) {
+    list = list.filter(a => a.agency === statsFilter.value)
+  }
+  return [...list].sort((a, b) => {
+    const ai = AGENCY_ORDER.indexOf(a.agency)
+    const bi = AGENCY_ORDER.indexOf(b.agency)
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+  })
 })
 
 // All months across all agencies for table headers
@@ -203,6 +213,62 @@ const allMonths = computed(() => {
     for (const m of Object.keys(a.monthly)) months.add(m)
   }
   return [...months].sort()
+})
+
+// 테이블 정렬
+type StatsSortKey = 'branch' | 'agency' | 'rate' | 'streak' | string  // string = month key
+const statsSortKey = ref<StatsSortKey>('agency')
+const statsSortDesc = ref(false)
+
+function toggleStatsSort(key: StatsSortKey) {
+  if (statsSortKey.value === key) {
+    statsSortDesc.value = !statsSortDesc.value
+  } else {
+    statsSortKey.value = key
+    statsSortDesc.value = key !== 'branch' && key !== 'agency'  // 수치는 내림차순 기본
+  }
+}
+
+function statsSortIcon(key: StatsSortKey): string {
+  if (statsSortKey.value !== key) return ''
+  return statsSortDesc.value ? '↓' : '↑'
+}
+
+// 플랫 지점 리스트 (정렬 가능)
+interface FlatBranch {
+  branch: string
+  agency: string
+  rate: number
+  streak: number
+  monthly: Record<string, { total: number; exposed: number; rate: number }>
+}
+
+const flatBranches = computed<FlatBranch[]>(() => {
+  const list: FlatBranch[] = []
+  for (const a of filteredAgencies.value) {
+    for (const b of a.branches) {
+      list.push({ branch: b.branch, agency: a.agency, rate: b.rate, streak: b.streak, monthly: b.monthly })
+    }
+  }
+  // 정렬
+  const key = statsSortKey.value
+  const desc = statsSortDesc.value
+  list.sort((a, b) => {
+    let av: number | string = 0, bv: number | string = 0
+    if (key === 'branch') { av = a.branch; bv = b.branch }
+    else if (key === 'agency') {
+      const ai = AGENCY_ORDER.indexOf(a.agency)
+      const bi = AGENCY_ORDER.indexOf(b.agency)
+      av = ai === -1 ? 99 : ai; bv = bi === -1 ? 99 : bi
+    }
+    else if (key === 'rate') { av = a.rate; bv = b.rate }
+    else if (key === 'streak') { av = a.streak; bv = b.streak }
+    else { av = a.monthly[key]?.rate ?? -1; bv = b.monthly[key]?.rate ?? -1 }  // month key
+    if (av < bv) return desc ? 1 : -1
+    if (av > bv) return desc ? -1 : 1
+    return 0
+  })
+  return list
 })
 
 // ════════════════════════════════════════════
@@ -380,31 +446,39 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- 지점별 상세 테이블 -->
+          <!-- 지점별 상세 테이블 (정렬 가능) -->
           <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
             <table class="w-full text-xs">
               <thead>
-                <tr class="bg-slate-50 border-b">
-                  <th class="text-left pl-3 py-2 font-medium text-slate-500">지점</th>
-                  <th class="text-left px-2 py-2 font-medium text-slate-500">실행사</th>
-                  <th v-for="m in allMonths" :key="m" class="text-center px-2 py-2 font-medium text-slate-500 w-16">{{ m.split('-')[1] }}월</th>
-                  <th class="text-center px-2 py-2 font-medium text-slate-500 w-16">전체</th>
-                  <th class="text-center px-2 py-2 font-medium text-slate-500 w-12">연속</th>
+                <tr class="bg-slate-50 border-b select-none">
+                  <th @click="toggleStatsSort('branch')" class="text-left pl-3 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700">
+                    지점 <span class="text-[10px]">{{ statsSortIcon('branch') }}</span>
+                  </th>
+                  <th @click="toggleStatsSort('agency')" class="text-left px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700">
+                    실행사 <span class="text-[10px]">{{ statsSortIcon('agency') }}</span>
+                  </th>
+                  <th v-for="m in allMonths" :key="m" @click="toggleStatsSort(m)" class="text-center px-2 py-2 font-medium text-slate-500 w-16 cursor-pointer hover:text-slate-700">
+                    {{ m.split('-')[1] }}월 <span class="text-[10px]">{{ statsSortIcon(m) }}</span>
+                  </th>
+                  <th @click="toggleStatsSort('rate')" class="text-center px-2 py-2 font-medium text-slate-500 w-16 cursor-pointer hover:text-slate-700">
+                    전체 <span class="text-[10px]">{{ statsSortIcon('rate') }}</span>
+                  </th>
+                  <th @click="toggleStatsSort('streak')" class="text-center px-2 py-2 font-medium text-slate-500 w-12 cursor-pointer hover:text-slate-700">
+                    연속 <span class="text-[10px]">{{ statsSortIcon('streak') }}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                <template v-for="a in filteredAgencies" :key="a.agency">
-                  <tr v-for="b in a.branches" :key="b.branch" class="border-b border-slate-50 hover:bg-blue-50/30">
-                    <td class="pl-3 py-1.5 text-slate-700">{{ b.branch }}</td>
-                    <td class="px-2 py-1.5 text-slate-400">{{ a.agency }}</td>
-                    <td v-for="m in allMonths" :key="m" class="text-center py-1.5 tabular-nums"
-                      :class="(b.monthly[m]?.rate || 0) >= 80 ? 'text-blue-600 font-medium' : (b.monthly[m]?.rate || 0) >= 50 ? 'text-slate-600' : (b.monthly[m]?.rate || 0) > 0 ? 'text-red-500' : 'text-slate-300'">
-                      {{ b.monthly[m] ? b.monthly[m].rate + '%' : '-' }}
-                    </td>
-                    <td class="text-center py-1.5 font-semibold tabular-nums" :class="b.rate >= 50 ? 'text-blue-600' : 'text-red-500'">{{ b.rate }}%</td>
-                    <td class="text-center py-1.5 text-slate-500 tabular-nums">{{ b.streak }}일</td>
-                  </tr>
-                </template>
+                <tr v-for="b in flatBranches" :key="b.branch" class="border-b border-slate-50 hover:bg-blue-50/30">
+                  <td class="pl-3 py-1.5 text-slate-700">{{ b.branch }}</td>
+                  <td class="px-2 py-1.5 text-slate-400">{{ b.agency }}</td>
+                  <td v-for="m in allMonths" :key="m" class="text-center py-1.5 tabular-nums"
+                    :class="(b.monthly[m]?.rate || 0) >= 80 ? 'text-blue-600 font-medium' : (b.monthly[m]?.rate || 0) >= 50 ? 'text-slate-600' : (b.monthly[m]?.rate || 0) > 0 ? 'text-red-500' : 'text-slate-300'">
+                    {{ b.monthly[m] ? b.monthly[m].rate + '%' : '-' }}
+                  </td>
+                  <td class="text-center py-1.5 font-semibold tabular-nums" :class="b.rate >= 50 ? 'text-blue-600' : 'text-red-500'">{{ b.rate }}%</td>
+                  <td class="text-center py-1.5 text-slate-500 tabular-nums">{{ b.streak }}일</td>
+                </tr>
               </tbody>
             </table>
           </div>

@@ -118,14 +118,19 @@ def update_agency_sheets(
 async def get_agency_stats(
     user: Annotated[dict, Depends(get_current_user)],
     type: Literal["place", "webpage"] = Query("place"),
-    months: int = Query(6, description="최근 N개월"),
+    months: int = Query(6, description="최근 N개월 (date_from 미지정 시 사용)"),
+    date_from: str = Query(None, description="시작일 (YYYY-MM-DD)"),
+    date_to: str = Query(None, description="종료일 (YYYY-MM-DD)"),
 ):
     """실행사별 성과 통계 — 기간별 성공률, 지점별 상세."""
-    from datetime import date, timedelta
+    from datetime import date as date_cls, timedelta
 
-    today = date.today()
-    # 최근 N개월 범위
-    start_date = (today.replace(day=1) - timedelta(days=30 * (months - 1))).replace(day=1)
+    today = date_cls.today()
+    if date_from and date_to:
+        start_date = date_cls.fromisoformat(date_from)
+        today = date_cls.fromisoformat(date_to)
+    else:
+        start_date = (today.replace(day=1) - timedelta(days=30 * (months - 1))).replace(day=1)
 
     table = "place_daily" if type == "place" else "webpage_daily"
     agency_key = f"agency_map_{type}"

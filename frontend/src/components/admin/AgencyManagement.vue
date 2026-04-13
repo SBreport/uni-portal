@@ -176,18 +176,44 @@ interface AgencyStatDetail {
 const statsData = ref<{ agencies: AgencyStatDetail[]; period: string } | null>(null)
 const statsLoading = ref(false)
 const statsMonths = ref(6)
+const statsCustom = ref(false)
+const statsDateFrom = ref('')
+const statsDateTo = ref('')
 const statsFilter = ref('')  // agency filter
 
 async function loadStats(type: 'place' | 'webpage') {
   statsLoading.value = true
   try {
-    const { data } = await api.get('/config/agency-stats', { params: { type, months: statsMonths.value } })
+    const params: Record<string, any> = { type }
+    if (statsCustom.value && statsDateFrom.value && statsDateTo.value) {
+      params.date_from = statsDateFrom.value + '-01'
+      params.date_to = statsDateTo.value + '-28'
+    } else {
+      params.months = statsMonths.value
+    }
+    const { data } = await api.get('/config/agency-stats', { params })
     statsData.value = data
     await loadAgencyHistory(type)
   } catch {
     statsData.value = null
   } finally {
     statsLoading.value = false
+  }
+}
+
+function selectPreset(months: number) {
+  statsCustom.value = false
+  statsMonths.value = months
+  loadStats(subTab.value === 'place-stats' ? 'place' : 'webpage')
+}
+
+function enableCustomRange() {
+  statsCustom.value = true
+  if (!statsDateFrom.value) {
+    const now = new Date()
+    const from = new Date(now.getFullYear(), now.getMonth() - 6, 1)
+    statsDateFrom.value = `${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,'0')}`
+    statsDateTo.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
   }
 }
 
@@ -430,13 +456,24 @@ onUnmounted(() => {
     <div v-if="subTab === 'place-stats' || subTab === 'webpage-stats'">
       <div class="space-y-4">
         <!-- 기간 + 필터 -->
-        <div class="flex items-center gap-3 text-xs">
+        <div class="flex items-center gap-2 text-xs flex-wrap">
           <label class="text-slate-500">기간:</label>
-          <select v-model="statsMonths" @change="loadStats(subTab === 'place-stats' ? 'place' : 'webpage')" class="px-2 py-1 border border-slate-300 rounded text-xs">
-            <option :value="1">최근 1개월</option>
-            <option :value="3">최근 3개월</option>
-            <option :value="6">최근 6개월</option>
-          </select>
+          <div class="flex gap-1">
+            <button v-for="p in [{v:1,l:'1개월'},{v:3,l:'3개월'},{v:6,l:'6개월'},{v:12,l:'1년'}]" :key="p.v"
+              @click="selectPreset(p.v)"
+              :class="!statsCustom && statsMonths === p.v ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:text-slate-700'"
+              class="px-2 py-0.5 rounded border text-[11px]">{{ p.l }}</button>
+            <button @click="enableCustomRange"
+              :class="statsCustom ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:text-slate-700'"
+              class="px-2 py-0.5 rounded border text-[11px]">직접 선택</button>
+          </div>
+          <template v-if="statsCustom">
+            <input type="month" v-model="statsDateFrom" class="px-1.5 py-0.5 border border-slate-300 rounded text-[11px]" />
+            <span class="text-slate-400">~</span>
+            <input type="month" v-model="statsDateTo" class="px-1.5 py-0.5 border border-slate-300 rounded text-[11px]" />
+            <button @click="loadStats(subTab === 'place-stats' ? 'place' : 'webpage')"
+              class="px-2 py-0.5 bg-blue-600 text-white rounded text-[11px]">조회</button>
+          </template>
           <label class="text-slate-500 ml-2">실행사:</label>
           <select v-model="statsFilter" class="px-2 py-1 border border-slate-300 rounded text-xs">
             <option value="">전체</option>

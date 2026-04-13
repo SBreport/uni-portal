@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import * as equipApi from '@/api/equipment'
 import * as eventsApi from '@/api/events'
 import * as cafeApi from '@/api/cafe'
@@ -263,6 +263,15 @@ const assigningBranch = ref<string | null>(null)
 function toggleAssigning(branch: string) {
   assigningBranch.value = assigningBranch.value === branch ? null : branch
 }
+
+// 바깥 클릭 시 드롭다운 닫기
+function handleClickOutside(e: MouseEvent) {
+  if (assigningBranch.value && !(e.target as HTMLElement).closest('[data-agency-dropdown]')) {
+    assigningBranch.value = null
+  }
+}
+onMounted(() => document.addEventListener('click', handleClickOutside, true))
+onUnmounted(() => document.removeEventListener('click', handleClickOutside, true))
 </script>
 
 <template>
@@ -460,18 +469,42 @@ function toggleAssigning(branch: string) {
                   −
                 </button>
               </div>
-              <!-- 지점 칩 -->
+              <!-- 지점 칩 — 클릭 시 실행사 변경 드롭다운 -->
               <div class="flex flex-wrap gap-1">
-                <span
+                <div
                   v-for="branch in branches"
                   :key="branch"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-700 border border-blue-200"
+                  class="relative"
+                  data-agency-dropdown
                 >
-                  {{ branch }}
-                  <button @click="unassignBranch(branch)"
-                    class="text-blue-400 hover:text-red-500 leading-none font-bold"
-                    title="배정 해제">×</button>
-                </span>
+                  <button
+                    @click="toggleAssigning(branch)"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
+                  >
+                    {{ branch }}
+                    <span class="text-blue-400 text-[10px]">▾</span>
+                  </button>
+                  <!-- 실행사 변경 드롭다운 -->
+                  <div
+                    v-if="assigningBranch === branch"
+                    class="absolute top-full left-0 mt-1 z-20 bg-white border border-slate-200 rounded shadow-md py-1 min-w-max"
+                  >
+                    <button
+                      v-for="name in agencyNames.filter(n => n !== agencyName)"
+                      :key="name"
+                      @click="assignBranch(branch, name)"
+                      class="block w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      {{ name }}
+                    </button>
+                    <button
+                      @click="unassignBranch(branch); assigningBranch = null"
+                      class="block w-full text-left px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 border-t border-slate-100"
+                    >
+                      배정 해제
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -486,6 +519,7 @@ function toggleAssigning(branch: string) {
                   v-for="branch in agencyGroups.unassigned"
                   :key="branch"
                   class="relative"
+                  data-agency-dropdown
                 >
                   <button
                     @click="toggleAssigning(branch)"

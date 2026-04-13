@@ -14,6 +14,14 @@ from shared.sheets_base import (
 SPREADSHEET_ID = "1h-Zhxpzz8EVHcxoxO4Z72iHIx9EKwYKppni3CKpeal0"
 SKIP_SHEETS = {"~30 템플릿", "~31 템플릿"}
 
+# 실행사별 시트 ID
+AGENCY_SHEETS = {
+    "애드드림즈": "1j3NELKYDICyENCzAbEiW6g_NgvEs8bxdAfqP1URlhKA",
+    "일프로": "1xBpyiUWvlSvvFqvirFKJwjHzk0vhlIcNHtYIyRUxzqk",
+    "간달프": "14uGBHtMElW99o0V14J5MOsqeIf0mx8DGRBa-sYh7a0Y",
+    "에이치": "1ZOsmK9pI2B8O92v2Mlsdc5AGje02ALBwwpir_ZsvThA",
+}
+
 
 def list_months() -> list[str]:
     cached = get_cached("place__months__")
@@ -225,3 +233,80 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
         "branches": branches,
         "summary": build_summary(branches),
     }
+
+
+def get_ranking_by_agency(sheet_name: str) -> dict:
+    """실행사별 시트에서 순위 데이터 + 실행사 매핑을 동시에 읽어온다."""
+    client = get_client()
+    agency_map = {}  # branch_name → agency_name
+    all_branches = []  # merged list of all branch data
+
+    for agency_name, sheet_id in AGENCY_SHEETS.items():
+        try:
+            spreadsheet = client.open_by_key(sheet_id)
+            ws = spreadsheet.worksheet(sheet_name)
+            values = ws.get_all_values()
+            parsed = _parse_sheet(values, sheet_name)
+
+            # Extract branch→agency mapping from this sheet
+            for b in parsed["branches"]:
+                branch = b["branch"]
+                if "유앤아이" in branch:
+                    agency_map[branch] = agency_name
+
+            all_branches.extend(parsed["branches"])
+        except Exception as e:
+            logger.warning(f"실행사 시트 읽기 실패 ({agency_name}/{sheet_name}): {e}")
+            continue
+
+    # Build merged result using same structure as _parse_sheet return value
+    if not all_branches:
+        return {
+            "agency_map": agency_map,
+            "ranking": {
+                "year": 0,
+                "month": 0,
+                "days": 0,
+                "today_index": 0,
+                "branches": [],
+                "summary": {"total": 0, "success_today": 0, "fail_today": 0, "midal": 0},
+            },
+        }
+
+    # Get year/month from sheet_name
+    year, month = _parse_sheet_name(sheet_name)
+
+    # Rebuild summary from all merged branches
+    merged_result = {
+        "year": year,
+        "month": month,
+        "days": len(all_branches[0].get("daily", [])) if all_branches else 0,
+        "today_index": calc_today_index(year, month, len(all_branches[0].get("daily", [])) if all_branches else 30),
+        "branches": all_branches,
+        "summary": build_summary(all_branches),
+    }
+
+    return {"agency_map": agency_map, "ranking": merged_result}
+
+
+def list_months_from_agency() -> list[str]:
+    """실행사 시트에서 월 목록 조회."""
+    cached = get_cached("place__agency_months__")
+    if cached is not None:
+        return cached
+
+    client = get_client()
+    # Use first agency sheet to get month list (all sheets have same tabs)
+    first_id = next(iter(AGENCY_SHEETS.values()))
+    spreadsheet = client.open_by_key(first_id)
+    sheets = [ws.title for ws in spreadsheet.worksheets() if ws.title not in SKIP_SHEETS]
+    # Filter only parseable month tabs
+    result = []
+    for name in sheets:
+        try:
+            _parse_sheet_name(name)
+            result.append(name)
+        except ValueError:
+            continue
+    set_cached("place__agency_months__", result)
+    return result

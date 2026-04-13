@@ -250,7 +250,14 @@ async function handleSync() {
   error.value = ''
   try {
     const { data: res } = await syncPlaceToDB()
-    alert(`동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved}건 저장`)
+    let msg = `동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved?.toLocaleString()}건 저장`
+    if (res.agency_changes?.length) {
+      msg += `\n\n실행사 변경 ${res.agency_changes.length}건:`
+      for (const c of res.agency_changes) {
+        msg += `\n  ${c.branch}: ${c.from} → ${c.to}`
+      }
+    }
+    alert(msg)
     await loadData()
     await loadLastSync()
   } catch (e: any) {

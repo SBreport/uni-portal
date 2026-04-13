@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { getPlaceRankingDaily, syncPlaceToDB, getPlaceLastSync } from '@/api/place'
 import { getComparison } from '@/api/rankChecker'
+import { fetchAgencyMap } from '@/api/branches'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 const auth = useAuthStore()
@@ -34,29 +35,11 @@ interface PlaceData {
   summary: { total: number; success_today: number; fail_today: number; midal: number }
 }
 
-// ── 실행사 매핑 (지점명 → 실행사) ──
-const AGENCY_MAP: Record<string, string> = {
-  // 애드드림즈 (21개)
-  '광주유앤아이': '애드드림즈', '부천유앤아이': '애드드림즈', '목동유앤아이': '애드드림즈',
-  '광교유앤아이': '애드드림즈', '김포유앤아이': '애드드림즈', '천호유앤아이': '애드드림즈',
-  '건대유앤아이': '애드드림즈', '의정부유앤아이': '애드드림즈', '시흥배곧유앤아이': '애드드림즈',
-  '분당미금유앤아이': '애드드림즈', '인천검단유앤아이': '애드드림즈', '구로유앤아이': '애드드림즈',
-  '잠실유앤아이': '애드드림즈', '광명유앤아이': '애드드림즈', '다산유앤아이': '애드드림즈',
-  '여의도유앤아이': '애드드림즈', '창동유앤아이': '애드드림즈', '왕십리유앤아이': '애드드림즈',
-  '홍대유앤아이': '애드드림즈', '화성봉담유앤아이': '애드드림즈', '경기광주유앤아이': '애드드림즈',
-  // 일프로 (12개)
-  '동탄유앤아이': '일프로', '영등포유앤아이': '일프로', '부산유앤아이': '일프로',
-  '안양유앤아이': '일프로', '일산유앤아이': '일프로', '대전유앤아이': '일프로',
-  '선릉유앤아이': '일프로', '평택유앤아이': '일프로', '창원유앤아이': '일프로',
-  '대구유앤아이': '일프로', '부평유앤아이': '일프로', '명동유앤아이': '일프로',
-  // 간달프 (4개)
-  '안산유앤아이': '간달프', '과천유앤아이': '간달프', '마곡유앤아이': '간달프', '미사유앤아이': '간달프',
-  // 에이치 (4개)
-  '수원유앤아이': '에이치', '천안유앤아이': '에이치', '강남유앤아이': '에이치', '판교유앤아이': '에이치',
-}
+// ── 실행사 매핑 (API에서 로드) ──
+const agencyMap = ref<Record<string, string>>({})
 
 function getAgency(branch: string): string {
-  return AGENCY_MAP[branch] || '-'
+  return agencyMap.value[branch] || '-'
 }
 
 const loading = ref(true)
@@ -110,7 +93,7 @@ async function toggleBranch(b: BranchRanking) {
 
 // 검색 + 정렬
 const searchQuery = ref('')
-type SortKey = 'branch' | 'keyword' | 'today_rank' | 'streak' | 'nosul_count' | 'month_success_count' | 'work_days' | 'status' | 'agency'
+type SortKey = 'branch' | 'keyword' | 'today_rank' | 'streak' | 'nosul_count' | 'work_days' | 'status' | 'agency'
 const sortKey = ref<SortKey>('nosul_count')
 const sortAsc = ref(false)
 
@@ -150,7 +133,6 @@ const filteredBranches = computed(() => {
       case 'today_rank': av = a.today_rank ?? 999; bv = b.today_rank ?? 999; break
       case 'streak': av = a.streak; bv = b.streak; break
       case 'nosul_count': av = a.nosul_count; bv = b.nosul_count; break
-      case 'month_success_count': av = a.month_success_count; bv = b.month_success_count; break
       case 'work_days': av = a.work_days; bv = b.work_days; break
       case 'agency': av = getAgency(a.branch); bv = getAgency(b.branch); break
       case 'status':
@@ -181,7 +163,6 @@ const midalBranches = computed(() =>
 )
 
 // 실행사별 성과 집계
-const AGENCIES = ['애드드림즈', '일프로', '간달프', '에이치'] as const
 interface AgencyStat {
   name: string
   total: number
@@ -192,7 +173,9 @@ interface AgencyStat {
 }
 const agencyStats = computed<AgencyStat[]>(() => {
   if (!data.value) return []
-  return AGENCIES.map(name => {
+  const names = [...new Set(Object.values(agencyMap.value))].filter(Boolean)
+  if (names.length === 0) return []
+  return names.map(name => {
     const branches = data.value!.branches.filter(b => getAgency(b.branch) === name)
     const total = branches.length
     const success = branches.filter(b => b.status === 'active').length
@@ -282,7 +265,14 @@ async function loadLastSync() {
 
 watch(selectedDate, () => loadData())
 
-onMounted(() => { loadData(); loadLastSync() })
+onMounted(async () => {
+  loadData()
+  loadLastSync()
+  try {
+    const data = await fetchAgencyMap('place')
+    agencyMap.value = data
+  } catch {}
+})
 </script>
 
 <template>
@@ -365,8 +355,9 @@ onMounted(() => { loadData(); loadLastSync() })
         </div>
       </div>
 
-      <!-- ─── ROW 3: 실행사 카드 4개 ─── -->
-      <div v-if="!isBranch" class="grid grid-cols-4 gap-2 px-5 pb-1.5 shrink-0">
+      <!-- ─── ROW 3: 실행사 카드 ─── -->
+      <div v-if="!isBranch && agencyStats.length > 0" class="grid gap-2 px-5 pb-1.5 shrink-0"
+        :style="{ gridTemplateColumns: `repeat(${Math.min(agencyStats.length, 4)}, 1fr)` }">
         <div v-for="a in agencyStats" :key="a.name"
           class="bg-white border border-slate-200 rounded-lg px-3 py-2">
           <div class="flex items-center justify-between mb-1.5">
@@ -410,14 +401,13 @@ onMounted(() => { loadData(); loadLastSync() })
                     <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
                     <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]">총노출 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
                     <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]">진행 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
-                    <th @click="toggleSort('month_success_count')" class="th-cell text-center w-[36px]">월성공 <span class="sort-icon">{{ sortIcon('month_success_count') }}</span></th>
                     <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
                     <th v-if="!isBranch" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="filteredBranches.length === 0">
-                    <td :colspan="isBranch ? 9 : 10" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
+                    <td :colspan="isBranch ? 8 : 9" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
                   <template v-for="b in filteredBranches" :key="b.branch">
                     <tr @click="isEditor && toggleBranch(b)"
@@ -445,7 +435,6 @@ onMounted(() => { loadData(); loadLastSync() })
                         {{ b.nosul_count }}
                       </td>
                       <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
-                      <td class="py-[5px] text-center text-slate-500 tabular-nums">{{ b.month_success_count > 0 ? b.month_success_count + '일' : '-' }}</td>
                       <td class="py-[5px] text-center">
                         <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusBadge(b.status).cls">
                           {{ statusBadge(b.status).text }}
@@ -455,7 +444,7 @@ onMounted(() => { loadData(); loadLastSync() })
                     </tr>
                     <!-- SB체커 비교 하위 행 -->
                     <tr v-if="expandedBranch === b.branch && isEditor" class="bg-amber-50/50">
-                      <td :colspan="isBranch ? 9 : 10" class="px-3 py-2">
+                      <td :colspan="isBranch ? 8 : 9" class="px-3 py-2">
                         <div v-if="comparisonLoading" class="text-xs text-slate-400 py-2 text-center">비교 데이터 로딩 중...</div>
                         <div v-else-if="comparisonData && comparisonData.comparisons.length > 0">
                           <div class="flex items-center gap-2 mb-1.5">

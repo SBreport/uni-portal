@@ -4,6 +4,7 @@ import * as equipApi from '@/api/equipment'
 import * as eventsApi from '@/api/events'
 import * as cafeApi from '@/api/cafe'
 import * as blogApi from '@/api/blog'
+import { fetchAgencyMap, saveAgencyMap } from '@/api/branches'
 import { useAsyncAction } from '@/composables/useAsyncAction'
 
 const props = defineProps<{ branches: { id: number; name: string }[] }>()
@@ -152,7 +153,42 @@ async function uploadCred(event: Event) {
   }
 }
 
-onMounted(() => {})
+// 실행사 매핑 관리
+const agencyTab = ref<'place' | 'webpage'>('place')
+const agencyMaps = ref<{ place: Record<string, string>; webpage: Record<string, string> }>({ place: {}, webpage: {} })
+const currentAgencyMap = computed(() => agencyMaps.value[agencyTab.value])
+const savingAgency = ref(false)
+const agencySaveMsg = ref('')
+const agencySaveError = ref(false)
+
+async function loadAgencyMaps() {
+  try {
+    const [place, webpage] = await Promise.all([
+      fetchAgencyMap('place').catch(() => ({})),
+      fetchAgencyMap('webpage').catch(() => ({})),
+    ])
+    agencyMaps.value.place = { ...place }
+    agencyMaps.value.webpage = { ...webpage }
+  } catch {}
+}
+
+async function saveAgencyMapHandler() {
+  savingAgency.value = true
+  agencySaveMsg.value = ''
+  agencySaveError.value = false
+  try {
+    await saveAgencyMap(agencyTab.value, currentAgencyMap.value)
+    agencySaveMsg.value = '저장 완료'
+  } catch (e: any) {
+    agencySaveError.value = true
+    agencySaveMsg.value = e.response?.data?.detail || '저장 실패'
+  } finally {
+    savingAgency.value = false
+    setTimeout(() => { agencySaveMsg.value = '' }, 3000)
+  }
+}
+
+onMounted(() => { loadAgencyMaps() })
 </script>
 
 <template>
@@ -283,6 +319,40 @@ onMounted(() => {})
       </div>
     </div>
 
+    </div>
+
+    <!-- ═══ 실행사 매핑 ═══ -->
+    <div class="space-y-1.5">
+    <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">실행사 매핑</div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden">
+      <div class="px-4 py-3 bg-slate-50 border-b">
+        <div class="flex justify-between items-center">
+          <div>
+            <div class="text-sm font-semibold text-slate-700">실행사 매핑</div>
+            <div class="text-xs text-slate-400">플레이스/웹페이지 지점별 실행사 배정</div>
+          </div>
+          <div class="flex gap-2">
+            <button @click="agencyTab = 'place'" :class="agencyTab === 'place' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'" class="px-3 py-1 text-xs rounded border">플레이스</button>
+            <button @click="agencyTab = 'webpage'" :class="agencyTab === 'webpage' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'" class="px-3 py-1 text-xs rounded border">웹페이지</button>
+          </div>
+        </div>
+      </div>
+      <div class="p-4">
+        <div v-if="Object.keys(currentAgencyMap).length === 0" class="text-xs text-slate-400 py-2">등록된 매핑이 없습니다.</div>
+        <div v-else class="space-y-1 max-h-60 overflow-auto">
+          <div v-for="(agency, branch) in currentAgencyMap" :key="branch"
+            class="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded text-xs">
+            <span class="text-slate-700">{{ branch }}</span>
+            <input v-model="agencyMaps[agencyTab][branch]" class="w-32 px-2 py-1 border rounded text-xs text-right" />
+          </div>
+        </div>
+        <button @click="saveAgencyMapHandler" :disabled="savingAgency"
+          class="mt-3 px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50">
+          {{ savingAgency ? '저장 중...' : '저장' }}
+        </button>
+        <span v-if="agencySaveMsg" class="ml-2 text-xs" :class="agencySaveError ? 'text-red-500' : 'text-emerald-500'">{{ agencySaveMsg }}</span>
+      </div>
+    </div>
     </div>
 
     <!-- ═══ 공통 설정 ═══ -->

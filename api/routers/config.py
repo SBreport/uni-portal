@@ -1,10 +1,10 @@
-"""앱 설정 라우터 — GET /config/agency-map."""
+"""앱 설정 라우터 — GET/POST /config/agency-map."""
 
 import json
 from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.deps import get_current_user
+from api.deps import get_current_user, require_role
 from shared.db import get_conn, EQUIPMENT_DB
 
 router = APIRouter(prefix="/config", tags=["Config"])
@@ -28,5 +28,31 @@ async def get_agency_map(
         if row is None:
             raise HTTPException(status_code=404, detail=f"agency_map_{type} 설정이 없습니다.")
         return json.loads(row["value"])
+    finally:
+        conn.close()
+
+
+@router.post("/agency-map")
+def update_agency_map(
+    body: dict,
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    """실행사 매핑 저장 (admin 전용).
+
+    Body: {"type": "place"|"webpage", "data": {branch: agency, ...}}
+    """
+    map_type = body.get("type")
+    if map_type not in ("place", "webpage"):
+        raise HTTPException(status_code=400, detail="type은 'place' 또는 'webpage'여야 합니다.")
+    data = body.get("data", {})
+    key = f"agency_map_{map_type}"
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings(key, value, updated_at) VALUES(?, ?, datetime('now'))",
+            (key, json.dumps(data, ensure_ascii=False)),
+        )
+        conn.commit()
+        return {"ok": True}
     finally:
         conn.close()

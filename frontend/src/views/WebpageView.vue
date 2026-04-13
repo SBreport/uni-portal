@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { getWebpageRankingDaily, syncWebpageToDB, getWebpageLastSync } from '@/api/webpage'
+import { fetchAgencyMap } from '@/api/branches'
 
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
@@ -30,26 +31,12 @@ interface WebpageData {
   summary: { total: number; success_today: number; fail_today: number; midal: number }
 }
 
-// ── 실행사 매핑 (추후 기입 예정) ──
-const AGENCY_MAP: Record<string, string> = {
-  '유앤아이의원 천호점': '채움AD', '유앤아이의원 광명점': '채움AD', '유앤아이의원 부천점': '채움AD',
-  '유앤아이의원 일산점': '채움AD', '유앤아이의원 다산점': '채움AD', '유앤아이의원 김포점': '채움AD',
-  '유앤아이의원 안양점': '채움AD', '유앤아이의원 안산점': '채움AD', '유앤아이의원 천안점': '채움AD',
-  '유앤아이의원 광주점': '채움AD', '유앤아이의원 대구점': '채움AD', '유앤아이의원 과천점': '채움AD',
-  '유앤아이의원 하남미사점': '채움AD', '유앤아이의원 화성봉담점': '채움AD', '유앤아이의원 동탄점': '채움AD',
-  '유앤아이의원 목동점': '채움AD', '유앤아이의원 강남점': '채움AD', '유앤아이의원 영등포점': '채움AD',
-  '유앤아이의원 대전점': '채움AD', '유앤아이의원 서면점': '채움AD', '유앤아이의원 광교점': '채움AD',
-  '유앤아이의원 수원점': '채움AD', '유앤아이의원 검단점': '채움AD', '유앤아이의원 경기광주점': '채움AD',
-  '유앤아이의원 명동점': '채움AD', '유앤아이의원 목포점': '채움AD', '유앤아이의원 잠실점': '채움AD',
-  '유앤아이의원 의정부점': '채움AD', '유앤아이의원 창원점': '채움AD', '유앤아이의원 평택점': '채움AD',
-  '유앤아이의원 홍대점': '채움AD',
-}
+// ── 실행사 매핑 (API에서 로드) ──
+const agencyMap = ref<Record<string, string>>({})
 
 function getAgency(branch: string): string {
-  return AGENCY_MAP[branch] || '-'
+  return agencyMap.value[branch] || '-'
 }
-
-const AGENCIES: string[] = ['채움AD']
 
 const loading = ref(true)
 const error = ref('')
@@ -75,7 +62,7 @@ const isAdmin = computed(() => auth.role === 'admin')
 
 // 검색 + 정렬
 const searchQuery = ref('')
-type SortKey = 'branch' | 'keyword' | 'today_exposed' | 'streak' | 'month_exposed_count' | 'work_days' | 'nosul_count' | 'status' | 'agency'
+type SortKey = 'branch' | 'keyword' | 'today_exposed' | 'streak' | 'work_days' | 'nosul_count' | 'status' | 'agency'
 const sortKey = ref<SortKey>('nosul_count')
 const sortAsc = ref(false)
 
@@ -115,7 +102,6 @@ const filteredBranches = computed(() => {
       case 'today_exposed': av = a.today_exposed ? 0 : 1; bv = b.today_exposed ? 0 : 1; break
       case 'streak': av = a.streak; bv = b.streak; break
       case 'nosul_count': av = a.nosul_count; bv = b.nosul_count; break
-      case 'month_exposed_count': av = a.month_exposed_count; bv = b.month_exposed_count; break
       case 'work_days': av = a.work_days; bv = b.work_days; break
       case 'agency': av = getAgency(a.branch); bv = getAgency(b.branch); break
       case 'status':
@@ -155,8 +141,10 @@ interface AgencyStat {
   avgNosul: number
 }
 const agencyStats = computed<AgencyStat[]>(() => {
-  if (!data.value || AGENCIES.length === 0) return []
-  return AGENCIES.map(name => {
+  if (!data.value) return []
+  const names = [...new Set(Object.values(agencyMap.value))].filter(Boolean)
+  if (names.length === 0) return []
+  return names.map(name => {
     const branches = data.value!.branches.filter(b => getAgency(b.branch) === name)
     const total = branches.length
     const success = branches.filter(b => b.status === 'active').length
@@ -240,7 +228,14 @@ async function loadLastSync() {
 
 watch(selectedDate, () => loadData())
 
-onMounted(() => { loadData(); loadLastSync() })
+onMounted(async () => {
+  loadData()
+  loadLastSync()
+  try {
+    const data = await fetchAgencyMap('webpage')
+    agencyMap.value = data
+  } catch {}
+})
 </script>
 
 <template>
@@ -367,14 +362,13 @@ onMounted(() => { loadData(); loadLastSync() })
                     <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
                     <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]">총노출 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
                     <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]">진행 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
-                    <th @click="toggleSort('month_exposed_count')" class="th-cell text-center w-[36px]">월성공 <span class="sort-icon">{{ sortIcon('month_exposed_count') }}</span></th>
                     <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
-                    <th v-if="!isBranch && AGENCIES.length > 0" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
+                    <th v-if="!isBranch && agencyStats.length > 0" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="filteredBranches.length === 0">
-                    <td :colspan="isBranch || AGENCIES.length === 0 ? 9 : 10" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
+                    <td :colspan="isBranch || agencyStats.length === 0 ? 8 : 9" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
                   <tr v-for="b in filteredBranches" :key="b.branch"
                     class="border-b border-slate-100 hover:bg-blue-50/30 transition-colors">
@@ -398,13 +392,12 @@ onMounted(() => { loadData(); loadLastSync() })
                       {{ b.nosul_count }}
                     </td>
                     <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
-                    <td class="py-[5px] text-center text-slate-500 tabular-nums">{{ b.month_exposed_count > 0 ? b.month_exposed_count + '일' : '-' }}</td>
                     <td class="py-[5px] text-center">
                       <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusBadge(b.status).cls">
                         {{ statusBadge(b.status).text }}
                       </span>
                     </td>
-                    <td v-if="!isBranch && AGENCIES.length > 0" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
+                    <td v-if="!isBranch && agencyStats.length > 0" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
                   </tr>
                 </tbody>
               </table>

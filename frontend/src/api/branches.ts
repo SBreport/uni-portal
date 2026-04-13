@@ -9,3 +9,7 @@ export async function fetchAgencyMap(type: 'place' | 'webpage'): Promise<Record<
   const { data } = await api.get('/config/agency-map', { params: { type } })
   return data
 }
+
+export async function saveAgencyMap(type: string, data: Record<string, string>) {
+  return api.post('/config/agency-map', { type, data })
+}

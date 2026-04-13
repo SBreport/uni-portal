@@ -383,27 +383,6 @@ onUnmounted(() => {
         <div class="p-4 space-y-4">
           <div v-if="Object.keys(currentAgencyMap).length === 0" class="text-xs text-slate-400 py-4 text-center">등록된 매핑이 없습니다.</div>
           <template v-else>
-            <!-- 시트 링크 -->
-            <div class="pb-3 border-b border-slate-100">
-              <p class="text-xs font-semibold text-slate-500 mb-2">실행사별 시트 링크</p>
-              <div class="space-y-1.5">
-                <div v-for="(url, name) in currentSheets" :key="name" class="flex items-center gap-2 text-xs">
-                  <span class="font-medium text-slate-700 w-20 shrink-0">{{ name }}</span>
-                  <input v-model="agencySheets[agencyTab][name]" class="flex-1 px-2 py-1 border border-slate-200 rounded text-xs text-slate-500 focus:border-blue-400 focus:outline-none" placeholder="시트 URL 또는 ID" />
-                  <button @click="removeSheetEntry(name)" class="text-slate-400 hover:text-red-500 px-1">×</button>
-                </div>
-              </div>
-              <div class="flex items-center gap-2 mt-2">
-                <input v-model="newSheetAgency" placeholder="실행사명" class="w-20 px-2 py-1 border border-slate-300 rounded text-xs focus:border-blue-400 focus:outline-none" />
-                <input v-model="newSheetUrl" placeholder="Google Sheets URL" @keydown.enter="addSheetEntry" class="flex-1 px-2 py-1 border border-slate-300 rounded text-xs focus:border-blue-400 focus:outline-none" />
-                <button @click="addSheetEntry" class="px-2 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700">추가</button>
-              </div>
-              <div class="flex items-center gap-2 mt-2">
-                <button @click="saveAgencySheetsHandler" class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">시트 저장</button>
-                <span v-if="savingSheetsMsg" class="text-xs text-emerald-500">{{ savingSheetsMsg }}</span>
-              </div>
-            </div>
-
             <!-- 새 실행사 추가 -->
             <div class="flex items-center gap-2 pb-3 border-b border-slate-100">
               <span class="text-xs text-slate-500 whitespace-nowrap">새 실행사 추가</span>
@@ -451,6 +430,27 @@ onUnmounted(() => {
           <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
             <button @click="saveAgencyMapHandler" :disabled="savingAgency" class="px-4 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50">{{ savingAgency ? '저장 중...' : '저장' }}</button>
             <span v-if="agencySaveMsg" class="text-xs" :class="agencySaveError ? 'text-red-500' : 'text-emerald-500'">{{ agencySaveMsg }}</span>
+          </div>
+
+          <!-- 시트 링크 (하단 배치) -->
+          <div class="pt-3 border-t border-slate-100">
+            <p class="text-xs font-semibold text-slate-500 mb-2">실행사별 시트 링크</p>
+            <div class="space-y-1.5">
+              <div v-for="(url, name) in currentSheets" :key="name" class="flex items-center gap-2 text-xs">
+                <span class="font-medium text-slate-700 w-20 shrink-0">{{ name }}</span>
+                <input v-model="agencySheets[agencyTab][name]" class="flex-1 px-2 py-1 border border-slate-200 rounded text-xs text-slate-500 focus:border-blue-400 focus:outline-none" placeholder="시트 URL 또는 ID" />
+                <button @click="removeSheetEntry(name)" class="text-slate-400 hover:text-red-500 px-1">×</button>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 mt-2">
+              <input v-model="newSheetAgency" placeholder="실행사명" class="w-20 px-2 py-1 border border-slate-300 rounded text-xs focus:border-blue-400 focus:outline-none" />
+              <input v-model="newSheetUrl" placeholder="Google Sheets URL" @keydown.enter="addSheetEntry" class="flex-1 px-2 py-1 border border-slate-300 rounded text-xs focus:border-blue-400 focus:outline-none" />
+              <button @click="addSheetEntry" class="px-2 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700">추가</button>
+            </div>
+            <div class="flex items-center gap-2 mt-2">
+              <button @click="saveAgencySheetsHandler" class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">시트 저장</button>
+              <span v-if="savingSheetsMsg" class="text-xs text-emerald-500">{{ savingSheetsMsg }}</span>
+            </div>
           </div>
         </div>
       </div>

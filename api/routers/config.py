@@ -233,17 +233,19 @@ async def get_agency_stats(
                 result[m] = agency
             return result
 
-        # 실행사별 집계
+        # 실행사별 집계 — 월별 담당 실행사 기준으로 분배
         agencies = {}
         for bname, bdata in branch_data.items():
-            agency = agency_map.get(bname, "미배정").strip() or "미배정"
-            if agency not in agencies:
-                agencies[agency] = {"branches": [], "total_days": 0, "exposed_days": 0}
+            current_agency = agency_map.get(bname, "미배정").strip() or "미배정"
+            all_m = sorted(bdata["monthly"].keys())
+            monthly_ag = _get_monthly_agency(bname, current_agency, all_m)
+
+            # 현재 실행사 기준으로 branches 목록에는 추가
+            if current_agency not in agencies:
+                agencies[current_agency] = {"branches": [], "total_days": 0, "exposed_days": 0}
 
             rate = round(bdata["exposed_days"] / bdata["total_days"] * 100, 1) if bdata["total_days"] > 0 else 0
-            all_m = sorted(bdata["monthly"].keys())
-            monthly_ag = _get_monthly_agency(bname, agency, all_m)
-            agencies[agency]["branches"].append({
+            agencies[current_agency]["branches"].append({
                 "branch": bname,
                 "total_days": bdata["total_days"],
                 "exposed_days": bdata["exposed_days"],
@@ -252,8 +254,14 @@ async def get_agency_stats(
                 "monthly": bdata["monthly"],
                 "monthly_agency": monthly_ag,
             })
-            agencies[agency]["total_days"] += bdata["total_days"]
-            agencies[agency]["exposed_days"] += bdata["exposed_days"]
+
+            # 실행사 합산은 월별 담당 기준으로 분배
+            for m, mdata in bdata["monthly"].items():
+                responsible = monthly_ag.get(m, current_agency)
+                if responsible not in agencies:
+                    agencies[responsible] = {"branches": [], "total_days": 0, "exposed_days": 0}
+                agencies[responsible]["total_days"] += mdata["total"]
+                agencies[responsible]["exposed_days"] += mdata["exposed"]
 
         # 실행사 요약
         result = []
@@ -261,12 +269,16 @@ async def get_agency_stats(
             rate = round(adata["exposed_days"] / adata["total_days"] * 100, 1) if adata["total_days"] > 0 else 0
             avg_streak = round(sum(b["streak"] for b in adata["branches"]) / len(adata["branches"]), 1) if adata["branches"] else 0
 
-            # 월별 추이
+            # 월별 추이 — 해당 월에 이 실행사가 담당한 지점만 집계
             all_months = sorted(set(m for b in adata["branches"] for m in b["monthly"]))
             monthly_rates = {}
             for m in all_months:
-                m_total = sum(b["monthly"].get(m, {}).get("total", 0) for b in adata["branches"])
-                m_exposed = sum(b["monthly"].get(m, {}).get("exposed", 0) for b in adata["branches"])
+                m_total = 0
+                m_exposed = 0
+                for b in adata["branches"]:
+                    if b.get("monthly_agency", {}).get(m) == agency_name and m in b["monthly"]:
+                        m_total += b["monthly"][m]["total"]
+                        m_exposed += b["monthly"][m]["exposed"]
                 monthly_rates[m] = round(m_exposed / m_total * 100, 1) if m_total > 0 else 0
 
             # 추세 (최근 2개월 비교)

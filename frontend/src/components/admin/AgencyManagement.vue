@@ -526,12 +526,12 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- 지점별 상세 테이블 (정렬 가능) -->
-          <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+          <!-- 지점별 상세 테이블 (정렬 가능, 헤더 고정) -->
+          <div class="bg-white border border-slate-200 rounded-lg overflow-auto max-h-[600px]">
             <table class="w-full text-xs">
               <thead>
-                <tr class="bg-slate-50 border-b select-none">
-                  <th @click="toggleStatsSort('branch')" class="text-left pl-3 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700">
+                <tr class="bg-slate-50 border-b select-none sticky top-0 z-10">
+                  <th @click="toggleStatsSort('branch')" class="text-left pl-3 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700 bg-slate-50">
                     지점 <span class="text-[10px]">{{ statsSortIcon('branch') }}</span>
                   </th>
                   <th @click="toggleStatsSort('agency')" class="text-left px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700">

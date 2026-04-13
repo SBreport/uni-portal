@@ -607,7 +607,7 @@ def init_db():
         rank INTEGER,
         source TEXT DEFAULT 'sheets',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(date, branch_id, keyword)
+        UNIQUE(date, branch_name, keyword)
     )
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_place_daily_date ON place_daily(date)")
@@ -643,7 +643,7 @@ def init_db():
         executor TEXT DEFAULT '',
         source TEXT DEFAULT 'sheets',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(date, branch_id, keyword)
+        UNIQUE(date, branch_name, keyword)
     )
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_webpage_daily_date ON webpage_daily(date)")

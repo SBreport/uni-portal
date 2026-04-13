@@ -190,8 +190,7 @@ async function saveAgencyMapHandler() {
 
 // 실행사 시트 관리
 const agencySheets = ref<{ place: Record<string, string>; webpage: Record<string, string> }>({ place: {}, webpage: {} })
-const sheetTab = ref<'place' | 'webpage'>('place')
-const currentSheets = computed(() => agencySheets.value[sheetTab.value])
+const currentSheets = computed(() => agencySheets.value[agencyTab.value])
 const newSheetAgency = ref('')
 const newSheetUrl = ref('')
 const savingSheetsMsg = ref('')
@@ -209,7 +208,7 @@ async function loadAgencySheets() {
 
 async function saveAgencySheetsHandler() {
   try {
-    await saveAgencySheets(sheetTab.value, currentSheets.value)
+    await saveAgencySheets(agencyTab.value, currentSheets.value)
     savingSheetsMsg.value = '저장 완료'
     setTimeout(() => { savingSheetsMsg.value = '' }, 3000)
   } catch (e: any) {
@@ -221,13 +220,13 @@ function addSheetEntry() {
   const name = newSheetAgency.value.trim()
   const url = newSheetUrl.value.trim()
   if (!name || !url) return
-  agencySheets.value[sheetTab.value][name] = url
+  agencySheets.value[agencyTab.value][name] = url
   newSheetAgency.value = ''
   newSheetUrl.value = ''
 }
 
 function removeSheetEntry(name: string) {
-  delete agencySheets.value[sheetTab.value][name]
+  delete agencySheets.value[agencyTab.value][name]
 }
 
 onMounted(() => { loadAgencyMaps(); loadAgencySheets() })
@@ -479,18 +478,12 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside, true
 
           <!-- 실행사 시트 링크 관리 -->
           <div class="pb-3 border-b border-slate-100">
-            <div class="flex items-center justify-between mb-2">
-              <p class="text-xs font-semibold text-slate-500">실행사별 시트 링크</p>
-              <div class="flex gap-1">
-                <button @click="sheetTab = 'place'" :class="sheetTab === 'place' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500'" class="px-2 py-0.5 text-[10px] rounded border">플레이스</button>
-                <button @click="sheetTab = 'webpage'" :class="sheetTab === 'webpage' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500'" class="px-2 py-0.5 text-[10px] rounded border">웹페이지</button>
-              </div>
-            </div>
+            <p class="text-xs font-semibold text-slate-500 mb-2">실행사별 시트 링크</p>
             <div class="space-y-1.5">
               <div v-for="(url, name) in currentSheets" :key="name"
                 class="flex items-center gap-2 text-xs">
                 <span class="font-medium text-slate-700 w-20 shrink-0">{{ name }}</span>
-                <input v-model="agencySheets[sheetTab][name]"
+                <input v-model="agencySheets[agencyTab][name]"
                   class="flex-1 px-2 py-1 border border-slate-200 rounded text-xs text-slate-500 focus:border-blue-400 focus:outline-none"
                   placeholder="시트 URL 또는 ID" />
                 <button @click="removeSheetEntry(name)"

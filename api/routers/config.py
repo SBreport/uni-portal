@@ -261,3 +261,24 @@ async def get_agency_stats(
         }
     finally:
         conn.close()
+
+
+@router.get("/agency-history")
+async def get_agency_history(
+    user: Annotated[dict, Depends(get_current_user)],
+    type: Literal["place", "webpage"] = Query("place"),
+    branch_name: str = Query(None),
+):
+    """실행사 변경 이력 조회."""
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        query = "SELECT * FROM agency_map_history WHERE map_type = ?"
+        params = [type]
+        if branch_name:
+            query += " AND branch_name = ?"
+            params.append(branch_name)
+        query += " ORDER BY changed_at DESC, branch_name"
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()

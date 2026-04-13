@@ -182,6 +182,7 @@ async function loadStats(type: 'place' | 'webpage') {
   try {
     const { data } = await api.get('/config/agency-stats', { params: { type, months: statsMonths.value } })
     statsData.value = data
+    await loadAgencyHistory(type)
   } catch {
     statsData.value = null
   } finally {
@@ -278,6 +279,31 @@ const flatBranches = computed<FlatBranch[]>(() => {
   })
   return list
 })
+
+// 실행사 변경 이력
+const agencyHistory = ref<{branch_name: string; from_agency: string; to_agency: string; changed_at: string}[]>([])
+
+async function loadAgencyHistory(type: 'place' | 'webpage') {
+  try {
+    const { data } = await api.get('/config/agency-history', { params: { type } })
+    agencyHistory.value = data
+  } catch {
+    agencyHistory.value = []
+  }
+}
+
+// Branch names that have changed agencies
+const changedBranches = computed(() => {
+  const set = new Set<string>()
+  for (const h of agencyHistory.value) set.add(h.branch_name)
+  return set
+})
+
+function getChangeInfo(branch: string): string {
+  const changes = agencyHistory.value.filter(h => h.branch_name === branch)
+  if (changes.length === 0) return ''
+  return changes.map(c => `${c.changed_at}: ${c.from_agency} → ${c.to_agency}`).join('\n')
+}
 
 // ════════════════════════════════════════════
 
@@ -481,7 +507,12 @@ onUnmounted(() => {
               <tbody>
                 <tr v-for="b in flatBranches" :key="b.branch"
                   :class="[agencyColor(b.agency).bg, 'border-b border-slate-100 border-l-2', agencyColor(b.agency).border, 'hover:bg-blue-50/40']">
-                  <td class="pl-3 py-1.5 text-slate-700 font-medium">{{ b.branch }}</td>
+                  <td class="pl-3 py-1.5 text-slate-700 font-medium">
+                    {{ b.branch }}
+                    <span v-if="changedBranches.has(b.branch)"
+                      class="ml-1 text-[9px] text-amber-500 cursor-help"
+                      :title="getChangeInfo(b.branch)">&#9889;변경</span>
+                  </td>
                   <td class="px-2 py-1.5">
                     <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium" :class="agencyColor(b.agency).badge">{{ b.agency }}</span>
                   </td>

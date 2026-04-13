@@ -170,6 +170,14 @@ def sync_all_to_db(max_months: int = 3) -> dict:
                 if old_agency and old_agency != new_agency:
                     agency_changes.append({"branch": branch, "from": old_agency, "to": new_agency})
 
+            # Save agency changes to history table
+            for change in agency_changes:
+                conn.execute("""
+                    INSERT OR IGNORE INTO agency_map_history
+                    (branch_name, map_type, from_agency, to_agency, changed_at, detected_at)
+                    VALUES (?, 'webpage', ?, ?, date('now','localtime'), datetime('now','localtime'))
+                """, (change["branch"], change["from"], change["to"]))
+
             merged_map = {**old_map, **latest_agency_map}
             conn.execute(
                 "INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",

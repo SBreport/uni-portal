@@ -665,6 +665,22 @@ def init_db():
     """)
 
     # ============================================================
+    # 실행사 매핑 변경 이력 (agency_map_history)
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS agency_map_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        branch_name TEXT NOT NULL,
+        map_type TEXT NOT NULL DEFAULT 'place',
+        from_agency TEXT NOT NULL DEFAULT '',
+        to_agency TEXT NOT NULL,
+        changed_at TEXT NOT NULL DEFAULT (date('now','localtime')),
+        detected_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+        UNIQUE(branch_name, map_type, changed_at)
+    )
+    """)
+
+    # ============================================================
     # SB 순위 체크 키워드 (rank_check_keywords)
     # ============================================================
     c.execute("""

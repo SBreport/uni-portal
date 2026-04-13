@@ -184,6 +184,14 @@ def sync_all_to_db(max_months: int = 3) -> dict:
                         "to": new_agency,
                     })
 
+            # Save agency changes to history table
+            for change in agency_changes:
+                conn.execute("""
+                    INSERT OR IGNORE INTO agency_map_history
+                    (branch_name, map_type, from_agency, to_agency, changed_at, detected_at)
+                    VALUES (?, 'place', ?, ?, date('now','localtime'), datetime('now','localtime'))
+                """, (change["branch"], change["from"], change["to"]))
+
             # Merge: preserve branches already in DB that aren't in any agency sheet
             merged_map = {**old_map, **latest_agency_map}
 

@@ -176,14 +176,27 @@ async def get_agency_stats(
             branch_data[bname]["total_days"] += r["total_days"]
             branch_data[bname]["exposed_days"] += r["exposed_days"]
 
-        # 연속일 조회 — 선택 기간 내, 미작업일 건너뛰고 실제 작업일만 카운트
+        # 연속일 조회 — 전체 기간, 미작업일 건너뛰고 실제 작업일만 카운트
         streak_rows = conn.execute(f"""
             SELECT branch_name, date, is_exposed
             FROM {table}
-            WHERE date >= ? AND date <= ?
+            WHERE date <= ?
               AND NOT (is_exposed = 0 AND {"(rank IS NULL OR rank = 0)" if type == "place" else "(executor IS NULL OR executor = '')"})
             ORDER BY branch_name, date DESC
-        """, (start_date.isoformat(), today.isoformat())).fetchall()
+        """, (today.isoformat(),)).fetchall()
+
+        # 총노출/총진행 — 전체 기간
+        alltime_rows = conn.execute(f"""
+            SELECT branch_name,
+                   COUNT(*) AS total_days,
+                   SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS exposed_days
+            FROM {table}
+            WHERE date <= ?
+              {work_filter}
+            GROUP BY branch_name
+        """, (today.isoformat(),)).fetchall()
+        alltime_total = {r["branch_name"]: r["total_days"] for r in alltime_rows}
+        alltime_exposed = {r["branch_name"]: r["exposed_days"] for r in alltime_rows}
 
         streaks = {}
         current_branch = None
@@ -248,10 +261,10 @@ async def get_agency_stats(
             rate = round(bdata["exposed_days"] / bdata["total_days"] * 100, 1) if bdata["total_days"] > 0 else 0
             agencies[current_agency]["branches"].append({
                 "branch": bname,
-                "total_days": bdata["total_days"],
-                "exposed_days": bdata["exposed_days"],
-                "rate": rate,
-                "streak": streaks.get(bname, 0),
+                "total_days": alltime_total.get(bname, bdata["total_days"]),      # 전체 기간
+                "exposed_days": alltime_exposed.get(bname, bdata["exposed_days"]), # 전체 기간
+                "rate": rate,                                                      # 선택 기간 내 성공률
+                "streak": streaks.get(bname, 0),                                   # 전체 기간
                 "monthly": bdata["monthly"],
                 "monthly_agency": monthly_ag,
             })

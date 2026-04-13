@@ -118,7 +118,7 @@ def update_agency_sheets(
 async def get_agency_stats(
     user: Annotated[dict, Depends(get_current_user)],
     type: Literal["place", "webpage"] = Query("place"),
-    months: int = Query(3, description="최근 N개월"),
+    months: int = Query(6, description="최근 N개월"),
 ):
     """실행사별 성과 통계 — 기간별 성공률, 지점별 상세."""
     from datetime import date, timedelta
@@ -137,6 +137,14 @@ async def get_agency_stats(
         agency_map = json.loads(row["value"]) if row else {}
 
         # 기간 내 전체 데이터 집계 (지점별, 월별)
+        # 미작업일/미래 날짜 제외:
+        #   place: rank가 NULL이고 미노출인 행 제외
+        #   webpage: executor가 빈값이고 미노출인 행 제외 (rank 컬럼 항상 NULL)
+        if type == "place":
+            work_filter = "AND NOT (is_exposed = 0 AND (rank IS NULL OR rank = 0))"
+        else:
+            work_filter = "AND NOT (is_exposed = 0 AND (executor IS NULL OR executor = ''))"
+
         rows = conn.execute(f"""
             SELECT branch_name,
                    strftime('%Y-%m', date) AS month,
@@ -144,6 +152,7 @@ async def get_agency_stats(
                    SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS exposed_days
             FROM {table}
             WHERE date >= ? AND date <= ?
+              {work_filter}
             GROUP BY branch_name, strftime('%Y-%m', date)
             ORDER BY branch_name, month
         """, (start_date.isoformat(), today.isoformat())).fetchall()

@@ -174,7 +174,7 @@ interface AgencyStatDetail {
 
 const statsData = ref<{ agencies: AgencyStatDetail[]; period: string } | null>(null)
 const statsLoading = ref(false)
-const statsMonths = ref(3)
+const statsMonths = ref(6)
 const statsFilter = ref('')  // agency filter
 
 async function loadStats(type: 'place' | 'webpage') {

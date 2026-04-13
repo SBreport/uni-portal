@@ -71,22 +71,28 @@ def find_category_marker(row_text: str) -> str | None:
 
 
 _NAME_KEYWORDS = {"이벤트명", "시술명", "상품명", "항목", "메뉴명"}
-_REGULAR_KEYWORDS = {"정상가", "원가", "기본가", "정가"}
-_EVENT_KEYWORDS = {"이벤트가", "할인가", "프로모션가", "특가", "최종가"}
+_REGULAR_KEYWORDS = {"정상"}    # "정상가", "정상 가격" etc.
+_EVENT_PRICE_KEYWORDS = {"이벤트"}  # "이벤트가", "이벤트 제안가", "최종 이벤트가" etc.
 _NOTES_KEYWORDS = {"비고", "참고", "메모", "설명"}
 
 
 def is_header_row(cells: list[str]) -> bool:
-    """헤더 행 여부 판별.
-
-    이벤트/시술명 계열 컬럼과 가격 계열 컬럼(정상가 또는 이벤트가)이
-    모두 존재하는 행을 헤더로 인식한다.
-    """
-    text = " ".join(cells)
-    has_name_col = any(kw in text for kw in _NAME_KEYWORDS)
-    has_regular_col = any(kw in text for kw in _REGULAR_KEYWORDS)
-    has_event_col = any(kw in text for kw in _EVENT_KEYWORDS)
-    return has_name_col and (has_regular_col or has_event_col)
+    """헤더 행 여부 판별 — 셀 단위로 이름 컬럼과 가격 컬럼을 각각 확인."""
+    found_name = False
+    found_price = False
+    for cell in cells:
+        ct = cell.strip()
+        if not ct:
+            continue
+        # 이름 컬럼 체크 (우선순위 높음)
+        if any(kw in ct for kw in _NAME_KEYWORDS):
+            found_name = True
+        elif "정상" in ct:
+            found_price = True
+        elif "이벤트" in ct:
+            # "이벤트"가 포함되지만 이름 키워드가 아닌 셀 → 가격 컬럼
+            found_price = True
+    return found_name and found_price
 
 
 def infer_columns_from_data(row: list[str]) -> dict | None:
@@ -183,12 +189,15 @@ def parse_branch_sheet(
                 cell_text = cell.strip()
                 if any(kw in cell_text for kw in _NAME_KEYWORDS):
                     col_name = i
-                elif any(kw in cell_text for kw in _REGULAR_KEYWORDS):
+                elif "정상" in cell_text:
                     col_regular = i
-                elif any(kw in cell_text for kw in _EVENT_KEYWORDS):
+                elif "이벤트" in cell_text:
                     col_event = i
                 elif any(kw in cell_text for kw in _NOTES_KEYWORDS):
                     col_notes = i
+            # 비고 컬럼 미감지 시 마지막 가격 컬럼 다음으로 설정
+            if col_notes <= max(col_name, col_regular, col_event):
+                col_notes = max(col_name, col_regular, col_event) + 1
             header_found = True
             continue
 
@@ -203,7 +212,9 @@ def parse_branch_sheet(
             else:
                 continue
 
-        if "이벤트" in full_text and "월" in full_text and len(row[0].strip()) <= 3:
+        # 제목 행 건너뛰기 ("3-4월 이벤트" 형태, 이름 셀이 비어있는 경우만)
+        name_cell = row[col_name].strip() if col_name < len(row) else ""
+        if not name_cell and "이벤트" in full_text and "월" in full_text:
             continue
         if "목차로 돌아가기" in full_text:
             continue

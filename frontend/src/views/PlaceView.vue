@@ -414,15 +414,15 @@ onMounted(async () => {
               <table class="w-full text-xs">
                 <thead>
                   <tr class="bg-slate-50/95 border-b border-slate-200">
-                    <th @click="toggleSort('branch')"   class="th-cell text-left pl-3 pr-2 w-[70px]">지점 <span class="sort-icon">{{ sortIcon('branch') }}</span></th>
-                    <th @click="toggleSort('keyword')"   class="th-cell text-left px-2 w-[100px]">키워드 <span class="sort-icon">{{ sortIcon('keyword') }}</span></th>
-                    <th @click="toggleSort('today_rank')" class="th-cell text-center w-[44px]">오늘 <span class="sort-icon">{{ sortIcon('today_rank') }}</span></th>
-                    <th class="th-cell text-center w-[100px]">최근 5일</th>
-                    <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
-                    <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]">총노출 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
-                    <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]">진행 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
-                    <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
-                    <th v-if="!isBranch" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
+                    <th @click="toggleSort('branch')"   class="th-cell text-left pl-3 pr-2 w-[70px]" title="플레이스 등록 지점명">지점 <span class="sort-icon">{{ sortIcon('branch') }}</span></th>
+                    <th @click="toggleSort('keyword')"   class="th-cell text-left px-2 w-[100px]" title="실제 작업 중인 검색 키워드">키워드 <span class="sort-icon">{{ sortIcon('keyword') }}</span></th>
+                    <th @click="toggleSort('today_rank')" class="th-cell text-center w-[44px]" title="오늘 1~5위 노출 성공 여부 (O/X)">오늘 <span class="sort-icon">{{ sortIcon('today_rank') }}</span></th>
+                    <th class="th-cell text-center w-[100px]" title="최근 5일간 일별 성공 여부 (O/X)">최근 5일</th>
+                    <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]" title="끊김 없이 연속 성공한 일수">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
+                    <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]" title="시트 AF열 기준 누적 노출일수">총노출 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
+                    <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]" title="작업 시작일부터 현재까지 총 진행일수">진행 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
+                    <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 실패: 오늘 미노출 / 미달: 데이터 없음">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
+                    <th v-if="!isBranch" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]" title="해당 지점 담당 실행사">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
                   </tr>
                 </thead>
                 <tbody>

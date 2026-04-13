@@ -132,6 +132,17 @@ async def get_ranking_daily(
             ORDER BY branch_name, date
         """, (range_from, range_to)).fetchall()
 
+        # 진행일수: 작업 시작일부터 총 일수 (전체 기간)
+        work_days_rows = conn.execute("""
+            SELECT branch_name,
+                   COUNT(*) AS total_days,
+                   MIN(date) AS first_date
+            FROM place_daily
+            WHERE date <= ?
+            GROUP BY branch_name
+        """, (range_to,)).fetchall()
+        work_days_total = {r["branch_name"]: r["total_days"] for r in work_days_rows}
+
         # AF열 노출일수 조회
         target_year = target.year
         target_month = target.month
@@ -198,7 +209,7 @@ async def get_ranking_daily(
                 "today_success": today_exposed,
                 "streak": streak,
                 "nosul_count": nosul_db.get(bname, month_exposed),
-                "work_days": month_days,
+                "work_days": work_days_total.get(bname, month_days),
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "daily": recent,
             })

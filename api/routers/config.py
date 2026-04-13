@@ -61,15 +61,14 @@ def update_agency_map(
 @router.get("/agency-sheets")
 async def get_agency_sheets(
     user: Annotated[dict, Depends(get_current_user)],
+    type: Literal["place", "webpage"] = Query("place", description="시트 유형"),
 ):
-    """실행사별 구글시트 설정 조회.
-
-    Returns: {"애드드림즈": "sheet_id_or_url", ...}
-    """
+    """실행사별 구글시트 설정 조회."""
+    key = f"agency_sheets_{type}"
     conn = get_conn(EQUIPMENT_DB)
     try:
         row = conn.execute(
-            "SELECT value FROM app_settings WHERE key = 'agency_sheets_place'"
+            "SELECT value FROM app_settings WHERE key = ?", (key,)
         ).fetchone()
         if row is None:
             return {}
@@ -83,11 +82,11 @@ def update_agency_sheets(
     body: dict,
     user: Annotated[dict, Depends(require_role("admin"))],
 ):
-    """실행사별 구글시트 설정 저장 (admin 전용).
-
-    Body: {"data": {"애드드림즈": "sheet_id_or_url", ...}}
-    """
+    """실행사별 구글시트 설정 저장 (admin 전용)."""
     import re
+    map_type = body.get("type", "place")
+    if map_type not in ("place", "webpage"):
+        raise HTTPException(status_code=400, detail="type은 'place' 또는 'webpage'여야 합니다.")
     data = body.get("data", {})
     # URL에서 시트 ID 추출
     cleaned = {}
@@ -96,18 +95,18 @@ def update_agency_sheets(
         val = val.strip()
         if not name or not val:
             continue
-        # Google Sheets URL → ID 추출
         m = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", val)
         if m:
             cleaned[name] = m.group(1)
         else:
-            cleaned[name] = val  # Already an ID
+            cleaned[name] = val
 
+    key = f"agency_sheets_{map_type}"
     conn = get_conn(EQUIPMENT_DB)
     try:
         conn.execute(
             "INSERT OR REPLACE INTO app_settings(key, value, updated_at) VALUES(?, ?, datetime('now'))",
-            ("agency_sheets_place", json.dumps(cleaned, ensure_ascii=False)),
+            (key, json.dumps(cleaned, ensure_ascii=False)),
         )
         conn.commit()
         return {"ok": True, "saved": cleaned}

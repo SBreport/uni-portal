@@ -14,11 +14,11 @@ export async function saveAgencyMap(type: string, data: Record<string, string>) 
   return api.post('/config/agency-map', { type, data })
 }
 
-export async function fetchAgencySheets(): Promise<Record<string, string>> {
-  const { data } = await api.get('/config/agency-sheets')
+export async function fetchAgencySheets(type: 'place' | 'webpage' = 'place'): Promise<Record<string, string>> {
+  const { data } = await api.get('/config/agency-sheets', { params: { type } })
   return data
 }
 
-export async function saveAgencySheets(data: Record<string, string>): Promise<void> {
-  await api.post('/config/agency-sheets', { data })
+export async function saveAgencySheets(type: 'place' | 'webpage', data: Record<string, string>): Promise<void> {
+  await api.post('/config/agency-sheets', { type, data })
 }

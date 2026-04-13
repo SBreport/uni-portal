@@ -365,9 +365,9 @@ onMounted(() => { loadData(); loadLastSync() })
                     <th @click="toggleSort('today_exposed')" class="th-cell text-center w-[44px]">오늘 <span class="sort-icon">{{ sortIcon('today_exposed') }}</span></th>
                     <th class="th-cell text-center w-[100px]">최근 5일</th>
                     <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
-                    <th @click="toggleSort('month_exposed_count')" class="th-cell text-center w-[36px]">총노출 <span class="sort-icon">{{ sortIcon('month_exposed_count') }}</span></th>
+                    <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]">총노출 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
                     <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]">진행 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
-                    <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]">노출 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
+                    <th @click="toggleSort('month_exposed_count')" class="th-cell text-center w-[36px]">월성공 <span class="sort-icon">{{ sortIcon('month_exposed_count') }}</span></th>
                     <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
                     <th v-if="!isBranch && AGENCIES.length > 0" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
                   </tr>
@@ -393,12 +393,12 @@ onMounted(() => { loadData(); loadLastSync() })
                       </span>
                     </td>
                     <td class="py-[5px] text-center text-slate-500 tabular-nums">{{ b.streak > 0 ? b.streak + '일' : '-' }}</td>
-                    <td class="py-[5px] text-center text-blue-500 tabular-nums">{{ b.month_exposed_count > 0 ? b.month_exposed_count + '일' : '-' }}</td>
-                    <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
                     <td class="py-[5px] text-center font-semibold tabular-nums"
-                      :class="b.nosul_count >= 23 ? 'text-red-500' : b.nosul_count >= 15 ? 'text-amber-500' : 'text-slate-600'">
+                      :class="b.nosul_count >= 23 ? 'text-red-500' : b.nosul_count >= 15 ? 'text-amber-500' : 'text-blue-600'">
                       {{ b.nosul_count }}
                     </td>
+                    <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
+                    <td class="py-[5px] text-center text-slate-500 tabular-nums">{{ b.month_exposed_count > 0 ? b.month_exposed_count + '일' : '-' }}</td>
                     <td class="py-[5px] text-center">
                       <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusBadge(b.status).cls">
                         {{ statusBadge(b.status).text }}

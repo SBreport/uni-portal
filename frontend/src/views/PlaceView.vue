@@ -176,6 +176,7 @@ interface AgencyStat {
   fail: number
   midal: number
   avgNosul: number
+  notUpdated: boolean
 }
 const agencyStats = computed<AgencyStat[]>(() => {
   if (!data.value) return []
@@ -188,7 +189,9 @@ const agencyStats = computed<AgencyStat[]>(() => {
     const midal = branches.filter(b => b.status === '미달').length
     const fail = total - success - midal
     const sumNosul = branches.reduce((s, b) => s + b.nosul_count, 0)
-    return { name, total, success, fail, midal, avgNosul: total > 0 ? Math.round(sumNosul / total) : 0 }
+    // 금일 미갱신: 모든 지점의 today_rank가 null이면 해당 실행사 미갱신
+    const notUpdated = total > 0 && branches.every(b => b.today_rank === null || b.today_rank === undefined)
+    return { name, total, success, fail, midal, avgNosul: total > 0 ? Math.round(sumNosul / total) : 0, notUpdated }
   })
 })
 
@@ -381,7 +384,15 @@ onMounted(async () => {
       <div v-if="!isBranch && agencyStats.length > 0" class="grid gap-2 px-5 pb-1.5 shrink-0"
         :style="{ gridTemplateColumns: `repeat(${Math.min(agencyStats.length, 4)}, 1fr)` }">
         <div v-for="a in agencyStats" :key="a.name"
-          class="bg-white border border-slate-200 rounded-lg px-3 py-2">
+          class="relative bg-white border rounded-lg px-3 py-2 overflow-hidden"
+          :class="a.notUpdated ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200'">
+          <!-- 미갱신 오버레이 -->
+          <div v-if="a.notUpdated"
+            class="absolute inset-0 z-10 bg-white/60 backdrop-blur-[1px] flex items-center justify-center">
+            <span class="text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
+              금일 정보 갱신 안됨
+            </span>
+          </div>
           <div class="flex items-center justify-between mb-1.5">
             <span class="text-xs font-bold text-slate-700">{{ a.name }}</span>
             <span class="text-[10px] text-slate-400">{{ a.total }}지점</span>

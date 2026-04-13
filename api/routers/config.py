@@ -112,3 +112,143 @@ def update_agency_sheets(
         return {"ok": True, "saved": cleaned}
     finally:
         conn.close()
+
+
+@router.get("/agency-stats")
+async def get_agency_stats(
+    user: Annotated[dict, Depends(get_current_user)],
+    type: Literal["place", "webpage"] = Query("place"),
+    months: int = Query(3, description="최근 N개월"),
+):
+    """실행사별 성과 통계 — 기간별 성공률, 지점별 상세."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    # 최근 N개월 범위
+    start_date = (today.replace(day=1) - timedelta(days=30 * (months - 1))).replace(day=1)
+
+    table = "place_daily" if type == "place" else "webpage_daily"
+    agency_key = f"agency_map_{type}"
+
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        # 실행사 매핑 로드
+        row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (agency_key,)).fetchone()
+        agency_map = json.loads(row["value"]) if row else {}
+
+        # 기간 내 전체 데이터 집계 (지점별, 월별)
+        rows = conn.execute(f"""
+            SELECT branch_name,
+                   strftime('%Y-%m', date) AS month,
+                   COUNT(*) AS total_days,
+                   SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS exposed_days
+            FROM {table}
+            WHERE date >= ? AND date <= ?
+            GROUP BY branch_name, strftime('%Y-%m', date)
+            ORDER BY branch_name, month
+        """, (start_date.isoformat(), today.isoformat())).fetchall()
+
+        # 지점별 데이터 구조화
+        branch_data = {}
+        for r in rows:
+            bname = r["branch_name"]
+            if bname not in branch_data:
+                branch_data[bname] = {"monthly": {}, "total_days": 0, "exposed_days": 0}
+            branch_data[bname]["monthly"][r["month"]] = {
+                "total": r["total_days"],
+                "exposed": r["exposed_days"],
+                "rate": round(r["exposed_days"] / r["total_days"] * 100, 1) if r["total_days"] > 0 else 0,
+            }
+            branch_data[bname]["total_days"] += r["total_days"]
+            branch_data[bname]["exposed_days"] += r["exposed_days"]
+
+        # 연속일 조회 (최신 데이터 기준)
+        streak_rows = conn.execute(f"""
+            SELECT branch_name, date, is_exposed
+            FROM {table}
+            WHERE date >= ? AND date <= ?
+            ORDER BY branch_name, date DESC
+        """, ((today - timedelta(days=60)).isoformat(), today.isoformat())).fetchall()
+
+        streaks = {}
+        current_branch = None
+        current_streak = 0
+        for r in streak_rows:
+            if r["branch_name"] != current_branch:
+                if current_branch:
+                    streaks[current_branch] = current_streak
+                current_branch = r["branch_name"]
+                current_streak = 0
+                counting = True
+            if counting:
+                if r["is_exposed"] == 1:
+                    current_streak += 1
+                else:
+                    counting = False
+        if current_branch:
+            streaks[current_branch] = current_streak
+
+        # 실행사별 집계
+        agencies = {}
+        for bname, bdata in branch_data.items():
+            agency = agency_map.get(bname, "미배정").strip() or "미배정"
+            if agency not in agencies:
+                agencies[agency] = {"branches": [], "total_days": 0, "exposed_days": 0}
+
+            rate = round(bdata["exposed_days"] / bdata["total_days"] * 100, 1) if bdata["total_days"] > 0 else 0
+            agencies[agency]["branches"].append({
+                "branch": bname,
+                "total_days": bdata["total_days"],
+                "exposed_days": bdata["exposed_days"],
+                "rate": rate,
+                "streak": streaks.get(bname, 0),
+                "monthly": bdata["monthly"],
+            })
+            agencies[agency]["total_days"] += bdata["total_days"]
+            agencies[agency]["exposed_days"] += bdata["exposed_days"]
+
+        # 실행사 요약
+        result = []
+        for agency_name, adata in agencies.items():
+            rate = round(adata["exposed_days"] / adata["total_days"] * 100, 1) if adata["total_days"] > 0 else 0
+            avg_streak = round(sum(b["streak"] for b in adata["branches"]) / len(adata["branches"]), 1) if adata["branches"] else 0
+
+            # 월별 추이
+            all_months = sorted(set(m for b in adata["branches"] for m in b["monthly"]))
+            monthly_rates = {}
+            for m in all_months:
+                m_total = sum(b["monthly"].get(m, {}).get("total", 0) for b in adata["branches"])
+                m_exposed = sum(b["monthly"].get(m, {}).get("exposed", 0) for b in adata["branches"])
+                monthly_rates[m] = round(m_exposed / m_total * 100, 1) if m_total > 0 else 0
+
+            # 추세 (최근 2개월 비교)
+            trend = "→"
+            if len(all_months) >= 2:
+                prev = monthly_rates.get(all_months[-2], 0)
+                curr = monthly_rates.get(all_months[-1], 0)
+                if curr > prev + 5:
+                    trend = "↑"
+                elif curr < prev - 5:
+                    trend = "↓"
+
+            result.append({
+                "agency": agency_name,
+                "branch_count": len(adata["branches"]),
+                "total_days": adata["total_days"],
+                "exposed_days": adata["exposed_days"],
+                "rate": rate,
+                "avg_streak": avg_streak,
+                "trend": trend,
+                "monthly": monthly_rates,
+                "branches": sorted(adata["branches"], key=lambda b: b["rate"], reverse=True),
+            })
+
+        result.sort(key=lambda a: a["rate"], reverse=True)
+
+        return {
+            "type": type,
+            "period": f"{start_date.isoformat()} ~ {today.isoformat()}",
+            "agencies": result,
+        }
+    finally:
+        conn.close()

@@ -4,20 +4,20 @@ import { useBranchStore } from '@/stores/branches'
 import UserManagement from '@/components/admin/UserManagement.vue'
 import SyncSettings from '@/components/admin/SyncSettings.vue'
 import DataQualityLog from '@/components/admin/DataQualityLog.vue'
-import RankChecker from '@/components/admin/RankChecker.vue'
+import AgencyManagement from '@/components/admin/AgencyManagement.vue'
 import EncyclopediaAdmin from '@/components/admin/EncyclopediaAdmin.vue'
 import TabBar from '@/components/common/TabBar.vue'
 
 const branchStore = useBranchStore()
-type AdminTab = 'sync' | 'quality' | 'encyclopedia' | 'rank-checker' | 'users'
+type AdminTab = 'sync' | 'quality' | 'agency' | 'encyclopedia' | 'users'
 const activeTab = ref<AdminTab>('sync')
 const branches = computed(() => branchStore.branches)
 
 const tabs = [
   { key: 'sync', label: '데이터 동기화' },
   { key: 'quality', label: '데이터 로그' },
+  { key: 'agency', label: '실행사 매핑' },
   { key: 'encyclopedia', label: '백과사전 관리' },
-  { key: 'rank-checker', label: 'SB체커' },
   { key: 'users', label: '사용자 관리' },
 ]
 
@@ -32,7 +32,7 @@ onMounted(() => branchStore.loadBranches())
 
     <SyncSettings v-if="activeTab === 'sync'" :branches="branches" />
     <DataQualityLog v-if="activeTab === 'quality'" />
-    <RankChecker v-if="activeTab === 'rank-checker'" :branches="branches" />
+    <AgencyManagement v-if="activeTab === 'agency'" :branches="branches" />
     <EncyclopediaAdmin v-if="activeTab === 'encyclopedia'" />
     <UserManagement v-if="activeTab === 'users'" :branches="branches" />
 

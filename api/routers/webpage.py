@@ -141,6 +141,27 @@ async def get_ranking_daily(
                 "executor": r["executor"] or "",
             }
 
+        # AF열 노출일수 조회
+        target_year = target.year
+        target_month = target.month
+        nosul_rows = conn.execute("""
+            SELECT branch_name, nosul_count FROM webpage_branch_monthly
+            WHERE year = ? AND month = ?
+        """, (target_year, target_month)).fetchall()
+        nosul_db = {r["branch_name"]: r["nosul_count"] for r in nosul_rows}
+
+        # 전체 기간 통계
+        alltime_rows = conn.execute("""
+            SELECT branch_name,
+                   COUNT(*) AS total_days,
+                   SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS total_exposed
+            FROM webpage_daily
+            WHERE date <= ?
+            GROUP BY branch_name
+        """, (range_to,)).fetchall()
+        work_days_total = {r["branch_name"]: r["total_days"] for r in alltime_rows}
+        total_exposed_map = {r["branch_name"]: r["total_exposed"] for r in alltime_rows}
+
         result = []
         for bname, bdata in branches.items():
             hist = bdata["history"]
@@ -176,8 +197,9 @@ async def get_ranking_daily(
                 "keyword": bdata["keyword"],
                 "today_exposed": today_exposed,
                 "streak": streak,
-                "nosul_count": month_exposed,
-                "work_days": month_days,
+                "nosul_count": nosul_db.get(bname, month_exposed),
+                "total_exposed": total_exposed_map.get(bname, 0),
+                "work_days": work_days_total.get(bname, month_days),
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "daily": recent,
             })

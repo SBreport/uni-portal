@@ -650,6 +650,21 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_webpage_daily_branch ON webpage_daily(branch_id)")
 
     # ============================================================
+    # 웹페이지 월별 지점 통계 (webpage_branch_monthly) — AF열 노출일수
+    # ============================================================
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS webpage_branch_monthly (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        branch_name TEXT NOT NULL,
+        nosul_count INTEGER DEFAULT 0,
+        updated_at TEXT DEFAULT (datetime('now','localtime')),
+        UNIQUE(year, month, branch_name)
+    )
+    """)
+
+    # ============================================================
     # SB 순위 체크 키워드 (rank_check_keywords)
     # ============================================================
     c.execute("""
@@ -1130,6 +1145,22 @@ def _seed_agency_maps(conn):
         )
         conn.commit()
         print("실행사 시트 설정 seed 데이터 삽입 완료")
+
+    # 웹페이지 실행사 시트 seed
+    c.execute("SELECT COUNT(*) FROM app_settings WHERE key = 'agency_sheets_webpage'")
+    if c.fetchone()[0] == 0:
+        agency_sheets_webpage = {
+            "채움AD": [
+                "1tkJqI64R6Ohjj1tDMvCw5oGvrmxuE7lYr5AdTkFMEh4",
+                "1ruk9l8Z-mnygkEcRCSSqy8XmzbXeH_KdaivbWDAAKmg",
+            ],
+        }
+        c.execute(
+            "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)",
+            ("agency_sheets_webpage", json.dumps(agency_sheets_webpage, ensure_ascii=False)),
+        )
+        conn.commit()
+        print("웹페이지 실행사 시트 설정 seed 데이터 삽입 완료")
 
 
 if __name__ == "__main__":

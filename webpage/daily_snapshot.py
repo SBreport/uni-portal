@@ -1,7 +1,7 @@
-"""웹페이지 일별 스냅샷 — 구글시트 오늘 데이터를 webpage_daily 테이블에 저장."""
+"""웹페이지 일별 스냅샷 — 실행사별 시트에서 빈 기간만 증분 갱신."""
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from shared.db import get_conn, EQUIPMENT_DB
 
@@ -9,63 +9,130 @@ logger = logging.getLogger(__name__)
 
 
 def take_snapshot():
-    """오늘의 웹페이지 데이터를 구글시트에서 읽어 DB에 저장."""
+    """마지막 동기화 이후 빈 날짜만 실행사별 시트에서 읽어 DB에 저장."""
     try:
-        from webpage.sheets import get_ranking, list_months
+        from webpage.sheets import get_ranking_by_agency, list_months_from_agency, _parse_sheet_name
     except Exception as e:
         logger.error(f"[webpage_snapshot] sheets 모듈 임포트 실패: {e}")
         return {"ok": False, "error": str(e)}
 
     today = date.today()
-    today_str = today.isoformat()
-
-    # 현재 월의 시트 찾기 (형식: "2026.4")
-    months = list_months()
-    current_sheet = None
-    for name in months:
-        if f"{today.year}.{today.month}" in name:
-            current_sheet = name
-            break
-
-    if not current_sheet:
-        logger.warning(f"[webpage_snapshot] {today.year}.{today.month} 시트를 찾을 수 없음")
-        return {"ok": False, "error": "sheet not found"}
-
-    ranking = get_ranking(current_sheet)
-    branches = ranking.get("branches", [])
-
     conn = get_conn(EQUIPMENT_DB)
-    inserted = 0
+
     try:
-        for b in branches:
-            branch_name = b.get("branch", "")
-            keyword = b.get("keyword", "")
-            daily = b.get("daily", [])
-            is_exposed = 0
-            rank = None
-            for d in daily:
-                if d.get("day") == today.day:
-                    is_exposed = 1 if d.get("exposed") else 0
-                    break
+        # 마지막 동기화 날짜 조회
+        row = conn.execute(
+            "SELECT MAX(date) AS last_date FROM webpage_daily WHERE source = 'sheets'"
+        ).fetchone()
+        last_date_str = row["last_date"] if row and row["last_date"] else None
 
-            row = conn.execute(
-                "SELECT id FROM evt_branches WHERE name = ?", (branch_name,)
-            ).fetchone()
-            branch_id = row["id"] if row else 0
+        # 최근 3일은 항상 재갱신
+        REFRESH_DAYS = 3
+        refresh_start = today - timedelta(days=REFRESH_DAYS - 1)
 
-            executor = b.get("executor", "")
+        if last_date_str:
+            last_date = date.fromisoformat(last_date_str)
+            incremental_start = last_date + timedelta(days=1)
+            start_date = min(incremental_start, refresh_start)
+        else:
+            start_date = today.replace(day=1)
 
-            conn.execute(
-                """INSERT OR REPLACE INTO webpage_daily
-                   (date, branch_id, branch_name, keyword, is_exposed, rank, executor, source)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 'sheets')""",
-                (today_str, branch_id, branch_name, keyword, is_exposed, rank, executor)
-            )
-            inserted += 1
+        missing_days = []
+        d = start_date
+        while d <= today:
+            missing_days.append(d)
+            d += timedelta(days=1)
+
+        logger.info(f"[webpage_snapshot] 갱신 대상: {start_date} ~ {today} ({len(missing_days)}일)")
+
+        months_needed = set()
+        for d in missing_days:
+            months_needed.add((d.year, d.month))
+
+        available_months = list_months_from_agency()
+
+        inserted = 0
+        for year, month in sorted(months_needed):
+            sheet_name = None
+            for name in available_months:
+                try:
+                    sy, sm = _parse_sheet_name(name)
+                    if sy == year and sm == month:
+                        sheet_name = name
+                        break
+                except ValueError:
+                    continue
+
+            if not sheet_name:
+                logger.warning(f"[webpage_snapshot] {year}년 {month}월 시트를 찾을 수 없음")
+                continue
+
+            try:
+                result = get_ranking_by_agency(sheet_name)
+            except Exception as e:
+                logger.warning(f"[webpage_snapshot] 시트 '{sheet_name}' 읽기 실패: {e}")
+                continue
+
+            ranking = result["ranking"]
+            branches = ranking.get("branches", [])
+
+            # nosul_map 저장
+            nosul_map = result.get("nosul_map", {})
+            for branch_name, nosul_val in nosul_map.items():
+                conn.execute("""
+                    INSERT OR REPLACE INTO webpage_branch_monthly
+                    (year, month, branch_name, nosul_count, updated_at)
+                    VALUES (?, ?, ?, ?, datetime('now'))
+                """, (year, month, branch_name, nosul_val))
+
+            days_in_month = [d for d in missing_days if d.year == year and d.month == month]
+
+            for b in branches:
+                branch_name = b.get("branch", "")
+                keyword = b.get("keyword", "")
+                daily = b.get("daily", [])
+
+                row = conn.execute(
+                    "SELECT id FROM evt_branches WHERE name = ?", (branch_name,)
+                ).fetchone()
+                branch_id = row["id"] if row else 0
+
+                for target_date in days_in_month:
+                    day_data = None
+                    for dd in daily:
+                        if dd.get("day") == target_date.day:
+                            day_data = dd
+                            break
+
+                    is_exposed = 1 if (day_data and day_data.get("exposed")) else 0
+                    executor = day_data.get("mark", "") if day_data else ""
+
+                    conn.execute(
+                        """INSERT OR REPLACE INTO webpage_daily
+                           (date, branch_id, branch_name, keyword, is_exposed, executor, source)
+                           VALUES (?, ?, ?, ?, ?, ?, 'sheets')""",
+                        (target_date.isoformat(), branch_id, branch_name, keyword, is_exposed, executor)
+                    )
+                    inserted += 1
 
         conn.commit()
-        logger.info(f"[webpage_snapshot] {inserted}건 저장 완료 ({today_str})")
-        return {"ok": True, "date": today_str, "count": inserted}
+
+        from datetime import datetime
+        conn.execute("""
+            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at)
+            VALUES (?, ?, 0, 0, ?, ?)
+        """, ("webpage_daily_snapshot", inserted,
+              f"{len(missing_days)}일 증분 갱신 (실행사별)",
+              datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+
+        logger.info(f"[webpage_snapshot] {inserted}건 저장 완료 ({start_date} ~ {today})")
+        return {
+            "ok": True,
+            "date_range": f"{start_date.isoformat()} ~ {today.isoformat()}",
+            "days": len(missing_days),
+            "count": inserted,
+        }
     except Exception as e:
         logger.error(f"[webpage_snapshot] 저장 실패: {e}", exc_info=True)
         return {"ok": False, "error": str(e)}

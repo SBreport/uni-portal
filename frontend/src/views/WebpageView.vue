@@ -17,6 +17,7 @@ interface BranchRanking {
   branch: string
   keyword: string
   nosul_count: number
+  total_exposed: number
   today_exposed: boolean
   streak: number
   status: 'active' | 'fail' | '미달' | 'stopped'
@@ -61,7 +62,7 @@ const isAdmin = computed(() => auth.role === 'admin')
 
 // 검색 + 정렬
 const searchQuery = ref('')
-type SortKey = 'branch' | 'keyword' | 'today_exposed' | 'streak' | 'work_days' | 'nosul_count' | 'status' | 'agency'
+type SortKey = 'branch' | 'keyword' | 'today_exposed' | 'streak' | 'work_days' | 'nosul_count' | 'total_exposed' | 'status' | 'agency'
 const sortKey = ref<SortKey>('nosul_count')
 const sortAsc = ref(false)
 
@@ -101,6 +102,7 @@ const filteredBranches = computed(() => {
       case 'today_exposed': av = a.today_exposed ? 0 : 1; bv = b.today_exposed ? 0 : 1; break
       case 'streak': av = a.streak; bv = b.streak; break
       case 'nosul_count': av = a.nosul_count; bv = b.nosul_count; break
+      case 'total_exposed': av = a.total_exposed; bv = b.total_exposed; break
       case 'work_days': av = a.work_days; bv = b.work_days; break
       case 'agency': av = getAgency(a.branch); bv = getAgency(b.branch); break
       case 'status':
@@ -143,6 +145,7 @@ interface AgencyStat {
   fail: number
   midal: number
   avgNosul: number
+  notUpdated: boolean
 }
 const agencyStats = computed<AgencyStat[]>(() => {
   if (!data.value) return []
@@ -155,7 +158,8 @@ const agencyStats = computed<AgencyStat[]>(() => {
     const midal = branches.filter(b => b.status === '미달').length
     const fail = total - success - midal
     const sumNosul = branches.reduce((s, b) => s + b.nosul_count, 0)
-    return { name, total, success, fail, midal, avgNosul: total > 0 ? Math.round(sumNosul / total) : 0 }
+    const notUpdated = total > 0 && branches.every(b => !b.today_exposed)
+    return { name, total, success, fail, midal, avgNosul: total > 0 ? Math.round(sumNosul / total) : 0, notUpdated }
   })
 })
 
@@ -213,7 +217,14 @@ async function handleSync() {
   error.value = ''
   try {
     const { data: res } = await syncWebpageToDB()
-    alert(`동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved}건 저장`)
+    let msg = `동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved?.toLocaleString()}건 저장`
+    if (res.agency_changes?.length) {
+      msg += `\n\n실행사 변경 ${res.agency_changes.length}건:`
+      for (const c of res.agency_changes) {
+        msg += `\n  ${c.branch}: ${c.from} → ${c.to}`
+      }
+    }
+    alert(msg)
     await loadData()
     await loadLastSync()
   } catch (e: any) {
@@ -333,7 +344,12 @@ onMounted(async () => {
       <div v-if="!isBranch && agencyStats.length > 0" class="grid gap-2 px-5 pb-1.5 shrink-0"
         :style="{ gridTemplateColumns: `repeat(${Math.min(agencyStats.length, 4)}, 1fr)` }">
         <div v-for="a in agencyStats" :key="a.name"
-          class="bg-white border border-slate-200 rounded-lg px-3 py-2">
+          class="bg-white border border-slate-200 rounded-lg px-3 py-2 relative overflow-hidden">
+          <!-- 미갱신 블러 오버레이 -->
+          <div v-if="a.notUpdated"
+            class="absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-[2px] bg-white/60">
+            <span class="text-[10px] text-slate-400 font-medium">미갱신</span>
+          </div>
           <div class="flex items-center justify-between mb-1.5">
             <span class="text-xs font-bold text-slate-700">{{ a.name }}</span>
             <span class="text-[10px] text-slate-400">{{ a.total }}지점</span>
@@ -370,18 +386,19 @@ onMounted(async () => {
                   <tr class="bg-slate-50/95 border-b border-slate-200">
                     <th @click="toggleSort('branch')"    class="th-cell text-left pl-3 pr-2 w-[80px]">지점 <span class="sort-icon">{{ sortIcon('branch') }}</span></th>
                     <th @click="toggleSort('keyword')"    class="th-cell text-left px-2 w-[100px]">키워드 <span class="sort-icon">{{ sortIcon('keyword') }}</span></th>
-                    <th @click="toggleSort('today_exposed')" class="th-cell text-center w-[44px]">오늘 <span class="sort-icon">{{ sortIcon('today_exposed') }}</span></th>
-                    <th class="th-cell text-center w-[100px]">최근 5일</th>
-                    <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
-                    <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]">총노출 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
-                    <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]">진행 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
-                    <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
-                    <th v-if="!isBranch && agencyStats.length > 0" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
+                    <th @click="toggleSort('today_exposed')" title="오늘 노출 성공 여부 (O/X)" class="th-cell text-center w-[44px]">오늘 <span class="sort-icon">{{ sortIcon('today_exposed') }}</span></th>
+                    <th title="최근 5일간 일별 노출 여부" class="th-cell text-center w-[100px]">최근 5일</th>
+                    <th @click="toggleSort('streak')"     title="끊김 없이 연속 노출된 일수" class="th-cell text-center w-[42px]">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
+                    <th @click="toggleSort('nosul_count')" title="시트 AF열 기준 당월 노출일수" class="th-cell text-center w-[36px]">노출일수 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
+                    <th @click="toggleSort('total_exposed')" title="전체 이력 중 노출 성공한 총 일수" class="th-cell text-center w-[36px]">총노출 <span class="sort-icon">{{ sortIcon('total_exposed') }}</span></th>
+                    <th @click="toggleSort('work_days')"   title="작업 시작일부터 현재까지 총 진행일수" class="th-cell text-center w-[36px]">총진행일 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
+                    <th @click="toggleSort('status')"      title="노출: 오늘 노출됨 / 미노출: 오늘 미노출 / 미달: 데이터 없음" class="th-cell text-center w-[44px]">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
+                    <th v-if="!isBranch && agencyStats.length > 0" @click="toggleSort('agency')" title="해당 지점 담당 실행사" class="th-cell text-center pr-3 w-[64px]">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="filteredBranches.length === 0">
-                    <td :colspan="isBranch || agencyStats.length === 0 ? 8 : 9" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
+                    <td :colspan="isBranch || agencyStats.length === 0 ? 9 : 10" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
                   <tr v-for="b in filteredBranches" :key="b.branch"
                     class="border-b border-slate-100 hover:bg-blue-50/30 transition-colors">
@@ -404,6 +421,7 @@ onMounted(async () => {
                       :class="b.nosul_count >= 23 ? 'text-red-500' : b.nosul_count >= 15 ? 'text-amber-500' : 'text-blue-600'">
                       {{ b.nosul_count }}
                     </td>
+                    <td class="py-[5px] text-center text-blue-600 font-medium tabular-nums">{{ b.total_exposed || 0 }}</td>
                     <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
                     <td class="py-[5px] text-center">
                       <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="statusBadge(b.status).cls">

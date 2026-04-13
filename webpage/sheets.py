@@ -13,6 +13,111 @@ from shared.sheets_base import (
 
 SPREADSHEET_ID = "1tkJqI64R6Ohjj1tDMvCw5oGvrmxuE7lYr5AdTkFMEh4"
 
+# 실행사별 시트 ID (웹페이지)
+AGENCY_SHEETS_WEBPAGE = {
+    "채움AD": [
+        "1tkJqI64R6Ohjj1tDMvCw5oGvrmxuE7lYr5AdTkFMEh4",  # 전지점
+        "1ruk9l8Z-mnygkEcRCSSqy8XmzbXeH_KdaivbWDAAKmg",  # 홍대추가
+    ],
+}
+
+
+def _get_agency_sheets_webpage_from_db() -> dict[str, list[str]]:
+    """DB에서 웹페이지 실행사별 시트 ID 조회. 없으면 하드코딩 폴백."""
+    import json
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = 'agency_sheets_webpage'"
+        ).fetchone()
+        if row:
+            return json.loads(row["value"])
+        return AGENCY_SHEETS_WEBPAGE
+    finally:
+        conn.close()
+
+
+def get_ranking_by_agency(sheet_name: str) -> dict:
+    """실행사별 시트에서 웹페이지 노출 데이터 + 실행사 매핑을 동시에 읽어온다."""
+    import time
+    client = get_client()
+    agency_map = {}
+    all_branches = []
+    nosul_map = {}
+
+    agency_sheets = _get_agency_sheets_webpage_from_db()
+    sheet_count = 0
+    for agency_name, sheet_ids in agency_sheets.items():
+        if isinstance(sheet_ids, str):
+            sheet_ids = [sheet_ids]
+        for sheet_id in sheet_ids:
+            if sheet_count > 0:
+                time.sleep(1.5)
+            sheet_count += 1
+            try:
+                spreadsheet = client.open_by_key(sheet_id)
+                ws = spreadsheet.worksheet(sheet_name)
+                values = ws.get_all_values()
+                parsed = _parse_sheet(values, sheet_name)
+
+                for b in parsed["branches"]:
+                    branch = b["branch"]
+                    agency_map[branch] = agency_name
+                    nosul_map[branch] = b.get("nosul_count", 0)
+
+                all_branches.extend(parsed["branches"])
+            except Exception as e:
+                logger.warning(f"웹페이지 실행사 시트 읽기 실패 ({agency_name}/{sheet_name}): {e}")
+                continue
+
+    if not all_branches:
+        return {
+            "agency_map": agency_map,
+            "nosul_map": nosul_map,
+            "ranking": {
+                "year": 0, "month": 0, "days": 0, "today_index": 0,
+                "branches": [],
+                "summary": {"total": 0, "success_today": 0, "fail_today": 0, "midal": 0},
+            },
+        }
+
+    year, month = _parse_sheet_name(sheet_name)
+    merged_result = {
+        "year": year,
+        "month": month,
+        "days": len(all_branches[0].get("daily", [])) if all_branches else 0,
+        "today_index": calc_today_index(year, month, len(all_branches[0].get("daily", [])) if all_branches else 30),
+        "branches": all_branches,
+        "summary": build_summary(all_branches),
+    }
+
+    return {"agency_map": agency_map, "nosul_map": nosul_map, "ranking": merged_result}
+
+
+def list_months_from_agency() -> list[str]:
+    """실행사 시트에서 월 목록 조회."""
+    cached = get_cached("webpage__agency_months__")
+    if cached is not None:
+        return cached
+
+    client = get_client()
+    agency_sheets = _get_agency_sheets_webpage_from_db()
+    # Use first sheet of first agency
+    first_ids = next(iter(agency_sheets.values()))
+    first_id = first_ids[0] if isinstance(first_ids, list) else first_ids
+    spreadsheet = client.open_by_key(first_id)
+    sheets = [ws.title for ws in spreadsheet.worksheets()]
+    result = []
+    for name in sheets:
+        try:
+            _parse_sheet_name(name)
+            result.append(name)
+        except ValueError:
+            continue
+    set_cached("webpage__agency_months__", result)
+    return result
+
 
 def list_months() -> list[str]:
     """월별 시트 목록 반환 (최신순)."""

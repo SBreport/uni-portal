@@ -254,12 +254,15 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
 
 def get_ranking_by_agency(sheet_name: str) -> dict:
     """실행사별 시트에서 순위 데이터 + 실행사 매핑을 동시에 읽어온다."""
+    import time
     client = get_client()
     agency_map = {}  # branch_name → agency_name
     all_branches = []  # merged list of all branch data
 
     agency_sheets = _get_agency_sheets_from_db()
-    for agency_name, sheet_id in agency_sheets.items():
+    for idx, (agency_name, sheet_id) in enumerate(agency_sheets.items()):
+        if idx > 0:
+            time.sleep(1.5)  # API rate limit 회피 (분당 60회 제한)
         try:
             spreadsheet = client.open_by_key(sheet_id)
             ws = spreadsheet.worksheet(sheet_name)

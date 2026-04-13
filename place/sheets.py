@@ -160,7 +160,7 @@ def _parse_sheet_name(sheet_name: str) -> tuple[int, int]:
 def _parse_rank(val: str | None) -> int | None:
     if not val or not str(val).strip():
         return None
-    s = str(val).strip().replace("등", "")
+    s = str(val).strip().replace("등", "").replace("위", "")
     try:
         return int(s)
     except ValueError:

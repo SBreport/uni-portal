@@ -189,8 +189,16 @@ async function loadStats(type: 'place' | 'webpage') {
   }
 }
 
-// 실행사 카드 정렬 (플레이스 페이지와 동일)
+// 실행사 카드 정렬 + 색상 (플레이스 페이지와 동일)
 const AGENCY_ORDER = ['애드드림즈', '일프로', '간달프', '에이치']
+const AGENCY_COLORS: Record<string, { bg: string; border: string; text: string; badge: string }> = {
+  '애드드림즈': { bg: 'bg-blue-50/40', border: 'border-l-blue-400', text: 'text-blue-600', badge: 'bg-blue-100 text-blue-700' },
+  '일프로':     { bg: 'bg-violet-50/40', border: 'border-l-violet-400', text: 'text-violet-600', badge: 'bg-violet-100 text-violet-700' },
+  '간달프':     { bg: 'bg-emerald-50/40', border: 'border-l-emerald-400', text: 'text-emerald-600', badge: 'bg-emerald-100 text-emerald-700' },
+  '에이치':     { bg: 'bg-amber-50/40', border: 'border-l-amber-400', text: 'text-amber-600', badge: 'bg-amber-100 text-amber-700' },
+}
+const defaultColor = { bg: 'bg-slate-50/40', border: 'border-l-slate-400', text: 'text-slate-600', badge: 'bg-slate-100 text-slate-700' }
+function agencyColor(name: string) { return AGENCY_COLORS[name] || defaultColor }
 
 const filteredAgencies = computed(() => {
   if (!statsData.value) return []
@@ -415,9 +423,11 @@ onUnmounted(() => {
         <template v-else-if="statsData">
           <!-- 실행사 요약 카드 -->
           <div class="grid gap-2" :style="{ gridTemplateColumns: `repeat(${Math.min(filteredAgencies.length, 4)}, 1fr)` }">
-            <div v-for="a in filteredAgencies" :key="a.agency" class="bg-white border border-slate-200 rounded-lg p-3">
+            <div v-for="a in filteredAgencies" :key="a.agency"
+              class="bg-white border rounded-lg p-3 border-l-4"
+              :class="[agencyColor(a.agency).border]">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-bold text-slate-700">{{ a.agency }}</span>
+                <span class="text-sm font-bold" :class="agencyColor(a.agency).text">{{ a.agency }}</span>
                 <span class="text-[10px] text-slate-400">{{ a.branch_count }}지점</span>
               </div>
               <div class="flex items-center gap-2 mb-2">
@@ -469,9 +479,12 @@ onUnmounted(() => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="b in flatBranches" :key="b.branch" class="border-b border-slate-50 hover:bg-blue-50/30">
-                  <td class="pl-3 py-1.5 text-slate-700">{{ b.branch }}</td>
-                  <td class="px-2 py-1.5 text-slate-400">{{ b.agency }}</td>
+                <tr v-for="b in flatBranches" :key="b.branch"
+                  :class="[agencyColor(b.agency).bg, 'border-b border-slate-100 border-l-2', agencyColor(b.agency).border, 'hover:bg-blue-50/40']">
+                  <td class="pl-3 py-1.5 text-slate-700 font-medium">{{ b.branch }}</td>
+                  <td class="px-2 py-1.5">
+                    <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium" :class="agencyColor(b.agency).badge">{{ b.agency }}</span>
+                  </td>
                   <td v-for="m in allMonths" :key="m" class="text-center py-1.5 tabular-nums"
                     :class="(b.monthly[m]?.rate || 0) >= 80 ? 'text-blue-600 font-medium' : (b.monthly[m]?.rate || 0) >= 50 ? 'text-slate-600' : (b.monthly[m]?.rate || 0) > 0 ? 'text-red-500' : 'text-slate-300'">
                     {{ b.monthly[m] ? b.monthly[m].rate + '%' : '-' }}

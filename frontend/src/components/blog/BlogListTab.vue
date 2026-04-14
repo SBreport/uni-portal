@@ -332,7 +332,7 @@ onMounted(() => {
             {{ t.post_type_main }} ({{ t.cnt }})
           </option>
         </select>
-        <label class="flex items-center gap-1 text-xs text-amber-600 cursor-pointer shrink-0">
+        <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer shrink-0">
           <input type="checkbox"
                  :checked="filterNeedsReview === 1"
                  @change="filterNeedsReview = ($event.target as HTMLInputElement).checked ? 1 : null; applyFilter()"
@@ -424,7 +424,7 @@ onMounted(() => {
                       'bg-amber-50/30': post.needs_review && selectedPost?.id !== post.id,
                     }">
                   <td class="px-2 py-1.5">
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                    <span class="text-xs px-1.5 py-0.5 rounded-full font-medium"
                           :class="channelColor(post.blog_channel)">
                       {{ channelLabel(post.blog_channel) }}
                     </span>
@@ -434,7 +434,7 @@ onMounted(() => {
                   </td>
                   <td class="px-2 py-1.5">
                     <span v-if="post.post_type_main"
-                          class="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                          class="text-xs px-1.5 py-0.5 rounded font-medium"
                           :class="typeColor(post.post_type_main)">
                       {{ post.post_type_main }}
                     </span>
@@ -487,21 +487,21 @@ onMounted(() => {
         <div v-else class="p-3 space-y-3">
           <div>
             <div class="flex gap-1.5 mb-2 flex-wrap">
-              <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+              <span class="text-xs px-1.5 py-0.5 rounded-full font-medium"
                     :class="channelColor(selectedPost.blog_channel)">
                 {{ channelLabel(selectedPost.blog_channel) }}
               </span>
               <span v-if="selectedPost.post_type_main"
-                    class="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                    class="text-xs px-1.5 py-0.5 rounded font-medium"
                     :class="typeColor(selectedPost.post_type_main)">
                 {{ selectedPost.post_type_main }}
               </span>
               <span v-if="selectedPost.post_type_sub"
-                    class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                    class="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
                 {{ selectedPost.post_type_sub }}
               </span>
               <span v-if="selectedPost.needs_review"
-                    class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                    class="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
                 검토필요
               </span>
             </div>

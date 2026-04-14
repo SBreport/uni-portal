@@ -144,7 +144,7 @@ const columns = computed(() => [
     size: 52,
     enableSorting: true,
     cell: (info) => h('span', {
-      class: `text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap ${channelColor(info.getValue())}`,
+      class: `text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap ${channelColor(info.getValue())}`,
     }, channelLabel(info.getValue())),
   }),
 
@@ -230,18 +230,18 @@ const columns = computed(() => [
         return h('div', { class: 'flex justify-end gap-1' }, [
           h('button', {
             onClick: (e: MouseEvent) => { e.stopPropagation(); saveAccount(acc.blog_id) },
-            class: 'text-[10px] text-blue-600 hover:underline',
+            class: 'text-xs text-blue-600 hover:underline',
           }, '저장'),
           h('button', {
             onClick: (e: MouseEvent) => { e.stopPropagation(); cancelEdit() },
-            class: 'text-[10px] text-slate-400 hover:underline',
+            class: 'text-xs text-slate-400 hover:underline',
           }, '취소'),
         ])
       }
       return h('div', { class: 'flex justify-end' }, [
         h('button', {
           onClick: (e: MouseEvent) => { e.stopPropagation(); startEdit(acc) },
-          class: 'text-[10px] text-slate-400 hover:text-blue-600',
+          class: 'text-xs text-slate-400 hover:text-blue-600',
         }, '편집'),
       ])
     },

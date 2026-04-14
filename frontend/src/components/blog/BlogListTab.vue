@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import * as blogApi from '@/api/blog'
 import { useColumnResize } from '@/composables/useResizePanel'
 import { channelLabel, channelColor, typeColor, statusColor } from '@/utils/blogFormatters'
@@ -8,6 +9,9 @@ const props = defineProps<{
   mode: 'uandi' | 'all'
   initialFilters?: Record<string, any>
 }>()
+
+const route = useRoute()
+const router = useRouter()
 
 const isUandi = computed(() => props.mode !== 'all')
 
@@ -252,7 +256,43 @@ async function openDetail(post: any) {
 
 function applyFilter() {
   page.value = 1
+  syncUrlQuery()
   loadPosts()
+}
+
+// URL 쿼리 동기화 (주요 필터만, 빈 값 제거)
+function syncUrlQuery() {
+  const q: Record<string, string> = {}
+  const tab = route.query.tab as string
+  if (tab) q.tab = tab
+  if (searchText.value) q.q = searchText.value
+  if (filterChannel.value) q.channel = filterChannel.value
+  if (filterBranch.value) q.branch = filterBranch.value
+  if (filterAuthor.value) q.author = filterAuthor.value
+  if (filterTypeMain.value) q.post_type_main = filterTypeMain.value
+  if (dateFrom.value && activeDatePreset.value !== 'year') q.from = dateFrom.value
+  if (dateTo.value && activeDatePreset.value !== 'year') q.to = dateTo.value
+  if (filterNeedsReview.value === 1) q.needs_review = '1'
+  router.replace({ query: q })
+}
+
+// URL 쿼리에서 필터 복원
+function restoreFromUrlQuery() {
+  const q = route.query
+  if (q.q) searchText.value = q.q as string
+  if (q.channel) filterChannel.value = q.channel as string
+  if (q.branch) filterBranch.value = q.branch as string
+  if (q.author) filterAuthor.value = q.author as string
+  if (q.post_type_main) {
+    filterTypeMain.value = q.post_type_main as string
+    showAdvancedFilters.value = true
+  }
+  if (q.from) { dateFrom.value = q.from as string; activeDatePreset.value = 'year' }
+  if (q.to) { dateTo.value = q.to as string; activeDatePreset.value = 'year' }
+  if (q.needs_review === '1') {
+    filterNeedsReview.value = 1
+    showAdvancedFilters.value = true
+  }
 }
 
 function resetFilter() {
@@ -301,11 +341,15 @@ watch(page, () => loadPosts())
 // - 없으면 기본 날짜 조건으로 조회
 onMounted(() => {
   if (props.initialFilters) {
+    // 대시보드에서 필터 지정 진입: initialFilters 우선
     applyInitialFilters(props.initialFilters)
     // 고급 필터에 속한 값이 주입된 경우 패널 자동 펼치기
     if (props.initialFilters.post_type_main || props.initialFilters.needs_review) {
       showAdvancedFilters.value = true
     }
+  } else {
+    // URL 쿼리에서 필터 복원 (북마크/새로고침)
+    restoreFromUrlQuery()
   }
   loadPosts()
   loadFilterOptions()

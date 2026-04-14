@@ -182,6 +182,24 @@ async function loadFilterOptions() {
   }
 }
 
+// 요약 스트립 (채널별 카운트)
+const summaryStrip = computed(() => {
+  if (loading.value) return null
+  if (!posts.value.length) return null
+  const counts: Record<string, number> = {}
+  for (const p of posts.value) {
+    const ch = p.blog_channel || 'etc'
+    counts[ch] = (counts[ch] || 0) + 1
+  }
+  const channelMap: Record<string, string> = { br: '브랜드', opt: '최적', cafe: '카페' }
+  const parts = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([ch, n]) => `${channelMap[ch] || ch} ${n}`)
+  const reviewCount = posts.value.filter((p: any) => p.needs_review).length
+  if (reviewCount > 0) parts.push(`검토필요 ${reviewCount}`)
+  return { total: totalCount.value, parts }
+})
+
 // 인라인 헤더 필터 + 정렬 적용
 const filteredPosts = computed(() => {
   let result = posts.value
@@ -384,6 +402,17 @@ onMounted(() => {
           </option>
         </select>
       </div>
+    </div>
+
+    <!-- 요약 스트립 -->
+    <div class="flex-none mb-1 min-h-[18px]">
+      <p v-if="loading" class="text-xs text-slate-300 tabular-nums">로딩 중...</p>
+      <p v-else-if="summaryStrip" class="text-xs text-slate-500 tabular-nums">
+        검색결과 <span class="font-medium">{{ summaryStrip.total.toLocaleString() }}건</span>
+        <template v-for="(part, i) in summaryStrip.parts" :key="i">
+          <span class="text-slate-300 mx-1">·</span>{{ part }}
+        </template>
+      </p>
     </div>
 
     <!-- 메인 2컬럼 -->

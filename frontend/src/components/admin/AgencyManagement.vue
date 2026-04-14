@@ -430,12 +430,12 @@ onUnmounted(() => {
               <h3 class="text-sm font-bold text-sky-700">플레이스 총 성과</h3>
               <span class="text-[11px] text-slate-500 ml-auto">{{ dashboardPlace.period }}</span>
             </div>
-            <div class="p-3 space-y-3">
+            <div class="p-3 space-y-4">
               <!-- KPI 2x2 -->
               <div class="grid grid-cols-2 gap-1.5">
                 <div class="border border-slate-200 rounded-md p-3">
                   <div class="text-[11px] text-slate-500">전체 성공률</div>
-                  <div class="text-2xl font-bold leading-none mt-1" :class="dashboardPlace.overall_rate >= 50 ? 'text-sky-600' : 'text-red-500'">{{ dashboardPlace.overall_rate }}%</div>
+                  <div class="text-2xl font-bold leading-none my-1" :class="dashboardPlace.overall_rate >= 50 ? 'text-sky-600' : 'text-red-500'">{{ dashboardPlace.overall_rate }}%</div>
                   <div class="text-[11px] text-slate-500">{{ dashboardPlace.exposed_days.toLocaleString() }} / {{ dashboardPlace.total_days.toLocaleString() }}일</div>
                 </div>
                 <div class="border border-slate-200 rounded-md p-3">
@@ -460,16 +460,18 @@ onUnmounted(() => {
               <!-- 월별 추이 -->
               <div>
                 <p class="text-[11px] font-semibold text-slate-600 mb-2">월별 전체 성공률</p>
-                <div class="flex gap-0.5 items-end" style="height: 80px">
+                <div class="flex gap-1" style="height: 80px">
                   <div v-for="(rate, m) in dashboardPlace.monthly_rates" :key="m" class="flex-1 flex flex-col items-center">
-                    <div class="text-[11px] font-semibold tabular-nums mb-1"
-                      :class="rate >= 80 ? 'text-sky-600' : rate >= 50 ? 'text-slate-500' : 'text-red-500'">
-                      {{ rate }}
-                    </div>
-                    <div class="w-full bg-slate-50 rounded-sm relative overflow-hidden" style="height: 54px">
-                      <div class="absolute bottom-0 w-full rounded-sm"
+                    <!-- 바 + 바 위에 붙는 수치 -->
+                    <div class="w-full bg-slate-50 rounded relative flex-1">
+                      <div class="absolute bottom-0 left-0 right-0 rounded"
                         :class="rate >= 50 ? 'bg-sky-400' : 'bg-red-400'"
                         :style="{ height: rate + '%' }"></div>
+                      <div class="absolute left-0 right-0 text-center text-[11px] font-semibold tabular-nums leading-none"
+                        :class="rate >= 80 ? 'text-sky-700' : rate >= 50 ? 'text-slate-600' : 'text-red-600'"
+                        :style="{ bottom: `calc(${rate}% + 2px)` }">
+                        {{ rate }}
+                      </div>
                     </div>
                     <div class="text-[10px] text-slate-400 mt-1">{{ parseInt(String(m).split('-')[1] || '0') }}월</div>
                   </div>
@@ -527,12 +529,12 @@ onUnmounted(() => {
               <h3 class="text-sm font-bold text-indigo-700">웹페이지 총 성과</h3>
               <span class="text-[11px] text-slate-500 ml-auto">{{ dashboardWebpage.period }}</span>
             </div>
-            <div class="p-3 space-y-3">
+            <div class="p-3 space-y-4">
               <!-- KPI 2x2 -->
               <div class="grid grid-cols-2 gap-1.5">
                 <div class="border border-slate-200 rounded-md p-3">
                   <div class="text-[11px] text-slate-500">전체 성공률</div>
-                  <div class="text-2xl font-bold leading-none mt-1" :class="dashboardWebpage.overall_rate >= 50 ? 'text-indigo-600' : 'text-red-500'">{{ dashboardWebpage.overall_rate }}%</div>
+                  <div class="text-2xl font-bold leading-none my-1" :class="dashboardWebpage.overall_rate >= 50 ? 'text-indigo-600' : 'text-red-500'">{{ dashboardWebpage.overall_rate }}%</div>
                   <div class="text-[11px] text-slate-500">{{ dashboardWebpage.exposed_days.toLocaleString() }} / {{ dashboardWebpage.total_days.toLocaleString() }}일</div>
                 </div>
                 <div class="border border-slate-200 rounded-md p-3">
@@ -557,16 +559,17 @@ onUnmounted(() => {
               <!-- 월별 추이 -->
               <div>
                 <p class="text-[11px] font-semibold text-slate-600 mb-2">월별 전체 성공률</p>
-                <div class="flex gap-0.5 items-end" style="height: 80px">
+                <div class="flex gap-1" style="height: 80px">
                   <div v-for="(rate, m) in dashboardWebpage.monthly_rates" :key="m" class="flex-1 flex flex-col items-center">
-                    <div class="text-[11px] font-semibold tabular-nums mb-1"
-                      :class="rate >= 80 ? 'text-indigo-600' : rate >= 50 ? 'text-slate-500' : 'text-red-500'">
-                      {{ rate }}
-                    </div>
-                    <div class="w-full bg-slate-50 rounded-sm relative overflow-hidden" style="height: 54px">
-                      <div class="absolute bottom-0 w-full rounded-sm"
+                    <div class="w-full bg-slate-50 rounded relative flex-1">
+                      <div class="absolute bottom-0 left-0 right-0 rounded"
                         :class="rate >= 50 ? 'bg-indigo-400' : 'bg-red-400'"
                         :style="{ height: rate + '%' }"></div>
+                      <div class="absolute left-0 right-0 text-center text-[11px] font-semibold tabular-nums leading-none"
+                        :class="rate >= 80 ? 'text-indigo-700' : rate >= 50 ? 'text-slate-600' : 'text-red-600'"
+                        :style="{ bottom: `calc(${rate}% + 2px)` }">
+                        {{ rate }}
+                      </div>
                     </div>
                     <div class="text-[10px] text-slate-400 mt-1">{{ parseInt(String(m).split('-')[1] || '0') }}월</div>
                   </div>

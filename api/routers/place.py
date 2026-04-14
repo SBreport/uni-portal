@@ -153,6 +153,77 @@ async def get_ranking_daily(
         """, (target_year, target_month)).fetchall()
         nosul_db = {r["branch_name"]: r["nosul_count"] for r in nosul_rows}
 
+        # 마지막 성공 날짜 집계 (target 이전, rank 1~5)
+        last_success_rows = conn.execute("""
+            SELECT branch_id, keyword, MAX(date) AS last_success_date
+            FROM place_daily
+            WHERE date < ? AND rank >= 1 AND rank <= 5
+            GROUP BY branch_id, keyword
+        """, (range_to,)).fetchall()
+        last_success_map = {
+            (r["branch_id"], r["keyword"]): r["last_success_date"]
+            for r in last_success_rows
+        }
+
+        # recovery 계산용: (branch_id, keyword)별 전체 이력 (target 이하) — 접근 B
+        # date 오름차순으로 로드 후 Python에서 streak 경계 탐색
+        recovery_history_rows = conn.execute("""
+            SELECT date, branch_id, keyword,
+                   CASE WHEN rank >= 1 AND rank <= 5 THEN 1 ELSE 0 END AS ok
+            FROM place_daily
+            WHERE date <= ?
+            ORDER BY branch_id, keyword, date
+        """, (range_to,)).fetchall()
+
+        # (branch_id, keyword) → sorted list of (date_str, ok)
+        from collections import defaultdict
+        _rh: dict = defaultdict(list)
+        for r in recovery_history_rows:
+            _rh[(r["branch_id"], r["keyword"])].append((r["date"], r["ok"]))
+
+        def _calc_recovery(history: list, target_str: str):
+            """
+            history: [(date_str, ok), ...] — 오름차순 정렬
+            반환: (recovery_date, recovery_gap)
+            """
+            if not history:
+                return None, None
+            # 마지막 항목이 target인지 확인, target에서 실패면 None
+            last_date, last_ok = history[-1]
+            if last_date != target_str or not last_ok:
+                return None, None
+            # 역방향으로 현재 streak 시작일 찾기
+            streak_start_idx = len(history) - 1
+            for i in range(len(history) - 2, -1, -1):
+                d, ok = history[i]
+                if ok:
+                    streak_start_idx = i
+                else:
+                    break
+            recovery_date = history[streak_start_idx][0]
+            # streak_start_idx 바로 직전이 실패인지 확인 (streak_start_idx == 0이면 역사상 첫 성공)
+            if streak_start_idx == 0:
+                # 역사상 첫 성공 (이전 기록 없음)
+                return recovery_date, None
+            # 직전 인덱스는 실패여야 함 (그래야 streak 시작)
+            # streak_start_idx - 1 은 실패; 그 이전에 마지막 성공일 찾기
+            prev_success_date = None
+            for i in range(streak_start_idx - 1, -1, -1):
+                d, ok = history[i]
+                if ok:
+                    prev_success_date = d
+                    break
+            if prev_success_date is None:
+                # 그 전에 성공 기록 없음 → 첫 성공 그룹
+                return recovery_date, None
+            from datetime import datetime as _dt
+            gap = (_dt.strptime(recovery_date, "%Y-%m-%d") - _dt.strptime(prev_success_date, "%Y-%m-%d")).days
+            return recovery_date, gap
+
+        recovery_map: dict = {}
+        for key, hist in _rh.items():
+            recovery_map[key] = _calc_recovery(hist, range_to)
+
         # 지점별 그룹핑
         branches: dict = {}
         for r in rows:
@@ -202,10 +273,15 @@ async def get_ranking_daily(
             today_rank = today_data["rank"] if today_data else None
             today_exposed = bool(today_data["is_exposed"]) if today_data else False
 
+            bid = bdata["branch_id"]
+            kw = bdata["keyword"]
+            last_success_date = last_success_map.get((bid, kw), None)
+            _recovery_date, _recovery_gap = recovery_map.get((bid, kw), (None, None))
+
             result.append({
                 "branch": bname,
-                "branch_id": bdata["branch_id"],
-                "keyword": bdata["keyword"],
+                "branch_id": bid,
+                "keyword": kw,
                 "today_rank": today_rank,
                 "today_success": today_exposed,
                 "streak": streak,
@@ -214,6 +290,9 @@ async def get_ranking_daily(
                 "work_days": work_days_total.get(bname, month_days), # 총진행일
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "daily": recent,
+                "last_success_date": last_success_date,
+                "recovery_date": _recovery_date,
+                "recovery_gap": _recovery_gap,
             })
 
         return {
@@ -226,6 +305,184 @@ async def get_ranking_daily(
                 "midal": sum(1 for b in result if b["status"] == "미달"),
             },
             "source": "db",
+        }
+    finally:
+        conn.close()
+
+
+@router.get("/branch-detail")
+async def get_branch_detail(
+    branch_name: str = Query(...),
+    keyword: str = Query(...),
+    reference_date: str = Query(..., description="기준일 YYYY-MM-DD"),
+    user: dict = Depends(get_current_user),
+):
+    """지점+키워드 상세 분석 패널 데이터 (성공률·연속기록·회복이력·실행사이력)."""
+    from datetime import datetime, date as _date
+    from shared.db import get_conn, EQUIPMENT_DB
+
+    ref = datetime.strptime(reference_date, "%Y-%m-%d").date()
+    ref_year = ref.year
+    ref_month = ref.month
+
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        # 전체 이력 로드 (오름차순)
+        rows = conn.execute("""
+            SELECT date, rank
+            FROM place_daily
+            WHERE branch_name = ? AND keyword = ?
+            ORDER BY date
+        """, (branch_name, keyword)).fetchall()
+
+        if not rows:
+            return {
+                "branch_name": branch_name,
+                "keyword": keyword,
+                "success_rate": {
+                    "all":        {"success": 0, "total": 0, "pct": 0.0},
+                    "this_month": {"success": 0, "total": 0, "pct": 0.0},
+                    "last_month": {"success": 0, "total": 0, "pct": 0.0},
+                },
+                "longest": {
+                    "success": {"days": 0, "from": None, "to": None},
+                    "fail":    {"days": 0, "from": None, "to": None},
+                },
+                "recovery_history": [],
+                "agency_history": [],
+            }
+
+        def _is_success(rank) -> bool:
+            return rank is not None and int(rank) >= 1 and int(rank) <= 5
+
+        # ref 이하 데이터만 사용
+        history = [(r["date"], _is_success(r["rank"])) for r in rows if r["date"] <= reference_date]
+
+        total_all = len(history)
+        success_all = sum(1 for _, ok in history if ok)
+
+        # 이번 달 (ref 기준 연·월)
+        this_month_prefix = f"{ref_year}-{ref_month:02d}"
+        # 지난 달
+        if ref_month == 1:
+            last_month_year, last_month_month = ref_year - 1, 12
+        else:
+            last_month_year, last_month_month = ref_year, ref_month - 1
+        last_month_prefix = f"{last_month_year}-{last_month_month:02d}"
+
+        this_month_hist = [(d, ok) for d, ok in history if d.startswith(this_month_prefix)]
+        last_month_hist = [(d, ok) for d, ok in history if d.startswith(last_month_prefix)]
+
+        def _rate(hist):
+            t = len(hist)
+            s = sum(1 for _, ok in hist if ok)
+            return {"success": s, "total": t, "pct": round(s / t * 100, 1) if t else 0.0}
+
+        # 최장 연속 성공 / 실패 streak 스캔
+        def _longest_streak(history, target_ok: bool):
+            best_days = 0
+            best_from = None
+            best_to = None
+            cur_days = 0
+            cur_from = None
+            for d, ok in history:
+                if ok == target_ok:
+                    cur_days += 1
+                    if cur_from is None:
+                        cur_from = d
+                    if cur_days > best_days:
+                        best_days = cur_days
+                        best_from = cur_from
+                        best_to = d
+                else:
+                    cur_days = 0
+                    cur_from = None
+            return best_days, best_from, best_to
+
+        suc_days, suc_from, suc_to = _longest_streak(history, True)
+        fail_days, fail_from, fail_to = _longest_streak(history, False)
+
+        # 마지막 성공 streak가 현재 진행 중이면 to=None
+        if suc_to and suc_to == history[-1][0] and history[-1][1]:
+            suc_to = None
+        if fail_to and fail_to == history[-1][0] and not history[-1][1]:
+            fail_to = None
+
+        # 모든 회복 이벤트 탐색
+        def _all_recovery_events(history):
+            """
+            연속 성공 streak가 시작되는 모든 경계를 반환.
+            반환: [{"recovery_date", "gap_days", "is_first_success", "prev_success_date"}, ...]
+            """
+            events = []
+            n = len(history)
+            i = 0
+            while i < n:
+                d, ok = history[i]
+                if ok:
+                    # streak 시작
+                    streak_start_idx = i
+                    # 이 streak의 직전이 실패이거나 첫 번째 항목이어야 회복 이벤트
+                    if i == 0 or not history[i - 1][1]:
+                        # 이전 성공일 탐색
+                        prev_success_date = None
+                        for j in range(i - 1, -1, -1):
+                            if history[j][1]:
+                                prev_success_date = history[j][0]
+                                break
+                        if prev_success_date is None:
+                            events.append({
+                                "recovery_date": d,
+                                "gap_days": None,
+                                "is_first_success": True,
+                                "prev_success_date": None,
+                            })
+                        else:
+                            from datetime import datetime as _dt
+                            gap = (_dt.strptime(d, "%Y-%m-%d") - _dt.strptime(prev_success_date, "%Y-%m-%d")).days
+                            events.append({
+                                "recovery_date": d,
+                                "gap_days": gap,
+                                "is_first_success": False,
+                                "prev_success_date": prev_success_date,
+                            })
+                    # streak 끝까지 건너뜀
+                    while i < n and history[i][1]:
+                        i += 1
+                else:
+                    i += 1
+            return events
+
+        recovery_events = _all_recovery_events(history)
+        # 최근 10건 (최신 순)
+        recovery_history = list(reversed(recovery_events[-10:]))
+
+        # 실행사 변경 이력 (map_type='place')
+        agency_rows = conn.execute("""
+            SELECT from_agency, to_agency, changed_at
+            FROM agency_map_history
+            WHERE branch_name = ? AND map_type = 'place'
+            ORDER BY changed_at DESC
+        """, (branch_name,)).fetchall()
+        agency_history = [
+            {"from_agency": r["from_agency"], "to_agency": r["to_agency"], "changed_at": r["changed_at"]}
+            for r in agency_rows
+        ]
+
+        return {
+            "branch_name": branch_name,
+            "keyword": keyword,
+            "success_rate": {
+                "all":        {"success": success_all, "total": total_all, "pct": round(success_all / total_all * 100, 1) if total_all else 0.0},
+                "this_month": _rate(this_month_hist),
+                "last_month": _rate(last_month_hist),
+            },
+            "longest": {
+                "success": {"days": suc_days,  "from": suc_from,  "to": suc_to},
+                "fail":    {"days": fail_days, "from": fail_from, "to": fail_to},
+            },
+            "recovery_history": recovery_history,
+            "agency_history": agency_history,
         }
     finally:
         conn.close()

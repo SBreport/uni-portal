@@ -2,12 +2,13 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAgencyVisibility } from '@/composables/useAgencyVisibility'
-import { getWebpageRankingDaily, syncWebpageToDB, getWebpageLastSync } from '@/api/webpage'
+import { getWebpageRankingDaily, syncWebpageToDB, getWebpageLastSync, getWebpageBranchDetail } from '@/api/webpage'
 import { fetchAgencyMap } from '@/api/branches'
 
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
 const { canSeeAgency } = useAgencyVisibility()
+const isEditor = computed(() => ['admin', 'editor'].includes(auth.role))
 
 interface DailyData {
   day: number
@@ -25,6 +26,9 @@ interface BranchRanking {
   status: 'active' | 'fail' | '미달' | 'stopped'
   work_days: number
   daily: DailyData[]
+  last_success_date?: string | null
+  recovery_date?: string | null
+  recovery_gap?: number | null
 }
 
 interface WebpageData {
@@ -175,21 +179,22 @@ function recentDays(b: BranchRanking): { day: number; exposed: number; mark: str
   return b.daily || []
 }
 
-function getRecoveryInfo(daily: DailyData[]): { isRecovered: boolean; days: number } {
-  if (!daily || daily.length === 0) return { isRecovered: false, days: 0 }
-  const last = daily[daily.length - 1]
-  const todayOk = last.exposed === 1
-  if (!todayOk) return { isRecovered: false, days: 0 }
-  let consecutiveFail = 0
-  for (let i = daily.length - 2; i >= 0; i--) {
-    if (daily[i].exposed !== 1 && daily[i].mark !== '') {
-      consecutiveFail++
-    } else {
-      break
-    }
-  }
-  if (consecutiveFail >= 3) return { isRecovered: true, days: consecutiveFail }
-  return { isRecovered: false, days: 0 }
+function getRecoveryInfo(b: BranchRanking): { show: boolean; label: string } {
+  if (!b.today_exposed) return { show: false, label: '' }
+  if (b.recovery_date == null) return { show: false, label: '' }
+  const recoveryPart = b.recovery_gap == null ? '첫 성공' : `${b.recovery_gap}일 만에 회복`
+  const holdPart = (b.streak && b.streak > 1) ? ` · ${b.streak}일째 유지` : ''
+  return { show: true, label: recoveryPart + holdPart }
+}
+
+// YY-MM-DD 형식으로 날짜 변환 (YYYY-MM-DD 또는 기타 형식 입력 허용)
+function fmtDate(raw: string | null | undefined): string {
+  if (!raw) return ''
+  // YYYY-MM-DD → YY-MM-DD
+  const m = raw.match(/^(\d{4})-(\d{2}-\d{2})$/)
+  if (m) return m[1].slice(2) + '-' + m[2]
+  // 이미 YY-MM-DD 이하면 그대로
+  return raw
 }
 
 function barWidth(count: number): number {
@@ -215,6 +220,34 @@ function statusBadge(status: string): { text: string; cls: string } {
 
 function shortName(branch: string): string {
   return branch.replace('유앤아이의원 ', '').replace('유앤아이의원', '').replace('유앤아이 ', '').replace('점', '')
+}
+
+// ── 확장 행 토글 ──
+const expandedBranch = ref<string | null>(null)
+const detailData = ref<any>(null)
+const detailLoading = ref(false)
+const detailError = ref('')
+
+async function toggleBranch(b: BranchRanking) {
+  if (!isEditor.value) return
+  if (expandedBranch.value === b.branch) {
+    expandedBranch.value = null
+    detailData.value = null
+    detailError.value = ''
+    return
+  }
+  expandedBranch.value = b.branch
+  detailLoading.value = true
+  detailData.value = null
+  detailError.value = ''
+  try {
+    const { data: res } = await getWebpageBranchDetail(b.branch, b.keyword, selectedDate.value)
+    detailData.value = res
+  } catch (e: any) {
+    detailError.value = e.response?.data?.detail || '데이터를 불러올 수 없습니다'
+  } finally {
+    detailLoading.value = false
+  }
 }
 
 async function loadData() {
@@ -404,7 +437,7 @@ onMounted(async () => {
               <table class="w-full text-xs">
                 <thead>
                   <tr class="bg-slate-50/95 border-b border-slate-200">
-                    <th @click="toggleSort('branch')"    class="th-cell text-left pl-3 pr-2 w-[80px]">지점 <span class="sort-icon">{{ sortIcon('branch') }}</span></th>
+                    <th @click="toggleSort('branch')"    class="th-cell text-left pl-3 pr-2 w-[80px] min-w-[120px]">지점 <span class="sort-icon">{{ sortIcon('branch') }}</span></th>
                     <th @click="toggleSort('keyword')"    class="th-cell text-left px-2 w-[100px]">키워드 <span class="sort-icon">{{ sortIcon('keyword') }}</span></th>
                     <th @click="toggleSort('today_exposed')" title="오늘 노출 성공 여부 (O/X)" class="th-cell text-center w-[44px]">오늘 <span class="sort-icon">{{ sortIcon('today_exposed') }}</span></th>
                     <th title="최근 5일간 일별 노출 여부" class="th-cell text-center w-[100px]">최근 5일</th>
@@ -420,14 +453,17 @@ onMounted(async () => {
                   <tr v-if="filteredBranches.length === 0">
                     <td :colspan="canSeeAgency && agencyStats.length > 0 ? 10 : 9" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
-                  <tr v-for="b in filteredBranches" :key="b.branch"
+                  <template v-for="b in filteredBranches" :key="b.branch">
+                  <tr @click="isEditor && toggleBranch(b)"
                     :class="['border-b border-slate-100 transition-colors',
-                      getRecoveryInfo(b.daily).isRecovered
-                        ? 'bg-emerald-50/60 hover:bg-emerald-100/60'
-                        : 'hover:bg-blue-50/30']">
-                    <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap">
+                      isEditor ? 'cursor-pointer' : '',
+                      getRecoveryInfo(b).show
+                        ? (expandedBranch === b.branch ? 'bg-emerald-100/60' : 'bg-emerald-50/60 hover:bg-emerald-100/60')
+                        : (expandedBranch === b.branch ? 'bg-blue-50/50' : 'hover:bg-blue-50/30')]">
+                    <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap min-w-[120px]">
+                      <span v-if="isEditor" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>
                       {{ shortName(b.branch) }}
-                      <span v-if="getRecoveryInfo(b.daily).isRecovered" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 border border-emerald-200 ml-1">{{ getRecoveryInfo(b.daily).days }}일 만에 회복</span>
+                      <span v-if="getRecoveryInfo(b).show" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" :title="getRecoveryInfo(b).label"></span>
                     </td>
                     <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
                     <td class="py-[5px] text-center whitespace-nowrap">
@@ -457,6 +493,94 @@ onMounted(async () => {
                     </td>
                     <td v-if="canSeeAgency && agencyStats.length > 0" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
                   </tr>
+                  <!-- 상세 분석 패널 -->
+                  <tr v-if="expandedBranch === b.branch && isEditor" class="bg-slate-50/80">
+                    <td :colspan="canSeeAgency && agencyStats.length > 0 ? 10 : 9" class="px-6 py-3">
+                      <div v-if="detailLoading" class="text-xs text-slate-400">불러오는 중...</div>
+                      <div v-else-if="detailError" class="text-xs text-red-500">{{ detailError }}</div>
+                      <template v-else-if="detailData && detailData.success_rate.all.total > 0">
+                        <div class="grid grid-cols-[auto_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs max-w-md">
+
+                          <!-- ── 성공률 섹션 ── -->
+                          <!-- 전체 -->
+                          <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">성공률</span>
+                          <span class="text-xs text-slate-500 self-center py-0.5">전체</span>
+                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                            {{ detailData.success_rate.all.success }}/{{ detailData.success_rate.all.total }}일
+                          </span>
+                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">({{ detailData.success_rate.all.pct }}%)</span>
+                          <!-- 이번 달 -->
+                          <span class="py-0.5"></span>
+                          <span class="text-xs text-slate-500 self-center py-0.5">이번 달</span>
+                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                            <template v-if="detailData.success_rate.this_month.total > 0">{{ detailData.success_rate.this_month.success }}/{{ detailData.success_rate.this_month.total }}일</template>
+                            <span v-else class="text-slate-300">-</span>
+                          </span>
+                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                            <template v-if="detailData.success_rate.this_month.total > 0">({{ detailData.success_rate.this_month.pct }}%)</template>
+                          </span>
+                          <!-- 지난 달 -->
+                          <span class="py-0.5"></span>
+                          <span class="text-xs text-slate-500 self-center py-0.5">지난 달</span>
+                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                            <template v-if="detailData.success_rate.last_month.total > 0">{{ detailData.success_rate.last_month.success }}/{{ detailData.success_rate.last_month.total }}일</template>
+                            <span v-else class="text-slate-300">-</span>
+                          </span>
+                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                            <template v-if="detailData.success_rate.last_month.total > 0">({{ detailData.success_rate.last_month.pct }}%)</template>
+                          </span>
+
+                          <!-- ── 연속 섹션 구분선 ── -->
+                          <div class="col-span-4 border-t border-slate-100 my-0.5"></div>
+
+                          <!-- 최장 노출 -->
+                          <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">연속</span>
+                          <span class="text-xs text-slate-500 self-center py-0.5">최장 노출</span>
+                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                            <template v-if="detailData.longest.success.days > 0">{{ detailData.longest.success.days }}일</template>
+                            <span v-else class="text-slate-300">-</span>
+                          </span>
+                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                            <template v-if="detailData.longest.success.days > 0">
+                              {{ fmtDate(detailData.longest.success.from) }} ~
+                              <template v-if="detailData.longest.success.to">{{ fmtDate(detailData.longest.success.to) }}</template>
+                              <template v-else>진행중</template>
+                            </template>
+                          </span>
+                          <!-- 최장 미노출 -->
+                          <span class="py-0.5"></span>
+                          <span class="text-xs text-slate-500 self-center py-0.5">최장 미노출</span>
+                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                            <template v-if="detailData.longest.fail.days > 0">{{ detailData.longest.fail.days }}일</template>
+                            <span v-else class="text-slate-300">-</span>
+                          </span>
+                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                            <template v-if="detailData.longest.fail.days > 0">
+                              {{ fmtDate(detailData.longest.fail.from) }} ~
+                              <template v-if="detailData.longest.fail.to">{{ fmtDate(detailData.longest.fail.to) }}</template>
+                              <template v-else>진행중</template>
+                            </template>
+                          </span>
+
+                          <!-- ── 회복 섹션 (이력이 있을 때만) ── -->
+                          <template v-if="detailData.recovery_history.length > 0">
+                            <div class="col-span-4 border-t border-slate-100 my-0.5"></div>
+                            <template v-for="(ev, idx) in detailData.recovery_history.slice(0, 5)" :key="ev.recovery_date">
+                              <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">{{ idx === 0 ? '회복' : '' }}</span>
+                              <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">{{ fmtDate(ev.recovery_date) }}</span>
+                              <span class="text-xs font-medium text-slate-900 self-center py-0.5 col-span-2">
+                                <span v-if="ev.is_first_success" class="text-slate-400">첫 성공</span>
+                                <span v-else class="tabular-nums">{{ ev.gap_days }}일 만에</span>
+                              </span>
+                            </template>
+                          </template>
+
+                        </div>
+                      </template>
+                      <div v-else-if="detailData" class="text-xs text-slate-300">이력 없음</div>
+                    </td>
+                  </tr>
+                  </template>
                 </tbody>
               </table>
             </div>

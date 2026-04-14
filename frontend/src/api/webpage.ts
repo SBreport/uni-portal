@@ -19,3 +19,6 @@ export const getWebpageRankingDaily = (date: string) =>
   api.get('/webpage/ranking-daily', { params: { date } })
 
 export const getWebpageLastSync = () => api.get('/webpage/last-sync')
+
+export const getWebpageBranchDetail = (branch_name: string, keyword: string, reference_date: string) =>
+  api.get('/webpage/branch-detail', { params: { branch_name, keyword, reference_date } })

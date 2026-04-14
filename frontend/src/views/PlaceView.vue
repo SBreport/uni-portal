@@ -2,8 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAgencyVisibility } from '@/composables/useAgencyVisibility'
-import { getPlaceRankingDaily, syncPlaceToDB, getPlaceLastSync } from '@/api/place'
-import { getComparison } from '@/api/rankChecker'
+import { getPlaceRankingDaily, syncPlaceToDB, getPlaceLastSync, getPlaceBranchDetail } from '@/api/place'
 import { fetchAgencyMap } from '@/api/branches'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
@@ -29,6 +28,9 @@ interface BranchRanking {
   status: 'active' | 'fail' | '미달' | 'stopped'
   work_days: number
   daily: DailyData[]
+  last_success_date?: string | null
+  recovery_date?: string | null
+  recovery_gap?: number | null
 }
 
 interface PlaceData {
@@ -68,28 +70,31 @@ const displayDate = computed(() => {
 const isAdmin = computed(() => auth.role === 'admin')
 const isEditor = computed(() => ['admin', 'editor'].includes(auth.role))
 
-// ── SB체커 토글 ──
+// ── 확장 행 토글 ──
 const expandedBranch = ref<string | null>(null)
-const comparisonData = ref<any>(null)
-const comparisonLoading = ref(false)
+const detailData = ref<any>(null)
+const detailLoading = ref(false)
+const detailError = ref('')
 
 async function toggleBranch(b: BranchRanking) {
   if (!isEditor.value) return
   if (expandedBranch.value === b.branch) {
     expandedBranch.value = null
-    comparisonData.value = null
+    detailData.value = null
+    detailError.value = ''
     return
   }
   expandedBranch.value = b.branch
-  comparisonLoading.value = true
-  comparisonData.value = null
+  detailLoading.value = true
+  detailData.value = null
+  detailError.value = ''
   try {
-    const { data: res } = await getComparison(b.branch_id)
-    comparisonData.value = res
-  } catch {
-    comparisonData.value = { comparisons: [], mismatch_count: 0 }
+    const { data: res } = await getPlaceBranchDetail(b.branch, b.keyword, selectedDate.value)
+    detailData.value = res
+  } catch (e: any) {
+    detailError.value = e.response?.data?.detail || '데이터를 불러올 수 없습니다'
   } finally {
-    comparisonLoading.value = false
+    detailLoading.value = false
   }
 }
 
@@ -207,22 +212,22 @@ function recentRanks(b: BranchRanking): { day: number; rank: number | null }[] {
   return b.daily || []
 }
 
-function getRecoveryInfo(daily: DailyData[]): { isRecovered: boolean; days: number } {
-  if (!daily || daily.length === 0) return { isRecovered: false, days: 0 }
-  const last = daily[daily.length - 1]
-  const todayOk = last.rank !== null && last.rank > 0
-  if (!todayOk) return { isRecovered: false, days: 0 }
-  let consecutiveFail = 0
-  for (let i = daily.length - 2; i >= 0; i--) {
-    const d = daily[i]
-    if (d.rank === null || d.rank <= 0) {
-      consecutiveFail++
-    } else {
-      break
-    }
-  }
-  if (consecutiveFail >= 3) return { isRecovered: true, days: consecutiveFail }
-  return { isRecovered: false, days: 0 }
+function getRecoveryInfo(b: BranchRanking): { show: boolean; label: string } {
+  if (b.today_rank == null || b.today_rank < 1 || b.today_rank > 5) return { show: false, label: '' }
+  if (b.recovery_date == null) return { show: false, label: '' }
+  const recoveryPart = b.recovery_gap == null ? '첫 성공' : `${b.recovery_gap}일 만에 회복`
+  const holdPart = (b.streak && b.streak > 1) ? ` · ${b.streak}일째 유지` : ''
+  return { show: true, label: recoveryPart + holdPart }
+}
+
+// YY-MM-DD 형식으로 날짜 변환 (YYYY-MM-DD 또는 기타 형식 입력 허용)
+function fmtDate(raw: string | null | undefined): string {
+  if (!raw) return ''
+  // YYYY-MM-DD → YY-MM-DD
+  const m = raw.match(/^(\d{4})-(\d{2}-\d{2})$/)
+  if (m) return m[1].slice(2) + '-' + m[2]
+  // 이미 YY-MM-DD 이하면 그대로
+  return raw
 }
 
 function barWidth(count: number): number {
@@ -448,7 +453,7 @@ onMounted(async () => {
               <table class="w-full text-xs">
                 <thead>
                   <tr class="bg-slate-50/95 border-b border-slate-200">
-                    <th @click="toggleSort('branch')"   class="th-cell text-left pl-3 pr-2 w-[70px]" title="플레이스 등록 지점명">지점 <span class="sort-icon">{{ sortIcon('branch') }}</span></th>
+                    <th @click="toggleSort('branch')"   class="th-cell text-left pl-3 pr-2 w-[70px] min-w-[120px]" title="플레이스 등록 지점명">지점 <span class="sort-icon">{{ sortIcon('branch') }}</span></th>
                     <th @click="toggleSort('keyword')"   class="th-cell text-left px-2 w-[100px]" title="실제 작업 중인 검색 키워드">키워드 <span class="sort-icon">{{ sortIcon('keyword') }}</span></th>
                     <th @click="toggleSort('today_rank')" class="th-cell text-center w-[44px]" title="오늘 측정된 플레이스 순위">오늘 <span class="sort-icon">{{ sortIcon('today_rank') }}</span></th>
                     <th class="th-cell text-center w-[100px]" title="최근 5일간 일별 성공 여부 (O/X)">최근 5일</th>
@@ -468,12 +473,13 @@ onMounted(async () => {
                     <tr @click="isEditor && toggleBranch(b)"
                       :class="['border-b border-slate-100 transition-colors',
                         isEditor ? 'cursor-pointer' : '',
-                        getRecoveryInfo(b.daily).isRecovered
+                        getRecoveryInfo(b).show
                           ? (expandedBranch === b.branch ? 'bg-emerald-100/60' : 'bg-emerald-50/60 hover:bg-emerald-100/60')
                           : (expandedBranch === b.branch ? 'bg-blue-50/50' : 'hover:bg-blue-50/30')]">
-                      <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap">
-                        <span v-if="isEditor" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>{{ shortName(b.branch) }}
-                        <span v-if="getRecoveryInfo(b.daily).isRecovered" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 border border-emerald-200 ml-1">{{ getRecoveryInfo(b.daily).days }}일 만에 회복</span>
+                      <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap min-w-[120px]">
+                        <span v-if="isEditor" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>
+                        {{ shortName(b.branch) }}
+                        <span v-if="getRecoveryInfo(b).show" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" :title="getRecoveryInfo(b).label"></span>
                       </td>
                       <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
                       <td class="py-[5px] text-center whitespace-nowrap" :class="rankClass(b.today_rank)">
@@ -501,55 +507,101 @@ onMounted(async () => {
                       </td>
                       <td v-if="canSeeAgency" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
                     </tr>
-                    <!-- SB체커 비교 하위 행 -->
-                    <tr v-if="expandedBranch === b.branch && isEditor" class="bg-amber-50/50">
-                      <td :colspan="canSeeAgency ? 10 : 9" class="px-3 py-2">
-                        <div v-if="comparisonLoading" class="text-xs text-slate-400 py-2 text-center">비교 데이터 로딩 중...</div>
-                        <div v-else-if="comparisonData && comparisonData.comparisons.length > 0">
-                          <div class="flex items-center gap-2 mb-1.5">
-                            <span class="text-[10px] font-bold text-amber-700">SB체커 비교</span>
-                            <span class="text-[10px] text-slate-400">{{ comparisonData.date }}</span>
-                            <span v-if="comparisonData.mismatch_count > 0"
-                              class="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded font-medium">
-                              불일치 {{ comparisonData.mismatch_count }}건
+                    <!-- 상세 분석 패널 -->
+                    <tr v-if="expandedBranch === b.branch && isEditor" class="bg-slate-50/80">
+                      <td :colspan="canSeeAgency ? 10 : 9" class="px-6 py-3">
+                        <div v-if="detailLoading" class="text-xs text-slate-400">불러오는 중...</div>
+                        <div v-else-if="detailError" class="text-xs text-red-500">{{ detailError }}</div>
+                        <template v-else-if="detailData && detailData.success_rate.all.total > 0">
+                          <div class="grid grid-cols-[auto_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs max-w-md">
+
+                            <!-- ── 성공률 섹션 ── -->
+                            <!-- 전체 -->
+                            <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">성공률</span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">전체</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              {{ detailData.success_rate.all.success }}/{{ detailData.success_rate.all.total }}일
                             </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">({{ detailData.success_rate.all.pct }}%)</span>
+                            <!-- 이번 달 -->
+                            <span class="py-0.5"></span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">이번 달</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.success_rate.this_month.total > 0">{{ detailData.success_rate.this_month.success }}/{{ detailData.success_rate.this_month.total }}일</template>
+                              <span v-else class="text-slate-300">-</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.success_rate.this_month.total > 0">({{ detailData.success_rate.this_month.pct }}%)</template>
+                            </span>
+                            <!-- 지난 달 -->
+                            <span class="py-0.5"></span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">지난 달</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.success_rate.last_month.total > 0">{{ detailData.success_rate.last_month.success }}/{{ detailData.success_rate.last_month.total }}일</template>
+                              <span v-else class="text-slate-300">-</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.success_rate.last_month.total > 0">({{ detailData.success_rate.last_month.pct }}%)</template>
+                            </span>
+
+                            <!-- ── 연속 섹션 구분선 ── -->
+                            <div class="col-span-4 border-t border-slate-100 my-0.5"></div>
+
+                            <!-- 최장 성공 -->
+                            <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">연속</span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">최장 성공</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.longest.success.days > 0">{{ detailData.longest.success.days }}일</template>
+                              <span v-else class="text-slate-300">-</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.longest.success.days > 0">
+                                {{ fmtDate(detailData.longest.success.from) }} ~
+                                <template v-if="detailData.longest.success.to">{{ fmtDate(detailData.longest.success.to) }}</template>
+                                <template v-else>진행중</template>
+                              </template>
+                            </span>
+                            <!-- 최장 실패 -->
+                            <span class="py-0.5"></span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">최장 실패</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.longest.fail.days > 0">{{ detailData.longest.fail.days }}일</template>
+                              <span v-else class="text-slate-300">-</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.longest.fail.days > 0">
+                                {{ fmtDate(detailData.longest.fail.from) }} ~
+                                <template v-if="detailData.longest.fail.to">{{ fmtDate(detailData.longest.fail.to) }}</template>
+                                <template v-else>진행중</template>
+                              </template>
+                            </span>
+
+                            <!-- ── 회복 섹션 (이력이 있을 때만) ── -->
+                            <template v-if="detailData.recovery_history.length > 0">
+                              <div class="col-span-4 border-t border-slate-100 my-0.5"></div>
+                              <template v-for="(ev, idx) in detailData.recovery_history.slice(0, 5)" :key="ev.recovery_date">
+                                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">{{ idx === 0 ? '회복' : '' }}</span>
+                                <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">{{ fmtDate(ev.recovery_date) }}</span>
+                                <span class="text-xs font-medium text-slate-900 self-center py-0.5 col-span-2">
+                                  <span v-if="ev.is_first_success" class="text-slate-400">첫 성공</span>
+                                  <span v-else class="tabular-nums">{{ ev.gap_days }}일 만에</span>
+                                </span>
+                              </template>
+                            </template>
+
+                            <!-- ── 실행사 섹션 (canSeeAgency + 이력이 있을 때만) ── -->
+                            <template v-if="canSeeAgency && detailData.agency_history && detailData.agency_history.length > 0">
+                              <div class="col-span-4 border-t border-slate-100 my-0.5"></div>
+                              <template v-for="(ag, idx) in detailData.agency_history.slice(0, 5)" :key="ag.changed_at">
+                                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">{{ idx === 0 ? '실행사' : '' }}</span>
+                                <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">{{ fmtDate(ag.changed_at) }}</span>
+                                <span class="text-xs font-medium text-slate-900 self-center py-0.5 col-span-2">{{ ag.from_agency || '(없음)' }} → {{ ag.to_agency }}</span>
+                              </template>
+                            </template>
+
                           </div>
-                          <table class="w-full text-[11px]">
-                            <thead>
-                              <tr class="text-slate-400">
-                                <th class="text-left px-2 py-1 font-medium">키워드</th>
-                                <th class="text-center px-2 py-1 font-medium">SB순위</th>
-                                <th class="text-center px-2 py-1 font-medium">SB노출</th>
-                                <th class="text-center px-2 py-1 font-medium">실행사순위</th>
-                                <th class="text-center px-2 py-1 font-medium">실행사노출</th>
-                                <th class="text-center px-2 py-1 font-medium">일치</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr v-for="c in comparisonData.comparisons.filter((c: any) => !expandedBranch || filteredBranches.some((fb: any) => fb.branch === expandedBranch && fb.keyword === c.keyword))" :key="c.keyword"
-                                :class="c.mismatch ? 'bg-red-50/80' : ''">
-                                <td class="px-2 py-1 text-slate-700 font-medium">{{ c.keyword }}</td>
-                                <td class="px-2 py-1 text-center" :class="c.checker?.rank && c.checker.rank <= (c.checker.guaranteed_rank || 5) ? 'text-emerald-600 font-semibold' : 'text-red-500'">
-                                  {{ c.checker?.rank ? c.checker.rank + '위' : '-' }}
-                                </td>
-                                <td class="px-2 py-1 text-center" :class="c.checker?.is_exposed ? 'text-emerald-600' : 'text-red-400'">
-                                  {{ c.checker ? (c.checker.is_exposed ? 'O' : 'X') : '-' }}
-                                </td>
-                                <td class="px-2 py-1 text-center" :class="c.agency?.rank && c.agency.rank <= 5 ? 'text-emerald-600 font-semibold' : c.agency?.rank ? 'text-red-500' : 'text-slate-300'">
-                                  {{ c.agency?.rank ? c.agency.rank + '위' : '-' }}
-                                </td>
-                                <td class="px-2 py-1 text-center" :class="c.agency?.is_exposed ? 'text-emerald-600' : 'text-red-400'">
-                                  {{ c.agency ? (c.agency.is_exposed ? 'O' : 'X') : '-' }}
-                                </td>
-                                <td class="px-2 py-1 text-center font-medium"
-                                  :class="c.mismatch ? 'text-red-600' : !c.checker || !c.agency ? 'text-slate-300' : 'text-emerald-600'">
-                                  {{ c.mismatch ? '불일치' : !c.checker ? '(신규)' : !c.agency ? '(없음)' : '일치' }}
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                        <div v-else class="text-xs text-slate-400 py-2 text-center">비교 데이터가 없습니다 (키워드 미등록 또는 체크 미실행)</div>
+                        </template>
+                        <div v-else-if="detailData" class="text-xs text-slate-300">이력 없음</div>
                       </td>
                     </tr>
                   </template>

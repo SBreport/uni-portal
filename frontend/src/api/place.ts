@@ -19,3 +19,6 @@ export const getPlaceRankingDaily = (date: string) =>
   api.get('/place/ranking-daily', { params: { date } })
 
 export const getPlaceLastSync = () => api.get('/place/last-sync')
+
+export const getPlaceBranchDetail = (branch_name: string, keyword: string, reference_date: string) =>
+  api.get('/place/branch-detail', { params: { branch_name, keyword, reference_date } })

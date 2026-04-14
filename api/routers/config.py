@@ -333,6 +333,186 @@ async def get_agency_stats(
         conn.close()
 
 
+@router.get("/dashboard-stats")
+async def get_dashboard_stats(
+    user: Annotated[dict, Depends(get_current_user)],
+    type: Literal["place", "webpage"] = Query("place"),
+    months: int = Query(6, description="최근 N개월"),
+):
+    """전체 지점 성과 대시보드 통계."""
+    from datetime import date as date_cls, timedelta
+
+    today = date_cls.today()
+    start_date = (today.replace(day=1) - timedelta(days=30 * (months - 1))).replace(day=1)
+    yesterday = (today - timedelta(days=1)).isoformat()
+
+    table = "place_daily" if type == "place" else "webpage_daily"
+
+    if type == "place":
+        work_filter = "AND NOT (is_exposed = 0 AND (rank IS NULL OR rank = 0))"
+    else:
+        work_filter = "AND NOT (is_exposed = 0 AND (executor IS NULL OR executor = ''))"
+
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        # 1. 전체 지점 목록
+        all_branches_rows = conn.execute(f"""
+            SELECT DISTINCT branch_name FROM {table}
+            WHERE date >= ? AND date <= ?
+              {work_filter}
+        """, (start_date.isoformat(), today.isoformat())).fetchall()
+        all_branches = [r["branch_name"] for r in all_branches_rows]
+        total_branches = len(all_branches)
+
+        # 2. 전체 성공률 + 총노출/총진행 (선택 기간 내)
+        overall_row = conn.execute(f"""
+            SELECT COUNT(*) AS total_days,
+                   SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS exposed_days
+            FROM {table}
+            WHERE date >= ? AND date <= ?
+              {work_filter}
+        """, (start_date.isoformat(), today.isoformat())).fetchone()
+        total_days = overall_row["total_days"] or 0
+        exposed_days = overall_row["exposed_days"] or 0
+        overall_rate = round(exposed_days / total_days * 100, 1) if total_days > 0 else 0
+
+        # 3. 오늘/어제 노출 지점 수
+        today_row = conn.execute(f"""
+            SELECT COUNT(DISTINCT branch_name) AS c FROM {table}
+            WHERE date = ? AND is_exposed = 1
+        """, (today.isoformat(),)).fetchone()
+        today_exposed = today_row["c"] or 0
+
+        yesterday_row = conn.execute(f"""
+            SELECT COUNT(DISTINCT branch_name) AS c FROM {table}
+            WHERE date = ? AND is_exposed = 1
+        """, (yesterday,)).fetchone()
+        yesterday_exposed = yesterday_row["c"] or 0
+
+        # 4. 월별 전체 성공률
+        monthly_rows = conn.execute(f"""
+            SELECT strftime('%Y-%m', date) AS month,
+                   COUNT(*) AS total_days,
+                   SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS exposed_days
+            FROM {table}
+            WHERE date >= ? AND date <= ?
+              {work_filter}
+            GROUP BY month
+            ORDER BY month
+        """, (start_date.isoformat(), today.isoformat())).fetchall()
+        monthly_rates = {}
+        for r in monthly_rows:
+            t = r["total_days"] or 0
+            e = r["exposed_days"] or 0
+            monthly_rates[r["month"]] = round(e / t * 100, 1) if t > 0 else 0
+
+        # 5. 지점별 성공률 (분포용)
+        branch_rates_rows = conn.execute(f"""
+            SELECT branch_name,
+                   COUNT(*) AS total_days,
+                   SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS exposed_days
+            FROM {table}
+            WHERE date >= ? AND date <= ?
+              {work_filter}
+            GROUP BY branch_name
+        """, (start_date.isoformat(), today.isoformat())).fetchall()
+
+        distribution = {"excellent": 0, "good": 0, "fair": 0, "poor": 0}  # 90+/70-89/50-69/<50
+        perfect_count = 0
+        rates = []
+        for r in branch_rates_rows:
+            t = r["total_days"] or 0
+            e = r["exposed_days"] or 0
+            rate = round(e / t * 100, 1) if t > 0 else 0
+            rates.append({"branch": r["branch_name"], "rate": rate})
+            if rate >= 90:
+                distribution["excellent"] += 1
+                if rate == 100:
+                    perfect_count += 1
+            elif rate >= 70:
+                distribution["good"] += 1
+            elif rate >= 50:
+                distribution["fair"] += 1
+            else:
+                distribution["poor"] += 1
+
+        # 6. 평균 연속일 (전체 기간에서 계산, 미작업일 건너뛰고)
+        streak_rows = conn.execute(f"""
+            SELECT branch_name, date, is_exposed
+            FROM {table}
+            WHERE date <= ?
+              {work_filter}
+            ORDER BY branch_name, date DESC
+        """, (today.isoformat(),)).fetchall()
+        streaks = {}
+        current_branch = None
+        current_streak = 0
+        counting = True
+        for r in streak_rows:
+            if r["branch_name"] != current_branch:
+                if current_branch:
+                    streaks[current_branch] = current_streak
+                current_branch = r["branch_name"]
+                current_streak = 0
+                counting = True
+            if counting:
+                if r["is_exposed"] == 1:
+                    current_streak += 1
+                else:
+                    counting = False
+        if current_branch:
+            streaks[current_branch] = current_streak
+
+        avg_streak = round(sum(streaks.values()) / len(streaks), 1) if streaks else 0
+
+        # 7. 변동 TOP (전월 대비 성공률 급변)
+        month_list = sorted(monthly_rates.keys())
+        top_changes = []
+        if len(month_list) >= 2:
+            prev_m = month_list[-2]
+            curr_m = month_list[-1]
+            # 지점별 전월 대비 변화
+            branch_prev = {r["branch_name"]: r for r in conn.execute(f"""
+                SELECT branch_name, COUNT(*) AS t, SUM(CASE WHEN is_exposed=1 THEN 1 ELSE 0 END) AS e
+                FROM {table}
+                WHERE strftime('%Y-%m', date) = ?
+                  {work_filter}
+                GROUP BY branch_name
+            """, (prev_m,)).fetchall()}
+            branch_curr = {r["branch_name"]: r for r in conn.execute(f"""
+                SELECT branch_name, COUNT(*) AS t, SUM(CASE WHEN is_exposed=1 THEN 1 ELSE 0 END) AS e
+                FROM {table}
+                WHERE strftime('%Y-%m', date) = ?
+                  {work_filter}
+                GROUP BY branch_name
+            """, (curr_m,)).fetchall()}
+            changes = []
+            for bname in set(branch_prev.keys()) & set(branch_curr.keys()):
+                prev_r = round(branch_prev[bname]["e"] / branch_prev[bname]["t"] * 100, 1) if branch_prev[bname]["t"] > 0 else 0
+                curr_r = round(branch_curr[bname]["e"] / branch_curr[bname]["t"] * 100, 1) if branch_curr[bname]["t"] > 0 else 0
+                if prev_r > 0 and abs(curr_r - prev_r) >= 15:
+                    changes.append({"branch": bname, "prev_rate": prev_r, "curr_rate": curr_r, "diff": round(curr_r - prev_r, 1)})
+            top_changes = sorted(changes, key=lambda x: abs(x["diff"]), reverse=True)[:5]
+
+        return {
+            "type": type,
+            "period": f"{start_date.isoformat()} ~ {today.isoformat()}",
+            "total_branches": total_branches,
+            "overall_rate": overall_rate,
+            "total_days": total_days,
+            "exposed_days": exposed_days,
+            "today_exposed": today_exposed,
+            "yesterday_exposed": yesterday_exposed,
+            "avg_streak": avg_streak,
+            "perfect_count": perfect_count,
+            "monthly_rates": monthly_rates,
+            "distribution": distribution,
+            "top_changes": top_changes,
+        }
+    finally:
+        conn.close()
+
+
 @router.get("/agency-history")
 async def get_agency_history(
     user: Annotated[dict, Depends(get_current_user)],

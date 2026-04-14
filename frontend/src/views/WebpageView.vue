@@ -175,6 +175,23 @@ function recentDays(b: BranchRanking): { day: number; exposed: number; mark: str
   return b.daily || []
 }
 
+function getRecoveryInfo(daily: DailyData[]): { isRecovered: boolean; days: number } {
+  if (!daily || daily.length === 0) return { isRecovered: false, days: 0 }
+  const last = daily[daily.length - 1]
+  const todayOk = last.exposed === 1
+  if (!todayOk) return { isRecovered: false, days: 0 }
+  let consecutiveFail = 0
+  for (let i = daily.length - 2; i >= 0; i--) {
+    if (daily[i].exposed !== 1 && daily[i].mark !== '') {
+      consecutiveFail++
+    } else {
+      break
+    }
+  }
+  if (consecutiveFail >= 3) return { isRecovered: true, days: consecutiveFail }
+  return { isRecovered: false, days: 0 }
+}
+
 function barWidth(count: number): number {
   if (count <= 0) return 0
   return Math.min(100, (count / 25) * 100)
@@ -404,8 +421,14 @@ onMounted(async () => {
                     <td :colspan="canSeeAgency && agencyStats.length > 0 ? 10 : 9" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
                   <tr v-for="b in filteredBranches" :key="b.branch"
-                    class="border-b border-slate-100 hover:bg-blue-50/30 transition-colors">
-                    <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap">{{ shortName(b.branch) }}</td>
+                    :class="['border-b border-slate-100 transition-colors',
+                      getRecoveryInfo(b.daily).isRecovered
+                        ? 'bg-emerald-50/60 hover:bg-emerald-100/60'
+                        : 'hover:bg-blue-50/30']">
+                    <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap">
+                      {{ shortName(b.branch) }}
+                      <span v-if="getRecoveryInfo(b.daily).isRecovered" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 border border-emerald-200 ml-1">{{ getRecoveryInfo(b.daily).days }}일 만에 회복</span>
+                    </td>
                     <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
                     <td class="py-[5px] text-center whitespace-nowrap">
                       <span v-if="b.status === '미달'" class="text-slate-300">-</span>

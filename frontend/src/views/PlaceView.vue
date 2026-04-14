@@ -207,6 +207,24 @@ function recentRanks(b: BranchRanking): { day: number; rank: number | null }[] {
   return b.daily || []
 }
 
+function getRecoveryInfo(daily: DailyData[]): { isRecovered: boolean; days: number } {
+  if (!daily || daily.length === 0) return { isRecovered: false, days: 0 }
+  const last = daily[daily.length - 1]
+  const todayOk = last.rank !== null && last.rank > 0
+  if (!todayOk) return { isRecovered: false, days: 0 }
+  let consecutiveFail = 0
+  for (let i = daily.length - 2; i >= 0; i--) {
+    const d = daily[i]
+    if (d.rank === null || d.rank <= 0) {
+      consecutiveFail++
+    } else {
+      break
+    }
+  }
+  if (consecutiveFail >= 3) return { isRecovered: true, days: consecutiveFail }
+  return { isRecovered: false, days: 0 }
+}
+
 function barWidth(count: number): number {
   if (count <= 0) return 0
   return Math.min(100, (count / 25) * 100)
@@ -448,11 +466,14 @@ onMounted(async () => {
                   </tr>
                   <template v-for="b in filteredBranches" :key="b.branch">
                     <tr @click="isEditor && toggleBranch(b)"
-                      :class="['border-b border-slate-100 hover:bg-blue-50/30 transition-colors',
+                      :class="['border-b border-slate-100 transition-colors',
                         isEditor ? 'cursor-pointer' : '',
-                        expandedBranch === b.branch ? 'bg-blue-50/50' : '']">
+                        getRecoveryInfo(b.daily).isRecovered
+                          ? (expandedBranch === b.branch ? 'bg-emerald-100/60' : 'bg-emerald-50/60 hover:bg-emerald-100/60')
+                          : (expandedBranch === b.branch ? 'bg-blue-50/50' : 'hover:bg-blue-50/30')]">
                       <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap">
                         <span v-if="isEditor" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>{{ shortName(b.branch) }}
+                        <span v-if="getRecoveryInfo(b.daily).isRecovered" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 border border-emerald-200 ml-1">{{ getRecoveryInfo(b.daily).days }}일 만에 회복</span>
                       </td>
                       <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
                       <td class="py-[5px] text-center whitespace-nowrap" :class="rankClass(b.today_rank)">

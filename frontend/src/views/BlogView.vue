@@ -50,9 +50,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="px-4 pt-4 pb-0 h-[calc(100vh-1rem)] flex flex-col">
+  <div class="px-4 pt-3 pb-0 h-[calc(100vh-1rem)] flex flex-col">
     <!-- 헤더 -->
-    <div class="flex items-center gap-2 mb-3 flex-none">
+    <div class="flex items-center gap-2 mb-2 flex-none">
       <h2 class="text-xl font-bold text-slate-800">{{ pageTitle }}</h2>
     </div>
 

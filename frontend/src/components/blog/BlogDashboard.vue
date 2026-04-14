@@ -262,36 +262,36 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex-1 overflow-auto space-y-4">
+  <div class="flex-1 overflow-auto space-y-3">
     <div v-if="loading" class="text-center py-12 text-slate-400">로딩 중...</div>
     <template v-else-if="dashboard">
       <!-- 요약 카드 (클릭 가능) -->
       <div class="flex items-center justify-between">
         <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 flex-1">
-          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
                @click="goToList()">
             <p class="text-xs text-slate-500">전체 게시글</p>
-            <p class="text-2xl font-bold text-blue-600 mt-1 tabular-nums">{{ dashboard.total?.toLocaleString() }}</p>
+            <p class="text-xl font-bold text-blue-600 mt-1 tabular-nums">{{ dashboard.total?.toLocaleString() }}</p>
           </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
                @click="goToList({ channel: 'br' })">
             <p class="text-xs text-slate-500">브랜드</p>
-            <p class="text-2xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.br || 0).toLocaleString() }}</p>
+            <p class="text-xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.br || 0).toLocaleString() }}</p>
           </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
                @click="goToList({ channel: 'opt' })">
             <p class="text-xs text-slate-500">최적</p>
-            <p class="text-2xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.opt || 0).toLocaleString() }}</p>
+            <p class="text-xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.opt || 0).toLocaleString() }}</p>
           </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
                @click="goToList({ channel: 'cafe' })">
             <p class="text-xs text-slate-500">카페</p>
-            <p class="text-2xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.cafe || 0).toLocaleString() }}</p>
+            <p class="text-xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.cafe || 0).toLocaleString() }}</p>
           </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
                @click="goToList({ needs_review: 1 })">
             <p class="text-xs text-slate-500">검토 필요</p>
-            <p class="text-2xl font-bold mt-1 tabular-nums" :class="(dashboard.review_count || 0) > 0 ? 'text-amber-600' : 'text-slate-800'">{{ (dashboard.review_count || 0).toLocaleString() }}</p>
+            <p class="text-xl font-bold mt-1 tabular-nums" :class="(dashboard.review_count || 0) > 0 ? 'text-amber-600' : 'text-slate-800'">{{ (dashboard.review_count || 0).toLocaleString() }}</p>
           </div>
         </div>
       </div>
@@ -299,12 +299,12 @@ onMounted(() => {
         마지막 동기화: {{ syncStatus.synced_at?.slice(0, 10) }}
       </p>
 
-      <div class="space-y-4">
+      <div class="space-y-3">
         <!-- Row 1: 월별 발행 추이 + 주간 발행 추이 (나란히, 컴팩트) -->
-        <div class="grid grid-cols-2 gap-4">
-          <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-white border border-slate-200 rounded-lg p-3">
             <h3 class="text-sm font-semibold text-slate-700 mb-3">월별 발행 추이</h3>
-            <div class="flex items-end gap-1 h-28">
+            <div class="flex items-end gap-1 h-24">
               <div v-for="m in sortedMonthly" :key="m.month"
                    class="flex-1 flex flex-col items-center justify-end cursor-pointer group"
                    @click="goToList({ project_month: m.month })">
@@ -315,9 +315,9 @@ onMounted(() => {
               </div>
             </div>
           </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-4">
+          <div class="bg-white border border-slate-200 rounded-lg p-3">
             <h3 class="text-sm font-semibold text-slate-700 mb-3">주간 발행 추이 <span class="text-[10px] text-slate-400 font-normal">최근 6주</span></h3>
-            <div class="flex items-end gap-1 h-28">
+            <div class="flex items-end gap-1 h-24">
               <div v-for="w in sortedWeekly" :key="w.week"
                    class="flex-1 flex flex-col items-center justify-end group">
                 <span class="text-[11px] text-slate-500 mb-1 group-hover:text-sky-600 font-semibold">{{ w.cnt }}</span>
@@ -330,7 +330,7 @@ onMounted(() => {
         </div>
 
         <!-- Row 2: 원고 종류별 분포 (전체 폭) -->
-        <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="bg-white border border-slate-200 rounded-lg p-3">
           <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-slate-700">원고 종류별 분포</h3>
             <div class="flex items-center gap-1 ml-auto">
@@ -371,7 +371,7 @@ onMounted(() => {
         </div>
 
         <!-- Row 3: 지점별 게시글 수 (전체 폭) -->
-        <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="bg-white border border-slate-200 rounded-lg p-3">
           <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-slate-700">
               지점별 게시글 수
@@ -419,8 +419,8 @@ onMounted(() => {
 
 
         <!-- Row 4: 이번주 발행글 | 지난주 발행글 -->
-        <div class="grid grid-cols-2 gap-4">
-        <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="grid grid-cols-2 gap-3">
+        <div class="bg-white border border-slate-200 rounded-lg p-3">
           <h3 class="text-sm font-semibold text-slate-700 mb-3">
             이번주 발행글
             <span class="text-[10px] text-slate-400 font-normal ml-1">{{ (dashboard.this_week || []).length }}건</span>
@@ -455,7 +455,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="bg-white border border-slate-200 rounded-lg p-3">
           <h3 class="text-sm font-semibold text-slate-700 mb-3">
             지난주 발행글
             <span class="text-[10px] text-slate-400 font-normal ml-1">{{ (dashboard.last_week || []).length }}건</span>
@@ -493,7 +493,7 @@ onMounted(() => {
         </div>
 
         <!-- 담당자별 게시글 수 — 관리자만 -->
-        <div v-if="!hideAuthor" class="bg-white border border-slate-200 rounded-lg p-4">
+        <div v-if="!hideAuthor" class="bg-white border border-slate-200 rounded-lg p-3">
           <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-slate-700">담당자별 게시글 수</h3>
             <div class="flex items-center gap-1 ml-auto">

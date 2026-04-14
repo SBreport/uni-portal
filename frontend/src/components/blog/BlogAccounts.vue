@@ -258,11 +258,11 @@ const columns = computed(() => [
     <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 mb-2 flex items-center gap-3 flex-none">
       <input v-model="search" @keyup.enter="loadAccounts"
              placeholder="계정 ID / 닉네임 검색"
-             class="border border-slate-300 rounded px-2 h-8 text-xs w-48 focus:border-blue-400 focus:outline-none" />
+             class="border border-slate-300 rounded px-2 h-7 text-xs w-48 focus:border-blue-400 focus:outline-none" />
       <button @click="loadAccounts"
-              class="px-3 h-8 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">검색</button>
+              class="px-3 h-7 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">검색</button>
       <select v-model="channelFilter" @change="loadAccounts"
-              class="border border-slate-300 rounded px-2 h-8 text-xs w-32">
+              class="border border-slate-300 rounded px-2 h-7 text-xs w-32">
         <option value="">전체 채널</option>
         <option value="br">브랜드</option>
         <option value="opt">최적</option>
@@ -296,7 +296,7 @@ const columns = computed(() => [
                 : 'border-slate-300 text-slate-500 hover:bg-slate-50'">
         도구 {{ showTools ? '▴' : '▾' }}
       </button>
-      <div v-if="showTools" class="mt-2 flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
+      <div v-if="showTools" class="mt-2 flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5">
         <button @click="runScrapeNicknames"
                 :disabled="scrapingNicknames"
                 class="px-2 py-1 text-xs rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-wait whitespace-nowrap">

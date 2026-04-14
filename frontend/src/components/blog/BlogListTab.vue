@@ -289,16 +289,16 @@ onMounted(() => {
       <div class="flex items-center gap-2 overflow-x-auto">
         <input v-model="searchText" @keyup.enter="applyFilter"
                placeholder="제목·키워드·태그 검색"
-               class="border border-slate-300 rounded px-2 h-8 text-xs flex-1 min-w-[180px] max-w-[280px] focus:border-blue-400 focus:outline-none shrink-0" />
+               class="border border-slate-300 rounded px-2 h-7 text-xs flex-1 min-w-[180px] max-w-[280px] focus:border-blue-400 focus:outline-none shrink-0" />
         <select v-model="filterChannel" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-8 text-xs shrink-0">
+                class="border border-slate-300 rounded px-2 h-7 text-xs shrink-0">
           <option value="">채널</option>
           <option value="br">브랜드</option>
           <option value="opt">최적</option>
           <option value="cafe">카페</option>
         </select>
         <select v-model="filterBranch" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-8 text-xs max-w-[120px] shrink-0">
+                class="border border-slate-300 rounded px-2 h-7 text-xs max-w-[120px] shrink-0">
           <option value="">지점</option>
           <option v-for="b in filterOptions?.branches" :key="b.branch_name" :value="b.branch_name">
             {{ b.branch_name }} ({{ b.cnt }})
@@ -306,10 +306,10 @@ onMounted(() => {
         </select>
         <!-- 기간 -->
         <input v-model="dateFrom" type="date" @change="activeDatePreset = 'year'; applyFilter()"
-               class="border border-slate-300 rounded px-2 h-8 text-xs w-[128px] shrink-0" />
+               class="border border-slate-300 rounded px-2 h-7 text-xs w-[128px] shrink-0" />
         <span class="text-slate-400 text-xs shrink-0">~</span>
         <input v-model="dateTo" type="date" @change="activeDatePreset = 'year'; applyFilter()"
-               class="border border-slate-300 rounded px-2 h-8 text-xs w-[128px] shrink-0" />
+               class="border border-slate-300 rounded px-2 h-7 text-xs w-[128px] shrink-0" />
         <div class="flex gap-0.5 shrink-0">
           <button v-for="dp in ([
             { key: 'year' as DatePreset, label: '올해' },
@@ -318,7 +318,7 @@ onMounted(() => {
             { key: 'all' as DatePreset, label: '전체' },
           ])" :key="dp.key"
             @click="setDatePreset(dp.key)"
-            class="px-2 h-8 text-xs rounded border transition-colors"
+            class="px-2 h-7 text-xs rounded border transition-colors"
             :class="activeDatePreset === dp.key
               ? 'bg-slate-700 text-white border-slate-700'
               : 'border-slate-300 text-slate-500 hover:bg-slate-100'">
@@ -328,14 +328,14 @@ onMounted(() => {
         <button @click="resetFilter" class="text-xs text-slate-400 hover:text-slate-600 shrink-0">초기화</button>
         <!-- 고급 필터 토글 -->
         <button @click="showAdvancedFilters = !showAdvancedFilters"
-                class="text-xs px-2 h-8 rounded border transition-colors shrink-0"
+                class="text-xs px-2 h-7 rounded border transition-colors shrink-0"
                 :class="showAdvancedFilters
                   ? 'border-blue-400 text-blue-600 bg-blue-50'
                   : 'border-slate-300 text-slate-500 hover:bg-slate-50'">
           고급 {{ showAdvancedFilters ? '▴' : '▾' }}
         </button>
         <button @click="showHeaderFilters = !showHeaderFilters"
-                class="text-xs px-2 h-8 rounded border transition-colors shrink-0"
+                class="text-xs px-2 h-7 rounded border transition-colors shrink-0"
                 :class="showHeaderFilters
                   ? 'border-blue-400 text-blue-600 bg-blue-50'
                   : 'border-slate-300 text-slate-400 hover:text-slate-600'">
@@ -346,7 +346,7 @@ onMounted(() => {
       <!-- 고급 필터 패널 -->
       <div v-if="showAdvancedFilters" class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
         <select v-model="filterTypeMain" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-8 text-xs">
+                class="border border-slate-300 rounded px-2 h-7 text-xs">
           <option value="">원고종류</option>
           <option v-for="t in filterOptions?.post_types_main" :key="t.post_type_main" :value="t.post_type_main">
             {{ t.post_type_main }} ({{ t.cnt }})
@@ -360,14 +360,14 @@ onMounted(() => {
           검토필요
         </label>
         <select v-if="!isUandi" v-model="filterAuthor" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-8 text-xs">
+                class="border border-slate-300 rounded px-2 h-7 text-xs">
           <option value="">담당자</option>
           <option v-for="a in filterOptions?.authors" :key="a.author" :value="a.author">
             {{ a.author }} ({{ a.cnt }})
           </option>
         </select>
         <select v-model="filterProjectMonth" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-8 text-xs">
+                class="border border-slate-300 rounded px-2 h-7 text-xs">
           <option value="">프로젝트 월</option>
           <option v-for="m in filterOptions?.project_months?.slice(0, 24)" :key="m.project_month" :value="m.project_month">
             {{ m.project_month }} ({{ m.cnt }})
@@ -391,7 +391,7 @@ onMounted(() => {
               <tr class="text-left text-xs text-slate-500 border-b">
                 <th v-for="(col, idx) in columns" :key="col.key"
                     @click="toggleSort(col.key)"
-                    class="px-2 py-2 bg-slate-50 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group">
+                    class="px-2 py-1.5 bg-slate-50 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group">
                   <span>{{ col.label }}</span>
                   <span v-if="sortColumn === col.key"
                         class="ml-0.5 text-blue-500 text-[10px]">{{ sortIcon(col.key) }}</span>
@@ -423,16 +423,16 @@ onMounted(() => {
                       'bg-blue-50': selectedPost?.id === post.id,
                       'bg-amber-50/30': post.needs_review && selectedPost?.id !== post.id,
                     }">
-                  <td class="px-2 py-1.5">
+                  <td class="px-2 py-1">
                     <span class="text-xs px-1.5 py-0.5 rounded-full font-medium"
                           :class="channelColor(post.blog_channel)">
                       {{ channelLabel(post.blog_channel) }}
                     </span>
                   </td>
-                  <td class="px-2 py-1.5 text-[11px] text-slate-500 truncate">
+                  <td class="px-2 py-1 text-[11px] text-slate-500 truncate">
                     {{ post.branch_name || '-' }}
                   </td>
-                  <td class="px-2 py-1.5">
+                  <td class="px-2 py-1">
                     <span v-if="post.post_type_main"
                           class="text-xs px-1.5 py-0.5 rounded font-medium"
                           :class="typeColor(post.post_type_main)">
@@ -440,18 +440,18 @@ onMounted(() => {
                     </span>
                     <span v-else class="text-slate-300 text-[10px]">-</span>
                   </td>
-                  <td class="px-2 py-1.5 text-slate-700 font-medium truncate text-xs">
+                  <td class="px-2 py-1 text-slate-700 font-medium truncate text-xs">
                     {{ post.keyword || '-' }}
                   </td>
-                  <td class="px-2 py-1.5 truncate text-xs"
+                  <td class="px-2 py-1 truncate text-xs"
                       :class="(post.title && post.title !== '' && !post.title.startsWith('http'))
                         ? 'text-slate-600'
                         : 'text-slate-400 italic'">
                     {{ decodeHtml(post.clean_title) || post.keyword || '-' }}
                   </td>
-                  <td v-if="!isUandi" class="px-2 py-1.5 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
-                  <td class="px-2 py-1.5 text-slate-400 text-[11px] tabular-nums">{{ post.published_at || '-' }}</td>
-                  <td class="px-2 py-1.5 text-[11px]" :class="statusColor(post.status_clean)">
+                  <td v-if="!isUandi" class="px-2 py-1 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums">{{ post.published_at || '-' }}</td>
+                  <td class="px-2 py-1 text-[11px]" :class="statusColor(post.status_clean)">
                     {{ post.status_clean || '-' }}
                   </td>
                 </tr>
@@ -484,7 +484,7 @@ onMounted(() => {
         <div v-if="!selectedPost" class="flex items-center justify-center flex-1 text-slate-300 text-sm">
           게시글을 선택하세요
         </div>
-        <div v-else class="p-3 space-y-3">
+        <div v-else class="p-2.5 space-y-2">
           <div>
             <div class="flex gap-1.5 mb-2 flex-wrap">
               <span class="text-xs px-1.5 py-0.5 rounded-full font-medium"
@@ -514,7 +514,7 @@ onMounted(() => {
             </h3>
           </div>
 
-          <div class="grid text-xs gap-x-3 gap-y-1.5" style="grid-template-columns: auto 1fr;">
+          <div class="grid text-xs gap-x-3 gap-y-1" style="grid-template-columns: auto 1fr;">
             <span class="text-xs text-slate-500 whitespace-nowrap">키워드</span>
             <span class="text-xs text-slate-800 font-medium">{{ selectedPost.keyword || '-' }}</span>
 

@@ -266,36 +266,38 @@ onMounted(() => {
     <div v-if="loading" class="text-center py-12 text-slate-400">로딩 중...</div>
     <template v-else-if="dashboard">
       <!-- 요약 카드 (클릭 가능) -->
-      <div class="grid grid-cols-5 gap-3">
-        <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
-             @click="goToList()">
-          <p class="text-xs text-slate-400">전체 게시글</p>
-          <p class="text-2xl font-bold text-slate-800 mt-1 tabular-nums">{{ dashboard.total?.toLocaleString() }}</p>
-        </div>
-        <div class="bg-white border border-blue-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
-             @click="goToList({ channel: 'br' })">
-          <p class="text-xs text-blue-500">브랜드</p>
-          <p class="text-2xl font-bold text-blue-700 mt-1 tabular-nums">{{ (dashboard.by_channel?.br || 0).toLocaleString() }}</p>
-        </div>
-        <div class="bg-white border border-indigo-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
-             @click="goToList({ channel: 'opt' })">
-          <p class="text-xs text-indigo-500">최적</p>
-          <p class="text-2xl font-bold text-indigo-700 mt-1 tabular-nums">{{ (dashboard.by_channel?.opt || 0).toLocaleString() }}</p>
-        </div>
-        <div class="bg-white border border-orange-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
-             @click="goToList({ channel: 'cafe' })">
-          <p class="text-xs text-orange-500">카페</p>
-          <p class="text-2xl font-bold text-orange-700 mt-1 tabular-nums">{{ (dashboard.by_channel?.cafe || 0).toLocaleString() }}</p>
-        </div>
-        <div class="bg-white border border-amber-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
-             @click="goToList({ needs_review: 1 })">
-          <p class="text-xs text-amber-500">검토 필요</p>
-          <p class="text-2xl font-bold text-amber-700 mt-1 tabular-nums">{{ (dashboard.review_count || 0).toLocaleString() }}</p>
-          <p v-if="syncStatus" class="text-[10px] text-slate-400 mt-2 leading-relaxed">
-            마지막 동기화: {{ syncStatus.synced_at?.slice(0, 10) }}
-          </p>
+      <div class="flex items-center justify-between">
+        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 flex-1">
+          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+               @click="goToList()">
+            <p class="text-xs text-slate-500">전체 게시글</p>
+            <p class="text-2xl font-bold text-blue-600 mt-1 tabular-nums">{{ dashboard.total?.toLocaleString() }}</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+               @click="goToList({ channel: 'br' })">
+            <p class="text-xs text-slate-500">브랜드</p>
+            <p class="text-2xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.br || 0).toLocaleString() }}</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+               @click="goToList({ channel: 'opt' })">
+            <p class="text-xs text-slate-500">최적</p>
+            <p class="text-2xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.opt || 0).toLocaleString() }}</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+               @click="goToList({ channel: 'cafe' })">
+            <p class="text-xs text-slate-500">카페</p>
+            <p class="text-2xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.cafe || 0).toLocaleString() }}</p>
+          </div>
+          <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:border-slate-300 transition-colors"
+               @click="goToList({ needs_review: 1 })">
+            <p class="text-xs text-slate-500">검토 필요</p>
+            <p class="text-2xl font-bold mt-1 tabular-nums" :class="(dashboard.review_count || 0) > 0 ? 'text-amber-600' : 'text-slate-800'">{{ (dashboard.review_count || 0).toLocaleString() }}</p>
+          </div>
         </div>
       </div>
+      <p v-if="syncStatus" class="text-[11px] text-slate-400 -mt-2 tabular-nums">
+        마지막 동기화: {{ syncStatus.synced_at?.slice(0, 10) }}
+      </p>
 
       <div class="space-y-4">
         <!-- Row 1: 월별 발행 추이 + 주간 발행 추이 (나란히, 컴팩트) -->

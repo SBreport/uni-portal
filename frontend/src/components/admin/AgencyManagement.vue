@@ -351,7 +351,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-5xl">
+  <div class="max-w-[1600px]">
     <!-- Sub-tabs -->
     <div class="flex gap-1 mb-4 border-b border-slate-200">
       <button v-for="t in [
@@ -510,9 +510,9 @@ onUnmounted(() => {
                 <span>평균연속 {{ a.avg_streak }}일</span>
                 <span class="ml-auto" :class="a.trend === '↑' ? 'text-blue-500' : a.trend === '↓' ? 'text-red-500' : 'text-slate-400'">추이 {{ a.trend }}</span>
               </div>
-              <!-- 월별 미니 바 + 수치 -->
-              <div class="flex gap-0.5 mt-2">
-                <div v-for="m in allMonths" :key="m" class="flex-1 text-center" :title="`${m}: ${a.monthly[m] || 0}%`">
+              <!-- 월별 미니 바 + 수치 (가로 스크롤) -->
+              <div class="flex gap-0.5 mt-2 overflow-x-auto pb-1">
+                <div v-for="m in allMonths" :key="m" class="text-center shrink-0" style="min-width: 28px" :title="`${m}: ${a.monthly[m] || 0}%`">
                   <div class="text-[9px] font-medium tabular-nums mb-0.5"
                     :class="(a.monthly[m] || 0) >= 80 ? 'text-blue-600' : (a.monthly[m] || 0) >= 50 ? 'text-slate-500' : (a.monthly[m] || 0) > 0 ? 'text-red-500' : 'text-slate-300'">
                     {{ a.monthly[m] != null ? a.monthly[m] + '%' : '-' }}
@@ -520,36 +520,36 @@ onUnmounted(() => {
                   <div class="h-6 bg-slate-50 rounded-sm relative overflow-hidden">
                     <div class="absolute bottom-0 w-full rounded-sm transition-all" :class="(a.monthly[m] || 0) >= 50 ? 'bg-blue-300' : 'bg-red-300'" :style="{ height: (a.monthly[m] || 0) + '%' }"></div>
                   </div>
-                  <div class="text-[9px] text-slate-400 mt-0.5">{{ m.split('-')[1] }}월</div>
+                  <div class="text-[9px] text-slate-400 mt-0.5 whitespace-nowrap">{{ m.split('-')[1] }}월</div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- 지점별 상세 테이블 (정렬 가능, 헤더 고정) -->
+          <!-- 지점별 상세 테이블 (정렬 가능, 헤더 고정, 가로 스크롤) -->
           <div class="bg-white border border-slate-200 rounded-lg overflow-auto max-h-[600px]">
-            <table class="w-full text-xs">
+            <table class="text-xs whitespace-nowrap" style="min-width: 100%">
               <thead>
                 <tr class="bg-slate-50 border-b select-none sticky top-0 z-10">
-                  <th @click="toggleStatsSort('branch')" class="text-left pl-3 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700 bg-slate-50">
+                  <th @click="toggleStatsSort('branch')" class="text-left pl-3 pr-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700 bg-slate-50 sticky left-0 z-20" style="min-width: 110px">
                     지점 <span class="text-[10px]">{{ statsSortIcon('branch') }}</span>
                   </th>
-                  <th @click="toggleStatsSort('agency')" class="text-left px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700">
+                  <th @click="toggleStatsSort('agency')" class="text-left px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 90px">
                     현 실행사 <span class="text-[10px]">{{ statsSortIcon('agency') }}</span>
                   </th>
-                  <th v-for="m in allMonths" :key="m" @click="toggleStatsSort(m)" class="text-center px-2 py-2 font-medium text-slate-500 w-16 cursor-pointer hover:text-slate-700">
+                  <th v-for="m in allMonths" :key="m" @click="toggleStatsSort(m)" class="text-center px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 62px">
                     {{ m.split('-')[1] }}월 <span class="text-[10px]">{{ statsSortIcon(m) }}</span>
                   </th>
-                  <th @click="toggleStatsSort('rate')" class="text-center px-2 py-2 font-medium text-slate-500 w-14 cursor-pointer hover:text-slate-700" title="전체 기간 성공률">
+                  <th @click="toggleStatsSort('rate')" class="text-center px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 60px" title="전체 기간 성공률">
                     전체 <span class="text-[10px]">{{ statsSortIcon('rate') }}</span>
                   </th>
-                  <th @click="toggleStatsSort('exposed_days')" class="text-center px-2 py-2 font-medium text-slate-500 w-14 cursor-pointer hover:text-slate-700" title="전체 기간 노출 성공 일수">
+                  <th @click="toggleStatsSort('exposed_days')" class="text-center px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 60px" title="전체 기간 노출 성공 일수">
                     총노출 <span class="text-[10px]">{{ statsSortIcon('exposed_days') }}</span>
                   </th>
-                  <th @click="toggleStatsSort('total_days')" class="text-center px-2 py-2 font-medium text-slate-500 w-14 cursor-pointer hover:text-slate-700" title="전체 기간 작업 진행 일수">
+                  <th @click="toggleStatsSort('total_days')" class="text-center px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 60px" title="전체 기간 작업 진행 일수">
                     총진행 <span class="text-[10px]">{{ statsSortIcon('total_days') }}</span>
                   </th>
-                  <th @click="toggleStatsSort('streak')" class="text-center px-2 py-2 font-medium text-slate-500 w-12 cursor-pointer hover:text-slate-700" title="연속 노출 일수">
+                  <th @click="toggleStatsSort('streak')" class="text-center pr-3 px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 56px" title="연속 노출 일수">
                     연속 <span class="text-[10px]">{{ statsSortIcon('streak') }}</span>
                   </th>
                 </tr>
@@ -557,7 +557,8 @@ onUnmounted(() => {
               <tbody>
                 <tr v-for="b in flatBranches" :key="b.branch"
                   :class="[agencyColor(b.agency).bg, 'border-b border-slate-100 border-l-2', agencyColor(b.agency).border, 'hover:bg-blue-50/40']">
-                  <td class="pl-3 py-1.5 text-slate-700 font-medium">
+                  <td class="pl-3 pr-2 py-1.5 text-slate-700 font-medium sticky left-0 z-[1]"
+                    :class="agencyColor(b.agency).bg">
                     {{ b.branch }}
                     <span v-if="changedBranches.has(b.branch)"
                       class="ml-1 text-[9px] text-amber-500 cursor-help"

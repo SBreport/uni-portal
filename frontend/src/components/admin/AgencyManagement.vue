@@ -406,7 +406,7 @@ onUnmounted(() => {
     </div>
 
     <!-- ═══ 대시보드 (2열 밀집 레이아웃) ═══ -->
-    <div v-if="subTab === 'dashboard'">
+    <div v-if="subTab === 'dashboard'" class="max-w-4xl">
       <!-- 기간 선택 -->
       <div class="flex items-center gap-2 text-xs mb-3">
         <label class="text-slate-500">기간:</label>

@@ -14,6 +14,12 @@ export function channelColor(ch: string) {
 
 export function typeColor(t: string) {
   if (t === '논문글') return 'bg-emerald-50 text-emerald-700'
+  if (t === '정보성글') return 'bg-sky-50 text-sky-700'
+  if (t === '홍보성글') return 'bg-amber-50 text-amber-700'
+  if (t === '임상글') return 'bg-rose-50 text-rose-700'
+  if (t === '키컨텐츠') return 'bg-indigo-50 text-indigo-700'
+  if (t === '최적') return 'bg-blue-50 text-blue-700'
+  if (t === '소개글') return 'bg-teal-50 text-teal-700'
   return 'bg-slate-100 text-slate-600'
 }
 

@@ -165,7 +165,8 @@ const midalBranches = computed(() =>
 
 const allFailed = computed(() => {
   if (!data.value?.branches.length) return false
-  return data.value.branches.every((b: BranchRanking) => b.status === 'fail')
+  // 성공(노출)이 단 한 건도 없을 때 (실패 + 미측정 전부 포함)
+  return data.value.branches.every((b: BranchRanking) => !b.today_success)
 })
 
 // 실행사별 성과 집계

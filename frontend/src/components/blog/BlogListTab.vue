@@ -126,6 +126,7 @@ const columns = ref(
         { key: 'clean_title', label: '제목', width: 0, minWidth: 120 },
         { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
         { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
+        { key: '_actions', label: '', width: 52, minWidth: 52 },
       ]
     : [
         { key: 'blog_channel', label: '채널', width: 64, minWidth: 50 },
@@ -136,6 +137,7 @@ const columns = ref(
         { key: 'author_main', label: '담당', width: 56, minWidth: 44 },
         { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
         { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
+        { key: '_actions', label: '', width: 52, minWidth: 52 },
       ]
 )
 
@@ -207,6 +209,14 @@ const filteredPosts = computed(() => {
 
   return result
 })
+
+function openUrl(url: string | undefined) {
+  if (url) window.open(url, '_blank')
+}
+
+function copyTitle(title: string | undefined) {
+  if (title) navigator.clipboard.writeText(title)
+}
 
 async function openDetail(post: any) {
   if (selectedPost.value?.id === post.id) return
@@ -418,7 +428,7 @@ onMounted(() => {
               <template v-else>
                 <tr v-for="post in filteredPosts" :key="post.id"
                     @click="openDetail(post)"
-                    class="border-b border-slate-100 hover:bg-blue-50/30 cursor-pointer transition-colors"
+                    class="border-b border-slate-100 hover:bg-blue-50/30 cursor-pointer transition-colors group"
                     :class="{
                       'bg-blue-50': selectedPost?.id === post.id,
                       'bg-amber-50/30': post.needs_review && selectedPost?.id !== post.id,
@@ -453,6 +463,14 @@ onMounted(() => {
                   <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums">{{ post.published_at || '-' }}</td>
                   <td class="px-2 py-1 text-[11px]" :class="statusColor(post.status_clean)">
                     {{ post.status_clean || '-' }}
+                  </td>
+                  <td class="px-1 py-1 whitespace-nowrap">
+                    <div class="opacity-0 group-hover:opacity-100 flex gap-0.5 transition-opacity">
+                      <button @click.stop="openUrl(post.published_url)" title="URL 열기"
+                              class="text-[10px] text-slate-400 hover:text-blue-600 px-1 py-0.5">&#x2197;</button>
+                      <button @click.stop="copyTitle(post.clean_title || post.keyword)" title="제목 복사"
+                              class="text-[10px] text-slate-400 hover:text-blue-600 px-1 py-0.5">&#x29C9;</button>
+                    </div>
                   </td>
                 </tr>
                 <tr v-if="!filteredPosts.length">

@@ -510,9 +510,13 @@ onUnmounted(() => {
                 <span>평균연속 {{ a.avg_streak }}일</span>
                 <span class="ml-auto" :class="a.trend === '↑' ? 'text-blue-500' : a.trend === '↓' ? 'text-red-500' : 'text-slate-400'">추이 {{ a.trend }}</span>
               </div>
-              <!-- 월별 미니 바 + 수치 (가로 스크롤) -->
+              <!-- 월별 미니 바 + 수치 (6개월 이하 꽉 차게, 많으면 스크롤) -->
               <div class="flex gap-0.5 mt-2 overflow-x-auto pb-1">
-                <div v-for="m in allMonths" :key="m" class="text-center shrink-0" style="min-width: 28px" :title="`${m}: ${a.monthly[m] || 0}%`">
+                <div v-for="m in allMonths" :key="m"
+                  class="text-center"
+                  :class="allMonths.length <= 6 ? 'flex-1' : 'shrink-0'"
+                  :style="allMonths.length <= 6 ? '' : 'min-width: 36px'"
+                  :title="`${m}: ${a.monthly[m] || 0}%`">
                   <div class="text-[9px] font-medium tabular-nums mb-0.5"
                     :class="(a.monthly[m] || 0) >= 80 ? 'text-blue-600' : (a.monthly[m] || 0) >= 50 ? 'text-slate-500' : (a.monthly[m] || 0) > 0 ? 'text-red-500' : 'text-slate-300'">
                     {{ a.monthly[m] != null ? a.monthly[m] + '%' : '-' }}

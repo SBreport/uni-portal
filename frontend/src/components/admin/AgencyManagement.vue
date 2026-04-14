@@ -392,11 +392,11 @@ onUnmounted(() => {
   <div class="max-w-6xl">
     <!-- Sub-tabs -->
     <div class="flex gap-1 mb-4 border-b border-slate-200">
+      <!-- 매핑 관리 서브탭은 UI에서 숨김 (admin 전용 경로 유지, 기능은 보존) -->
       <button v-for="t in [
         { key: 'dashboard', label: '대시보드' },
         { key: 'place-stats', label: '플레이스 성과' },
         { key: 'webpage-stats', label: '웹페이지 성과' },
-        { key: 'mapping', label: '매핑 관리' },
         { key: 'rank-checker', label: 'SB체커' },
       ]" :key="t.key"
         @click="subTab = t.key as SubTab; if (t.key === 'dashboard') loadDashboard(); if (t.key === 'place-stats') loadStats('place'); if (t.key === 'webpage-stats') loadStats('webpage')"

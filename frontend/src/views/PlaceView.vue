@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useAgencyVisibility } from '@/composables/useAgencyVisibility'
 import { getPlaceRankingDaily, syncPlaceToDB, getPlaceLastSync } from '@/api/place'
 import { getComparison } from '@/api/rankChecker'
 import { fetchAgencyMap } from '@/api/branches'
@@ -8,6 +9,7 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
+const { canSeeAgency } = useAgencyVisibility()
 
 interface DailyData {
   day: number
@@ -382,7 +384,7 @@ onMounted(async () => {
       </div>
 
       <!-- ─── ROW 3: 실행사 카드 ─── -->
-      <div v-if="!isBranch && agencyStats.length > 0" class="grid gap-2 px-5 pb-1.5 shrink-0"
+      <div v-if="canSeeAgency && agencyStats.length > 0" class="grid gap-2 px-5 pb-1.5 shrink-0"
         :style="{ gridTemplateColumns: `repeat(${Math.min(agencyStats.length, 4)}, 1fr)` }">
         <div v-for="a in agencyStats" :key="a.name"
           class="relative bg-white border rounded-lg px-3 py-2 overflow-hidden"
@@ -437,12 +439,12 @@ onMounted(async () => {
                     <th @click="toggleSort('total_exposed')" class="th-cell text-center w-[36px]" title="전체 이력 중 노출 성공한 총 일수">총노출 <span class="sort-icon">{{ sortIcon('total_exposed') }}</span></th>
                     <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]" title="작업 시작일부터 현재까지 총 진행일수">총진행일 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
                     <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 실패: 오늘 미노출 / 미달: 데이터 없음">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
-                    <th v-if="!isBranch" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]" title="해당 지점 담당 실행사">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
+                    <th v-if="canSeeAgency" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]" title="해당 지점 담당 실행사">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="filteredBranches.length === 0">
-                    <td :colspan="isBranch ? 9 : 10" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
+                    <td :colspan="canSeeAgency ? 10 : 9" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
                   <template v-for="b in filteredBranches" :key="b.branch">
                     <tr @click="isEditor && toggleBranch(b)"
@@ -476,11 +478,11 @@ onMounted(async () => {
                           {{ statusBadge(b.status).text }}
                         </span>
                       </td>
-                      <td v-if="!isBranch" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
+                      <td v-if="canSeeAgency" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
                     </tr>
                     <!-- SB체커 비교 하위 행 -->
                     <tr v-if="expandedBranch === b.branch && isEditor" class="bg-amber-50/50">
-                      <td :colspan="isBranch ? 9 : 10" class="px-3 py-2">
+                      <td :colspan="canSeeAgency ? 10 : 9" class="px-3 py-2">
                         <div v-if="comparisonLoading" class="text-xs text-slate-400 py-2 text-center">비교 데이터 로딩 중...</div>
                         <div v-else-if="comparisonData && comparisonData.comparisons.length > 0">
                           <div class="flex items-center gap-2 mb-1.5">

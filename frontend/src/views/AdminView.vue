@@ -16,7 +16,7 @@ const branches = computed(() => branchStore.branches)
 const tabs = [
   { key: 'sync', label: '데이터 동기화' },
   { key: 'quality', label: '데이터 로그' },
-  { key: 'agency', label: '실행사 매핑' },
+  { key: 'agency', label: '상위노출 관리' },
   { key: 'encyclopedia', label: '백과사전 관리' },
   { key: 'users', label: '사용자 관리' },
 ]

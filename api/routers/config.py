@@ -9,6 +9,15 @@ from shared.db import get_conn, EQUIPMENT_DB
 
 router = APIRouter(prefix="/config", tags=["Config"])
 
+# 실행사 정보 접근 가능한 역할 (uni 관계자만)
+_AGENCY_VISIBLE_ROLES = {"admin", "editor"}
+
+
+def _require_agency_access(user: dict):
+    """실행사 정보 접근 권한 확인. 지점/본사는 차단."""
+    if user.get("role") not in _AGENCY_VISIBLE_ROLES:
+        raise HTTPException(status_code=403, detail="실행사 정보 접근 권한 없음")
+
 
 @router.get("/agency-map")
 async def get_agency_map(
@@ -19,6 +28,7 @@ async def get_agency_map(
 
     Returns: {branch_name: agency_name, ...}
     """
+    _require_agency_access(user)
     key = f"agency_map_{type}"
     conn = get_conn(EQUIPMENT_DB)
     try:
@@ -64,6 +74,7 @@ async def get_agency_sheets(
     type: Literal["place", "webpage"] = Query("place", description="시트 유형"),
 ):
     """실행사별 구글시트 설정 조회."""
+    _require_agency_access(user)
     key = f"agency_sheets_{type}"
     conn = get_conn(EQUIPMENT_DB)
     try:
@@ -123,6 +134,7 @@ async def get_agency_stats(
     date_to: str = Query(None, description="종료일 (YYYY-MM-DD)"),
 ):
     """실행사별 성과 통계 — 기간별 성공률, 지점별 상세."""
+    _require_agency_access(user)
     from datetime import date as date_cls, timedelta
 
     today = date_cls.today()
@@ -340,6 +352,7 @@ async def get_dashboard_stats(
     months: int = Query(6, description="최근 N개월"),
 ):
     """전체 지점 성과 대시보드 통계."""
+    _require_agency_access(user)
     from datetime import date as date_cls, timedelta
 
     today = date_cls.today()
@@ -521,6 +534,7 @@ async def get_agency_history(
     branch_name: str = Query(None),
 ):
     """실행사 변경 이력 조회."""
+    _require_agency_access(user)
     conn = get_conn(EQUIPMENT_DB)
     try:
         query = "SELECT * FROM agency_map_history WHERE map_type = ?"

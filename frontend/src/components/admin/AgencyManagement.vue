@@ -351,7 +351,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-[1600px]">
+  <div class="max-w-6xl">
     <!-- Sub-tabs -->
     <div class="flex gap-1 mb-4 border-b border-slate-200">
       <button v-for="t in [
@@ -531,25 +531,25 @@ onUnmounted(() => {
             <table class="text-xs whitespace-nowrap" style="min-width: 100%">
               <thead>
                 <tr class="bg-slate-50 border-b select-none sticky top-0 z-10">
-                  <th @click="toggleStatsSort('branch')" class="text-left pl-3 pr-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700 bg-slate-50 sticky left-0 z-20" style="min-width: 110px">
+                  <th @click="toggleStatsSort('branch')" class="text-left pl-3 pr-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700 bg-slate-50 sticky left-0 z-20" style="min-width: 90px">
                     지점 <span class="text-[10px]">{{ statsSortIcon('branch') }}</span>
                   </th>
-                  <th @click="toggleStatsSort('agency')" class="text-left px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 90px">
+                  <th @click="toggleStatsSort('agency')" class="text-left px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 76px">
                     현 실행사 <span class="text-[10px]">{{ statsSortIcon('agency') }}</span>
                   </th>
-                  <th v-for="m in allMonths" :key="m" @click="toggleStatsSort(m)" class="text-center px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 62px">
+                  <th v-for="m in allMonths" :key="m" @click="toggleStatsSort(m)" class="text-center px-1.5 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 52px">
                     {{ m.split('-')[1] }}월 <span class="text-[10px]">{{ statsSortIcon(m) }}</span>
                   </th>
-                  <th @click="toggleStatsSort('rate')" class="text-center px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 60px" title="전체 기간 성공률">
+                  <th @click="toggleStatsSort('rate')" class="text-center px-1.5 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 52px" title="전체 기간 성공률">
                     전체 <span class="text-[10px]">{{ statsSortIcon('rate') }}</span>
                   </th>
-                  <th @click="toggleStatsSort('exposed_days')" class="text-center px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 60px" title="전체 기간 노출 성공 일수">
+                  <th @click="toggleStatsSort('exposed_days')" class="text-center px-1.5 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 52px" title="전체 기간 노출 성공 일수">
                     총노출 <span class="text-[10px]">{{ statsSortIcon('exposed_days') }}</span>
                   </th>
-                  <th @click="toggleStatsSort('total_days')" class="text-center px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 60px" title="전체 기간 작업 진행 일수">
+                  <th @click="toggleStatsSort('total_days')" class="text-center px-1.5 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 52px" title="전체 기간 작업 진행 일수">
                     총진행 <span class="text-[10px]">{{ statsSortIcon('total_days') }}</span>
                   </th>
-                  <th @click="toggleStatsSort('streak')" class="text-center pr-3 px-2 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 56px" title="연속 노출 일수">
+                  <th @click="toggleStatsSort('streak')" class="text-center pr-3 pl-1.5 py-2 font-medium text-slate-500 cursor-pointer hover:text-slate-700" style="min-width: 50px" title="연속 노출 일수">
                     연속 <span class="text-[10px]">{{ statsSortIcon('streak') }}</span>
                   </th>
                 </tr>

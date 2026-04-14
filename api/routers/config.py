@@ -345,6 +345,7 @@ async def get_dashboard_stats(
     today = date_cls.today()
     start_date = (today.replace(day=1) - timedelta(days=30 * (months - 1))).replace(day=1)
     yesterday = (today - timedelta(days=1)).isoformat()
+    day_before = (today - timedelta(days=2)).isoformat()
 
     table = "place_daily" if type == "place" else "webpage_daily"
 
@@ -376,18 +377,18 @@ async def get_dashboard_stats(
         exposed_days = overall_row["exposed_days"] or 0
         overall_rate = round(exposed_days / total_days * 100, 1) if total_days > 0 else 0
 
-        # 3. 오늘/어제 노출 지점 수
-        today_row = conn.execute(f"""
-            SELECT COUNT(DISTINCT branch_name) AS c FROM {table}
-            WHERE date = ? AND is_exposed = 1
-        """, (today.isoformat(),)).fetchone()
-        today_exposed = today_row["c"] or 0
-
+        # 3. 어제/그저께 노출 지점 수 (오늘은 갱신 지연 가능 → 어제 기준)
         yesterday_row = conn.execute(f"""
             SELECT COUNT(DISTINCT branch_name) AS c FROM {table}
             WHERE date = ? AND is_exposed = 1
         """, (yesterday,)).fetchone()
         yesterday_exposed = yesterday_row["c"] or 0
+
+        day_before_row = conn.execute(f"""
+            SELECT COUNT(DISTINCT branch_name) AS c FROM {table}
+            WHERE date = ? AND is_exposed = 1
+        """, (day_before,)).fetchone()
+        day_before_exposed = day_before_row["c"] or 0
 
         # 4. 월별 전체 성공률
         monthly_rows = conn.execute(f"""
@@ -501,8 +502,8 @@ async def get_dashboard_stats(
             "overall_rate": overall_rate,
             "total_days": total_days,
             "exposed_days": exposed_days,
-            "today_exposed": today_exposed,
             "yesterday_exposed": yesterday_exposed,
+            "day_before_exposed": day_before_exposed,
             "avg_streak": avg_streak,
             "perfect_count": perfect_count,
             "monthly_rates": monthly_rates,

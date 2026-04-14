@@ -491,8 +491,9 @@ onUnmounted(() => {
         <div v-if="statsLoading" class="text-center py-8 text-sm text-slate-400">통계 로딩 중...</div>
 
         <template v-else-if="statsData">
-          <!-- 실행사 요약 카드 -->
-          <div class="grid gap-2" :style="{ gridTemplateColumns: `repeat(${Math.min(filteredAgencies.length, 4)}, 1fr)` }">
+          <!-- 실행사 요약 카드 (월 개수에 따라 열 수 조절) -->
+          <div class="grid gap-2"
+            :style="{ gridTemplateColumns: `repeat(${Math.min(filteredAgencies.length, allMonths.length > 12 ? 1 : allMonths.length > 6 ? 2 : 4)}, 1fr)` }">
             <div v-for="a in filteredAgencies" :key="a.agency"
               class="bg-white border rounded-lg p-3 border-l-4"
               :class="[agencyColor(a.agency).border]">
@@ -510,21 +511,19 @@ onUnmounted(() => {
                 <span>평균연속 {{ a.avg_streak }}일</span>
                 <span class="ml-auto" :class="a.trend === '↑' ? 'text-blue-500' : a.trend === '↓' ? 'text-red-500' : 'text-slate-400'">추이 {{ a.trend }}</span>
               </div>
-              <!-- 월별 미니 바 + 수치 (6개월 이하 꽉 차게, 많으면 스크롤) -->
-              <div class="flex gap-0.5 mt-2 overflow-x-auto pb-1">
+              <!-- 월별 미니 바 + 수치 (카드 너비에 맞춰 꽉 차게) -->
+              <div class="flex gap-0.5 mt-2">
                 <div v-for="m in allMonths" :key="m"
-                  class="text-center"
-                  :class="allMonths.length <= 6 ? 'flex-1' : 'shrink-0'"
-                  :style="allMonths.length <= 6 ? '' : 'min-width: 36px'"
-                  :title="`${m}: ${a.monthly[m] || 0}%`">
-                  <div class="text-[9px] font-medium tabular-nums mb-0.5"
+                  class="flex-1 text-center min-w-0"
+                  :title="`${m}: ${a.monthly[m] != null ? a.monthly[m] + '%' : '데이터 없음'}`">
+                  <div v-if="allMonths.length <= 9" class="text-[9px] font-medium tabular-nums mb-0.5 overflow-hidden"
                     :class="(a.monthly[m] || 0) >= 80 ? 'text-blue-600' : (a.monthly[m] || 0) >= 50 ? 'text-slate-500' : (a.monthly[m] || 0) > 0 ? 'text-red-500' : 'text-slate-300'">
                     {{ a.monthly[m] != null ? a.monthly[m] + '%' : '-' }}
                   </div>
                   <div class="h-6 bg-slate-50 rounded-sm relative overflow-hidden">
                     <div class="absolute bottom-0 w-full rounded-sm transition-all" :class="(a.monthly[m] || 0) >= 50 ? 'bg-blue-300' : 'bg-red-300'" :style="{ height: (a.monthly[m] || 0) + '%' }"></div>
                   </div>
-                  <div class="text-[9px] text-slate-400 mt-0.5 whitespace-nowrap">{{ m.split('-')[1] }}월</div>
+                  <div class="text-[9px] text-slate-400 mt-0.5 whitespace-nowrap overflow-hidden">{{ parseInt(m.split('-')[1] || '0') }}월</div>
                 </div>
               </div>
             </div>

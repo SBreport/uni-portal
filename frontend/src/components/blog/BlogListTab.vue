@@ -302,6 +302,10 @@ watch(page, () => loadPosts())
 onMounted(() => {
   if (props.initialFilters) {
     applyInitialFilters(props.initialFilters)
+    // 고급 필터에 속한 값이 주입된 경우 패널 자동 펼치기
+    if (props.initialFilters.post_type_main || props.initialFilters.needs_review) {
+      showAdvancedFilters.value = true
+    }
   }
   loadPosts()
   loadFilterOptions()

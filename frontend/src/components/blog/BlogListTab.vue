@@ -283,22 +283,22 @@ onMounted(() => {
 
 <template>
   <div class="h-full flex flex-col min-h-0">
-    <!-- 필터 바 (기본 한 줄) -->
+    <!-- 필터 바 -->
     <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 mb-2 flex-none">
       <!-- 기본 필터 행 -->
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 overflow-x-auto">
         <input v-model="searchText" @keyup.enter="applyFilter"
                placeholder="제목·키워드·태그 검색"
-               class="border border-slate-300 rounded px-2 h-8 text-xs w-40 focus:border-blue-400 focus:outline-none" />
+               class="border border-slate-300 rounded px-2 h-8 text-xs flex-1 min-w-[180px] max-w-[280px] focus:border-blue-400 focus:outline-none shrink-0" />
         <select v-model="filterChannel" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-8 text-xs">
+                class="border border-slate-300 rounded px-2 h-8 text-xs shrink-0">
           <option value="">채널</option>
           <option value="br">브랜드</option>
           <option value="opt">최적</option>
           <option value="cafe">카페</option>
         </select>
         <select v-model="filterBranch" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-8 text-xs max-w-[120px]">
+                class="border border-slate-300 rounded px-2 h-8 text-xs max-w-[120px] shrink-0">
           <option value="">지점</option>
           <option v-for="b in filterOptions?.branches" :key="b.branch_name" :value="b.branch_name">
             {{ b.branch_name }} ({{ b.cnt }})
@@ -306,10 +306,10 @@ onMounted(() => {
         </select>
         <!-- 기간 -->
         <input v-model="dateFrom" type="date" @change="activeDatePreset = 'year'; applyFilter()"
-               class="border border-slate-300 rounded px-2 h-8 text-xs w-[116px]" />
+               class="border border-slate-300 rounded px-2 h-8 text-xs w-[128px] shrink-0" />
         <span class="text-slate-400 text-xs shrink-0">~</span>
         <input v-model="dateTo" type="date" @change="activeDatePreset = 'year'; applyFilter()"
-               class="border border-slate-300 rounded px-2 h-8 text-xs w-[116px]" />
+               class="border border-slate-300 rounded px-2 h-8 text-xs w-[128px] shrink-0" />
         <div class="flex gap-0.5 shrink-0">
           <button v-for="dp in ([
             { key: 'year' as DatePreset, label: '올해' },
@@ -318,27 +318,13 @@ onMounted(() => {
             { key: 'all' as DatePreset, label: '전체' },
           ])" :key="dp.key"
             @click="setDatePreset(dp.key)"
-            class="px-2 h-8 text-[11px] rounded border transition-colors"
+            class="px-2 h-8 text-xs rounded border transition-colors"
             :class="activeDatePreset === dp.key
               ? 'bg-slate-700 text-white border-slate-700'
               : 'border-slate-300 text-slate-500 hover:bg-slate-100'">
             {{ dp.label }}
           </button>
         </div>
-        <select v-model="filterTypeMain" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-8 text-xs">
-          <option value="">종류</option>
-          <option v-for="t in filterOptions?.post_types_main" :key="t.post_type_main" :value="t.post_type_main">
-            {{ t.post_type_main }} ({{ t.cnt }})
-          </option>
-        </select>
-        <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer shrink-0">
-          <input type="checkbox"
-                 :checked="filterNeedsReview === 1"
-                 @change="filterNeedsReview = ($event.target as HTMLInputElement).checked ? 1 : null; applyFilter()"
-                 class="rounded border-slate-300" />
-          검토필요
-        </label>
         <button @click="resetFilter" class="text-xs text-slate-400 hover:text-slate-600 shrink-0">초기화</button>
         <!-- 고급 필터 토글 -->
         <button @click="showAdvancedFilters = !showAdvancedFilters"
@@ -357,8 +343,22 @@ onMounted(() => {
         </button>
         <span class="ml-auto text-xs text-slate-400 shrink-0 tabular-nums">{{ totalCount.toLocaleString() }}건</span>
       </div>
-      <!-- 고급 필터 패널 (접힘 기본) -->
+      <!-- 고급 필터 패널 -->
       <div v-if="showAdvancedFilters" class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
+        <select v-model="filterTypeMain" @change="applyFilter"
+                class="border border-slate-300 rounded px-2 h-8 text-xs">
+          <option value="">원고종류</option>
+          <option v-for="t in filterOptions?.post_types_main" :key="t.post_type_main" :value="t.post_type_main">
+            {{ t.post_type_main }} ({{ t.cnt }})
+          </option>
+        </select>
+        <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer shrink-0">
+          <input type="checkbox"
+                 :checked="filterNeedsReview === 1"
+                 @change="filterNeedsReview = ($event.target as HTMLInputElement).checked ? 1 : null; applyFilter()"
+                 class="rounded border-slate-300" />
+          검토필요
+        </label>
         <select v-if="!isUandi" v-model="filterAuthor" @change="applyFilter"
                 class="border border-slate-300 rounded px-2 h-8 text-xs">
           <option value="">담당자</option>
@@ -406,7 +406,7 @@ onMounted(() => {
                 <th v-for="col in columns" :key="'f-' + col.key" class="px-1 py-1 bg-slate-50">
                   <input v-model="headerFilters[col.key]"
                          :placeholder="col.label"
-                         class="w-full border border-slate-200 rounded px-1 py-0.5 text-[10px] text-slate-600
+                         class="w-full border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-600
                                 focus:border-blue-300 focus:outline-none bg-white/80" />
                 </th>
               </tr>

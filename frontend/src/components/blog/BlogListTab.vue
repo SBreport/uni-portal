@@ -514,58 +514,62 @@ onMounted(() => {
             </h3>
           </div>
 
-          <div class="grid text-xs gap-y-1" style="grid-template-columns: 56px 1fr;">
-            <span class="text-slate-400">키워드</span>
-            <span class="text-slate-700 font-medium">{{ selectedPost.keyword || '-' }}</span>
+          <div class="grid text-xs gap-x-3 gap-y-1.5" style="grid-template-columns: auto 1fr;">
+            <span class="text-xs text-slate-500 whitespace-nowrap">키워드</span>
+            <span class="text-xs text-slate-800 font-medium">{{ selectedPost.keyword || '-' }}</span>
 
             <template v-if="selectedPost.tags">
-              <span class="text-slate-400">태그</span>
-              <span class="text-slate-700">{{ selectedPost.tags }}</span>
+              <span class="text-xs text-slate-500 whitespace-nowrap">태그</span>
+              <span class="text-xs text-slate-800">{{ selectedPost.tags }}</span>
             </template>
 
-            <template v-if="!isUandi">
-              <span class="text-slate-400">담당자</span>
-              <span class="text-slate-700">
+            <template v-if="!isUandi && (selectedPost.author_main || selectedPost.author_sub)">
+              <span class="text-xs text-slate-500 whitespace-nowrap">담당자</span>
+              <span class="text-xs text-slate-800">
                 {{ selectedPost.author_main || '-' }}
-                <span v-if="selectedPost.author_sub" class="text-slate-400"> · {{ selectedPost.author_sub }}</span>
+                <span v-if="selectedPost.author_sub" class="text-slate-500"> · {{ selectedPost.author_sub }}</span>
               </span>
             </template>
 
             <template v-if="selectedPost.branch_name">
-              <span class="text-slate-400">지점</span>
-              <span class="text-slate-700">
+              <span class="text-xs text-slate-500 whitespace-nowrap">지점</span>
+              <span class="text-xs text-slate-800">
                 {{ selectedPost.branch_name }}
-                <span v-if="selectedPost.slot_number" class="text-slate-400">#{{ selectedPost.slot_number }}</span>
+                <span v-if="selectedPost.slot_number" class="text-slate-500">#{{ selectedPost.slot_number }}</span>
               </span>
             </template>
 
-            <span class="text-slate-400">발행일</span>
-            <span class="text-slate-700 tabular-nums">{{ selectedPost.published_at || '-' }}</span>
-
-            <template v-if="selectedPost.deadline_at">
-              <span class="text-slate-400">마감일</span>
-              <span class="text-slate-700 tabular-nums">{{ selectedPost.deadline_at }}</span>
+            <template v-if="selectedPost.published_at">
+              <span class="text-xs text-slate-500 whitespace-nowrap">발행일</span>
+              <span class="text-xs text-slate-800 tabular-nums">{{ selectedPost.published_at }}</span>
             </template>
 
-            <span class="text-slate-400">상태</span>
-            <span :class="statusColor(selectedPost.status_clean)">{{ selectedPost.status_clean || '-' }}</span>
+            <template v-if="selectedPost.deadline_at">
+              <span class="text-xs text-slate-500 whitespace-nowrap">마감일</span>
+              <span class="text-xs text-slate-800 tabular-nums">{{ selectedPost.deadline_at }}</span>
+            </template>
+
+            <template v-if="selectedPost.status_clean">
+              <span class="text-xs text-slate-500 whitespace-nowrap">상태</span>
+              <span class="text-xs" :class="statusColor(selectedPost.status_clean)">{{ selectedPost.status_clean }}</span>
+            </template>
 
             <template v-if="selectedPost.blog_id">
-              <span class="text-slate-400">계정</span>
-              <span class="text-slate-700 font-mono text-[11px]">{{ selectedPost.blog_id }}</span>
+              <span class="text-xs text-slate-500 whitespace-nowrap">계정</span>
+              <span class="text-xs text-slate-800 font-mono">{{ selectedPost.blog_id }}</span>
             </template>
 
             <template v-if="selectedPost.project_month">
-              <span class="text-slate-400">프로젝트</span>
-              <span class="text-slate-700">
+              <span class="text-xs text-slate-500 whitespace-nowrap">프로젝트</span>
+              <span class="text-xs text-slate-800">
                 {{ selectedPost.project_month }}
-                <span v-if="selectedPost.project_branch" class="text-slate-400"> · {{ selectedPost.project_branch }}</span>
+                <span v-if="selectedPost.project_branch" class="text-slate-500"> · {{ selectedPost.project_branch }}</span>
               </span>
             </template>
 
             <template v-if="selectedPost.exposure_rank">
-              <span class="text-slate-400">노출순위</span>
-              <span class="text-slate-700 tabular-nums">{{ selectedPost.exposure_rank }}</span>
+              <span class="text-xs text-slate-500 whitespace-nowrap">노출순위</span>
+              <span class="text-xs text-slate-800 tabular-nums">{{ selectedPost.exposure_rank }}</span>
             </template>
           </div>
 
@@ -586,7 +590,7 @@ onMounted(() => {
           </div>
 
           <details v-if="selectedPost.needs_review" class="pt-2 border-t">
-            <summary class="text-[10px] text-amber-500 cursor-pointer">원본 데이터 보기</summary>
+            <summary class="text-xs text-amber-500 cursor-pointer">원본 데이터 보기</summary>
             <div class="mt-2 text-[11px] text-slate-500 space-y-1 bg-slate-50 p-2 rounded">
               <div><span class="text-slate-400">원본 제목:</span> {{ selectedPost.title || '(없음)' }}</div>
               <div><span class="text-slate-400">원본 종류:</span> {{ selectedPost.post_type || '(없음)' }}</div>

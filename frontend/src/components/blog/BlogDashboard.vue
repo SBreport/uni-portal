@@ -18,9 +18,6 @@ const syncStatus = ref<any>(null)
 const branchShowAll = ref(false)
 const authorShowAll = ref(false)
 
-// 운영 계정 (활성 블로그 계정)
-const activeAccounts = ref<any[]>([])
-const activeAccountsLoading = ref(false)
 
 // 월간 토글: 지점
 const branchMonthMode = ref<'all' | 'monthly'>('monthly')
@@ -56,18 +53,6 @@ function apiParams(extra?: Record<string, string>) {
   if (props.branchFilter) p.branch_filter = props.branchFilter
   if (extra) Object.assign(p, extra)
   return p
-}
-
-async function loadActiveAccounts() {
-  activeAccountsLoading.value = true
-  try {
-    const { data } = await blogApi.getActiveAccounts(apiParams())
-    activeAccounts.value = data.branches || []
-  } catch (e) {
-    console.error('운영 계정 로드 실패:', e)
-  } finally {
-    activeAccountsLoading.value = false
-  }
 }
 
 async function loadDashboard() {
@@ -273,7 +258,6 @@ const canNextType = computed(() => {
 
 onMounted(() => {
   loadDashboard()
-  loadActiveAccounts()
 })
 </script>
 
@@ -286,27 +270,27 @@ onMounted(() => {
         <div class="bg-white border border-slate-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
              @click="goToList()">
           <p class="text-xs text-slate-400">전체 게시글</p>
-          <p class="text-2xl font-bold text-slate-800 mt-1">{{ dashboard.total?.toLocaleString() }}</p>
+          <p class="text-2xl font-bold text-slate-800 mt-1 tabular-nums">{{ dashboard.total?.toLocaleString() }}</p>
         </div>
         <div class="bg-white border border-blue-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
              @click="goToList({ channel: 'br' })">
           <p class="text-xs text-blue-500">브랜드</p>
-          <p class="text-2xl font-bold text-blue-700 mt-1">{{ (dashboard.by_channel?.br || 0).toLocaleString() }}</p>
+          <p class="text-2xl font-bold text-blue-700 mt-1 tabular-nums">{{ (dashboard.by_channel?.br || 0).toLocaleString() }}</p>
         </div>
-        <div class="bg-white border border-purple-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
+        <div class="bg-white border border-indigo-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
              @click="goToList({ channel: 'opt' })">
-          <p class="text-xs text-purple-500">최적</p>
-          <p class="text-2xl font-bold text-purple-700 mt-1">{{ (dashboard.by_channel?.opt || 0).toLocaleString() }}</p>
+          <p class="text-xs text-indigo-500">최적</p>
+          <p class="text-2xl font-bold text-indigo-700 mt-1 tabular-nums">{{ (dashboard.by_channel?.opt || 0).toLocaleString() }}</p>
         </div>
         <div class="bg-white border border-orange-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
              @click="goToList({ channel: 'cafe' })">
           <p class="text-xs text-orange-500">카페</p>
-          <p class="text-2xl font-bold text-orange-700 mt-1">{{ (dashboard.by_channel?.cafe || 0).toLocaleString() }}</p>
+          <p class="text-2xl font-bold text-orange-700 mt-1 tabular-nums">{{ (dashboard.by_channel?.cafe || 0).toLocaleString() }}</p>
         </div>
         <div class="bg-white border border-amber-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
              @click="goToList({ needs_review: 1 })">
           <p class="text-xs text-amber-500">검토 필요</p>
-          <p class="text-2xl font-bold text-amber-700 mt-1">{{ (dashboard.review_count || 0).toLocaleString() }}</p>
+          <p class="text-2xl font-bold text-amber-700 mt-1 tabular-nums">{{ (dashboard.review_count || 0).toLocaleString() }}</p>
           <p v-if="syncStatus" class="text-[10px] text-slate-400 mt-2 leading-relaxed">
             마지막 동기화: {{ syncStatus.synced_at?.slice(0, 10) }}
           </p>
@@ -322,8 +306,8 @@ onMounted(() => {
               <div v-for="m in sortedMonthly" :key="m.month"
                    class="flex-1 flex flex-col items-center justify-end cursor-pointer group"
                    @click="goToList({ project_month: m.month })">
-                <span class="text-[11px] text-slate-500 mb-1 group-hover:text-purple-600 font-semibold">{{ m.cnt.toLocaleString() }}</span>
-                <div class="w-4/5 bg-purple-300 group-hover:bg-purple-400 rounded-t transition-all min-h-[2px]"
+                <span class="text-[11px] text-slate-500 mb-1 group-hover:text-indigo-600 font-semibold">{{ m.cnt.toLocaleString() }}</span>
+                <div class="w-4/5 bg-indigo-300 group-hover:bg-indigo-400 rounded-t transition-all min-h-[2px]"
                      :style="{ height: (m.cnt / maxMonthlyCount * 80) + 'px' }"></div>
                 <span class="text-[11px] text-slate-400 mt-1.5 whitespace-nowrap">{{ m.month.slice(2) }}</span>
               </div>
@@ -345,9 +329,9 @@ onMounted(() => {
 
         <!-- Row 2: 원고 종류별 분포 (전체 폭) -->
         <div class="bg-white border border-slate-200 rounded-lg p-4">
-          <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-slate-700">원고 종류별 분포</h3>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1 ml-auto">
               <button @click="typeMonthMode = 'all'"
                 class="text-[10px] px-2 py-0.5 rounded transition-colors"
                 :class="typeMonthMode === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
@@ -386,12 +370,12 @@ onMounted(() => {
 
         <!-- Row 3: 지점별 게시글 수 (전체 폭) -->
         <div class="bg-white border border-slate-200 rounded-lg p-4">
-          <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-slate-700">
               지점별 게시글 수
               <span class="text-[10px] text-slate-400 font-normal ml-1">{{ displayBranchData.length }}개 지점</span>
             </h3>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1 ml-auto">
               <button @click="branchMonthMode = 'all'"
                 class="text-[10px] px-2 py-0.5 rounded transition-colors"
                 :class="branchMonthMode === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
@@ -431,31 +415,6 @@ onMounted(() => {
           </button>
         </div>
 
-        <!-- Row 3b: 운영 계정 (3개월 내 브랜드블로그 발행 계정) -->
-        <div class="bg-white border border-slate-200 rounded-lg p-4">
-          <h3 class="text-sm font-semibold text-slate-700 mb-3">
-            운영 계정
-            <span class="text-[10px] text-slate-400 font-normal ml-1">최근 3개월 내 브랜드블로그 발행</span>
-          </h3>
-          <div v-if="activeAccountsLoading" class="text-center py-4 text-slate-400 text-xs">로딩...</div>
-          <div v-else-if="activeAccounts.length === 0" class="text-xs text-slate-400 text-center py-3">데이터 없음</div>
-          <div v-else class="space-y-3">
-            <div v-for="branch in activeAccounts" :key="branch.branch_name">
-              <p class="text-[11px] font-semibold text-slate-500 mb-1">{{ branch.branch_name }}</p>
-              <div class="flex flex-wrap gap-1.5">
-                <span
-                  v-for="acc in branch.accounts"
-                  :key="acc.blog_id"
-                  class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100"
-                  :title="acc.blog_id"
-                >
-                  {{ acc.nickname }}
-                  <span class="text-[10px] text-blue-400 font-normal">{{ acc.post_count }}</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <!-- Row 4: 이번주 발행글 | 지난주 발행글 -->
         <div class="grid grid-cols-2 gap-4">
@@ -533,9 +492,9 @@ onMounted(() => {
 
         <!-- 담당자별 게시글 수 — 관리자만 -->
         <div v-if="!hideAuthor" class="bg-white border border-slate-200 rounded-lg p-4">
-          <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-slate-700">담당자별 게시글 수</h3>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1 ml-auto">
               <button @click="authorMonthMode = 'all'"
                 class="text-[10px] px-2 py-0.5 rounded transition-colors"
                 :class="authorMonthMode === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"

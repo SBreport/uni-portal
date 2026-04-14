@@ -17,6 +17,9 @@ const editingAccount = ref<string | null>(null)
 const editForm = ref({ account_name: '', account_group: '' })
 const selectedAccounts = ref<Set<string>>(new Set())
 
+// 도구 패널 토글
+const showTools = ref(false)
+
 // 도구 실행 상태
 const scrapingNicknames = ref(false)
 const fixingUrlTitles = ref(false)
@@ -250,21 +253,50 @@ const columns = computed(() => [
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col min-h-0">
+  <div class="h-full flex flex-col min-h-0">
     <!-- 필터 -->
-    <div class="bg-white border border-slate-200 rounded-lg p-3 mb-3 flex items-center gap-2">
+    <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 mb-2 flex items-center gap-2 flex-none">
       <input v-model="search" @keyup.enter="loadAccounts"
              placeholder="계정 ID / 닉네임 검색"
-             class="border border-slate-300 rounded px-2 py-1 text-sm w-56 focus:border-blue-400 focus:outline-none" />
-      <button @click="loadAccounts" class="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">검색</button>
-      <select v-model="channelFilter" @change="loadAccounts" class="border border-slate-300 rounded px-2 py-1 text-sm">
+             class="border border-slate-300 rounded px-2 h-8 text-xs w-48 focus:border-blue-400 focus:outline-none" />
+      <button @click="loadAccounts"
+              class="px-3 h-8 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">검색</button>
+      <select v-model="channelFilter" @change="loadAccounts"
+              class="border border-slate-300 rounded px-2 h-8 text-xs">
         <option value="">전체 채널</option>
         <option value="br">브랜드</option>
         <option value="opt">최적</option>
         <option value="cafe">카페</option>
       </select>
-      <!-- 관리 도구 -->
-      <div class="ml-auto flex items-center gap-2">
+      <span class="text-xs text-slate-400 ml-auto tabular-nums">
+        {{ accounts.length }}개 계정
+        <span v-if="selectedAccounts.size > 0" class="text-blue-500 ml-1">
+          ({{ selectedAccounts.size }}개 선택)
+        </span>
+      </span>
+    </div>
+
+    <!-- 테이블 (flex-1로 남은 공간 채움) -->
+    <div class="flex-1 min-h-0 overflow-auto">
+      <DataTable
+        :data="accounts"
+        :columns="columns"
+        :page-size="100"
+        height="none"
+        :searchable="false"
+      />
+    </div>
+
+    <!-- 도구 패널 (접힘 기본) -->
+    <div class="flex-none mt-2">
+      <button @click="showTools = !showTools"
+              class="text-xs px-2 py-1 rounded border transition-colors"
+              :class="showTools
+                ? 'border-blue-400 text-blue-600 bg-blue-50'
+                : 'border-slate-300 text-slate-500 hover:bg-slate-50'">
+        도구 {{ showTools ? '▴' : '▾' }}
+      </button>
+      <div v-if="showTools" class="mt-2 flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2">
         <button @click="runScrapeNicknames"
                 :disabled="scrapingNicknames"
                 class="px-2 py-1 text-xs rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-wait whitespace-nowrap">
@@ -275,27 +307,8 @@ const columns = computed(() => [
                 class="px-2 py-1 text-xs rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-wait whitespace-nowrap">
           {{ fixingUrlTitles ? '수정 중...' : 'URL 제목 수정' }}
         </button>
-        <span class="text-xs text-slate-400">
-          {{ accounts.length }}개 계정
-          <span v-if="selectedAccounts.size > 0" class="text-blue-500 ml-1">
-            ({{ selectedAccounts.size }}개 선택)
-          </span>
-        </span>
+        <span v-if="toolMessage" class="text-xs text-blue-700 ml-2">{{ toolMessage }}</span>
       </div>
     </div>
-    <!-- 도구 실행 결과 메시지 -->
-    <div v-if="toolMessage"
-         class="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-3 text-xs text-blue-700">
-      {{ toolMessage }}
-    </div>
-
-    <!-- 테이블 -->
-    <DataTable
-      :data="accounts"
-      :columns="columns"
-      :page-size="100"
-      height="650px"
-      :searchable="false"
-    />
   </div>
 </template>

@@ -172,7 +172,7 @@ const columns = computed(() => [
     header: '전체',
     size: 50,
     enableSorting: true,
-    cell: (info) => h('span', { class: 'text-right text-xs text-slate-600 font-medium block' }, info.getValue()),
+    cell: (info) => h('span', { class: 'text-right text-xs text-slate-600 font-medium block tabular-nums' }, info.getValue()),
   }),
 
   col.accessor('recent_count', {
@@ -182,7 +182,7 @@ const columns = computed(() => [
     cell: (info) => {
       const v = info.getValue() ?? 0
       return h('span', {
-        class: `text-right text-xs font-medium block ${v > 0 ? 'text-blue-600' : 'text-slate-300'}`,
+        class: `text-right text-xs font-medium block tabular-nums ${v > 0 ? 'text-blue-600' : 'text-slate-300'}`,
       }, v)
     },
   }),
@@ -191,7 +191,7 @@ const columns = computed(() => [
     header: '최근발행',
     size: 84,
     enableSorting: true,
-    cell: (info) => h('span', { class: 'text-xs text-slate-400' }, info.getValue() || '-'),
+    cell: (info) => h('span', { class: 'text-xs text-slate-400 tabular-nums' }, info.getValue() || '-'),
   }),
 
   col.accessor('blog_title', {
@@ -255,14 +255,14 @@ const columns = computed(() => [
 <template>
   <div class="h-full flex flex-col min-h-0">
     <!-- 필터 -->
-    <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 mb-2 flex items-center gap-2 flex-none">
+    <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 mb-2 flex items-center gap-3 flex-none">
       <input v-model="search" @keyup.enter="loadAccounts"
              placeholder="계정 ID / 닉네임 검색"
              class="border border-slate-300 rounded px-2 h-8 text-xs w-48 focus:border-blue-400 focus:outline-none" />
       <button @click="loadAccounts"
               class="px-3 h-8 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">검색</button>
       <select v-model="channelFilter" @change="loadAccounts"
-              class="border border-slate-300 rounded px-2 h-8 text-xs">
+              class="border border-slate-300 rounded px-2 h-8 text-xs w-32">
         <option value="">전체 채널</option>
         <option value="br">브랜드</option>
         <option value="opt">최적</option>
@@ -277,7 +277,7 @@ const columns = computed(() => [
     </div>
 
     <!-- 테이블 (flex-1로 남은 공간 채움) -->
-    <div class="flex-1 min-h-0 overflow-auto">
+    <div class="flex-1 min-h-0 overflow-auto min-w-[720px]">
       <DataTable
         :data="accounts"
         :columns="columns"

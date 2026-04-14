@@ -20,6 +20,7 @@ import sys
 import re
 import sqlite3
 import time
+import traceback
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -195,14 +196,18 @@ def get_last_sync_time(conn) -> str:
 
 def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: bool = False) -> dict:
     """증분 동기화: 마지막 동기화 이후 수정된 페이지만 처리. force_full=True면 전체."""
-    conn = sqlite3.connect(os.path.abspath(DB_PATH))
+    print(f"[sync_notion] incremental_sync start force_full={force_full}", flush=True)
+    conn = sqlite3.connect(os.path.abspath(DB_PATH), timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
 
+    print("[sync_notion] get_last_sync_time", flush=True)
     since = None if force_full else get_last_sync_time(conn)
     sync_type = "full" if force_full or not since else "incremental"
 
     # 1. Notion에서 변경된 페이지 가져오기
+    print(f"[sync_notion] fetch_notion_pages since={since}", flush=True)
     pages = fetch_notion_pages(token, db_id, since=since)
 
     if not pages:
@@ -217,6 +222,7 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
     new_posts = 0
     matched = 0
 
+    print(f"[sync_notion] enrich rows count={len(pages)}", flush=True)
     for pg in pages:
         d = extract_page_data(pg)
         platform, blog_id, post_number = parse_blog_url(d["main_url"])
@@ -226,7 +232,7 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
 
         # DB에서 기존 레코드 찾기
         existing = conn.execute(
-            "SELECT id, title, clean_title FROM blog_posts WHERE platform = ? AND blog_id = ? AND post_number = ?",
+            "SELECT id, title, clean_title, scraped_title FROM blog_posts WHERE platform = ? AND blog_id = ? AND post_number = ?",
             (platform, blog_id, post_number),
         ).fetchone()
 
@@ -245,7 +251,10 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
         clean_title = d["title"] if d["title"] else enriched["clean_title"]
         # 기존에 스크래핑된 제목이 있으면 keyword fallback보다 우선
         if existing and not d["title"]:
-            existing_scraped = existing.get("scraped_title") or ""
+            try:
+                existing_scraped = existing["scraped_title"] or ""
+            except (IndexError, KeyError):
+                existing_scraped = ""
             if existing_scraped and existing_scraped not in ("(삭제됨)", "(카페-수집불가)"):
                 clean_title = existing_scraped
 
@@ -316,6 +325,7 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
             new_posts += 1
 
     # 3. 동기화 로그 기록
+    print("[sync_notion] writing to db", flush=True)
     if not dry_run:
         conn.execute("""
             INSERT INTO notion_sync_log (sync_type, notion_pages, matched, updated, new_posts, last_edited_cutoff)
@@ -339,8 +349,9 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
 
 def fix_titles(token: str, db_id: str, dry_run: bool = False) -> dict:
     """needs_review=1인 레코드의 제목만 Notion에서 보정."""
-    conn = sqlite3.connect(os.path.abspath(DB_PATH))
+    conn = sqlite3.connect(os.path.abspath(DB_PATH), timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=30000")
 
     # needs_review=1이 없으면 스킵
     review_count = conn.execute("SELECT COUNT(*) FROM blog_posts WHERE needs_review = 1").fetchone()[0]

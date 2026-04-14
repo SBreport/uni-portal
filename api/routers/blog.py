@@ -7,6 +7,7 @@ import os
 import sys
 import shutil
 import subprocess
+import traceback
 from typing import Annotated, Optional
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
 from pydantic import BaseModel
@@ -156,7 +157,8 @@ def sync_notion(body: NotionSyncRequest, user: dict = Depends(require_role("admi
     try:
         return incremental_sync(token, NOTION_BLOG_DB_ID, dry_run=False)
     except Exception as e:
-        raise HTTPException(500, f"동기화 실패: {str(e)}")
+        print(traceback.format_exc(), flush=True)
+        raise HTTPException(status_code=500, detail=f"동기화 실패: {type(e).__name__}: {e}")
 
 
 @router.get("/notion-token/status")

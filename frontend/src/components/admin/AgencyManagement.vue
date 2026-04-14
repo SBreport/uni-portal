@@ -427,77 +427,77 @@ onUnmounted(() => {
           <div v-if="dashboardPlace" class="bg-white border border-slate-200 rounded-lg overflow-hidden">
             <div class="flex items-center gap-2 px-3 py-2 bg-sky-50 border-b border-sky-100">
               <span class="w-1 h-4 bg-sky-500 rounded-full"></span>
-              <h3 class="text-xs font-bold text-sky-700">플레이스 총 성과</h3>
-              <span class="text-[10px] text-slate-400 ml-auto">{{ dashboardPlace.period }}</span>
+              <h3 class="text-sm font-bold text-sky-700">플레이스 총 성과</h3>
+              <span class="text-[11px] text-slate-500 ml-auto">{{ dashboardPlace.period }}</span>
             </div>
             <div class="p-3 space-y-3">
               <!-- KPI 2x2 -->
               <div class="grid grid-cols-2 gap-1.5">
-                <div class="border border-slate-200 rounded p-2">
-                  <div class="text-[10px] text-slate-400">전체 성공률</div>
-                  <div class="text-lg font-bold leading-tight" :class="dashboardPlace.overall_rate >= 50 ? 'text-sky-600' : 'text-red-500'">{{ dashboardPlace.overall_rate }}%</div>
-                  <div class="text-[10px] text-slate-400">{{ dashboardPlace.exposed_days.toLocaleString() }} / {{ dashboardPlace.total_days.toLocaleString() }}일</div>
+                <div class="border border-slate-200 rounded-md p-3">
+                  <div class="text-[11px] text-slate-500">전체 성공률</div>
+                  <div class="text-2xl font-bold leading-none mt-1" :class="dashboardPlace.overall_rate >= 50 ? 'text-sky-600' : 'text-red-500'">{{ dashboardPlace.overall_rate }}%</div>
+                  <div class="text-[11px] text-slate-500">{{ dashboardPlace.exposed_days.toLocaleString() }} / {{ dashboardPlace.total_days.toLocaleString() }}일</div>
                 </div>
-                <div class="border border-slate-200 rounded p-2">
-                  <div class="text-[10px] text-slate-400">어제 노출</div>
+                <div class="border border-slate-200 rounded-md p-3">
+                  <div class="text-[11px] text-slate-500">어제 노출</div>
                   <div class="text-lg font-bold text-slate-700 leading-tight">{{ dashboardPlace.yesterday_exposed }} / {{ dashboardPlace.total_branches }}</div>
                   <div class="text-[10px]" :class="(dashboardPlace.yesterday_exposed - dashboardPlace.day_before_exposed) > 0 ? 'text-blue-500' : (dashboardPlace.yesterday_exposed - dashboardPlace.day_before_exposed) < 0 ? 'text-red-500' : 'text-slate-400'">
                     {{ (dashboardPlace.yesterday_exposed - dashboardPlace.day_before_exposed) > 0 ? '↑ 그저께 +' + (dashboardPlace.yesterday_exposed - dashboardPlace.day_before_exposed) : (dashboardPlace.yesterday_exposed - dashboardPlace.day_before_exposed) < 0 ? '↓ 그저께 ' + (dashboardPlace.yesterday_exposed - dashboardPlace.day_before_exposed) : '→ 동일' }}
                   </div>
                 </div>
-                <div class="border border-slate-200 rounded p-2">
-                  <div class="text-[10px] text-slate-400">평균 연속</div>
+                <div class="border border-slate-200 rounded-md p-3">
+                  <div class="text-[11px] text-slate-500">평균 연속</div>
                   <div class="text-lg font-bold text-slate-700 leading-tight">{{ dashboardPlace.avg_streak }}일</div>
-                  <div class="text-[10px] text-slate-400">지점 평균</div>
+                  <div class="text-[11px] text-slate-500">지점 평균</div>
                 </div>
-                <div class="border border-slate-200 rounded p-2">
-                  <div class="text-[10px] text-slate-400">100% 유지</div>
+                <div class="border border-slate-200 rounded-md p-3">
+                  <div class="text-[11px] text-slate-500">100% 유지</div>
                   <div class="text-lg font-bold text-sky-600 leading-tight">{{ dashboardPlace.perfect_count }}개</div>
-                  <div class="text-[10px] text-slate-400">만점 지점</div>
+                  <div class="text-[11px] text-slate-500">만점 지점</div>
                 </div>
               </div>
 
               <!-- 월별 추이 -->
               <div>
-                <p class="text-[10px] font-semibold text-slate-500 mb-1.5">월별 전체 성공률</p>
-                <div class="flex gap-0.5 items-end" style="height: 60px">
+                <p class="text-[11px] font-semibold text-slate-600 mb-2">월별 전체 성공률</p>
+                <div class="flex gap-0.5 items-end" style="height: 80px">
                   <div v-for="(rate, m) in dashboardPlace.monthly_rates" :key="m" class="flex-1 flex flex-col items-center">
-                    <div class="text-[9px] font-medium tabular-nums mb-0.5"
+                    <div class="text-[11px] font-semibold tabular-nums mb-1"
                       :class="rate >= 80 ? 'text-sky-600' : rate >= 50 ? 'text-slate-500' : 'text-red-500'">
                       {{ rate }}
                     </div>
-                    <div class="w-full bg-slate-50 rounded-sm relative overflow-hidden" style="height: 34px">
+                    <div class="w-full bg-slate-50 rounded-sm relative overflow-hidden" style="height: 54px">
                       <div class="absolute bottom-0 w-full rounded-sm"
                         :class="rate >= 50 ? 'bg-sky-400' : 'bg-red-400'"
                         :style="{ height: rate + '%' }"></div>
                     </div>
-                    <div class="text-[9px] text-slate-400 mt-0.5">{{ parseInt(String(m).split('-')[1] || '0') }}월</div>
+                    <div class="text-[10px] text-slate-400 mt-1">{{ parseInt(String(m).split('-')[1] || '0') }}월</div>
                   </div>
                 </div>
               </div>
 
               <!-- 분포 스택 바 (단일 행) -->
               <div>
-                <p class="text-[10px] font-semibold text-slate-500 mb-1.5">지점 성공률 분포 ({{ dashboardPlace.total_branches }}개)</p>
-                <div class="flex h-5 rounded-sm overflow-hidden">
+                <p class="text-[11px] font-semibold text-slate-600 mb-2">지점 성공률 분포 ({{ dashboardPlace.total_branches }}개)</p>
+                <div class="flex h-7 rounded overflow-hidden">
                   <div v-if="dashboardPlace.distribution.excellent > 0"
-                    class="bg-sky-500 flex items-center justify-center text-white text-[10px] font-medium"
+                    class="bg-sky-500 flex items-center justify-center text-white text-xs font-semibold"
                     :style="{ width: (dashboardPlace.distribution.excellent / dashboardPlace.total_branches * 100) + '%' }"
                     :title="`우수 ${dashboardPlace.distribution.excellent}개`">{{ dashboardPlace.distribution.excellent }}</div>
                   <div v-if="dashboardPlace.distribution.good > 0"
-                    class="bg-sky-300 flex items-center justify-center text-white text-[10px] font-medium"
+                    class="bg-sky-300 flex items-center justify-center text-white text-xs font-semibold"
                     :style="{ width: (dashboardPlace.distribution.good / dashboardPlace.total_branches * 100) + '%' }"
                     :title="`양호 ${dashboardPlace.distribution.good}개`">{{ dashboardPlace.distribution.good }}</div>
                   <div v-if="dashboardPlace.distribution.fair > 0"
-                    class="bg-amber-400 flex items-center justify-center text-white text-[10px] font-medium"
+                    class="bg-amber-400 flex items-center justify-center text-white text-xs font-semibold"
                     :style="{ width: (dashboardPlace.distribution.fair / dashboardPlace.total_branches * 100) + '%' }"
                     :title="`보통 ${dashboardPlace.distribution.fair}개`">{{ dashboardPlace.distribution.fair }}</div>
                   <div v-if="dashboardPlace.distribution.poor > 0"
-                    class="bg-red-400 flex items-center justify-center text-white text-[10px] font-medium"
+                    class="bg-red-400 flex items-center justify-center text-white text-xs font-semibold"
                     :style="{ width: (dashboardPlace.distribution.poor / dashboardPlace.total_branches * 100) + '%' }"
                     :title="`부진 ${dashboardPlace.distribution.poor}개`">{{ dashboardPlace.distribution.poor }}</div>
                 </div>
-                <div class="flex justify-between text-[9px] text-slate-400 mt-1">
+                <div class="flex justify-between text-[10px] text-slate-500 mt-1.5">
                   <span><span class="inline-block w-2 h-2 rounded-full bg-sky-500 mr-1"></span>우수(90%+)</span>
                   <span><span class="inline-block w-2 h-2 rounded-full bg-sky-300 mr-1"></span>양호(70~89)</span>
                   <span><span class="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>보통(50~69)</span>
@@ -507,10 +507,10 @@ onUnmounted(() => {
 
               <!-- 급변 -->
               <div v-if="dashboardPlace.top_changes.length > 0">
-                <p class="text-[10px] font-semibold text-slate-500 mb-1.5">전월 대비 급변 (±15%)</p>
+                <p class="text-[11px] font-semibold text-slate-600 mb-2">전월 대비 급변 (±15%)</p>
                 <div class="flex flex-wrap gap-1">
                   <div v-for="c in dashboardPlace.top_changes" :key="c.branch"
-                    class="px-1.5 py-0.5 rounded text-[10px] tabular-nums"
+                    class="px-2 py-1 rounded text-[11px] font-medium tabular-nums"
                     :class="c.diff > 0 ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'"
                     :title="`${c.prev_rate}% → ${c.curr_rate}%`">
                     {{ c.branch.replace('유앤아이', '') }} {{ c.diff > 0 ? '+' : '' }}{{ c.diff }}
@@ -524,73 +524,73 @@ onUnmounted(() => {
           <div v-if="dashboardWebpage" class="bg-white border border-slate-200 rounded-lg overflow-hidden">
             <div class="flex items-center gap-2 px-3 py-2 bg-indigo-50 border-b border-indigo-100">
               <span class="w-1 h-4 bg-indigo-500 rounded-full"></span>
-              <h3 class="text-xs font-bold text-indigo-700">웹페이지 총 성과</h3>
-              <span class="text-[10px] text-slate-400 ml-auto">{{ dashboardWebpage.period }}</span>
+              <h3 class="text-sm font-bold text-indigo-700">웹페이지 총 성과</h3>
+              <span class="text-[11px] text-slate-500 ml-auto">{{ dashboardWebpage.period }}</span>
             </div>
             <div class="p-3 space-y-3">
               <!-- KPI 2x2 -->
               <div class="grid grid-cols-2 gap-1.5">
-                <div class="border border-slate-200 rounded p-2">
-                  <div class="text-[10px] text-slate-400">전체 성공률</div>
-                  <div class="text-lg font-bold leading-tight" :class="dashboardWebpage.overall_rate >= 50 ? 'text-indigo-600' : 'text-red-500'">{{ dashboardWebpage.overall_rate }}%</div>
-                  <div class="text-[10px] text-slate-400">{{ dashboardWebpage.exposed_days.toLocaleString() }} / {{ dashboardWebpage.total_days.toLocaleString() }}일</div>
+                <div class="border border-slate-200 rounded-md p-3">
+                  <div class="text-[11px] text-slate-500">전체 성공률</div>
+                  <div class="text-2xl font-bold leading-none mt-1" :class="dashboardWebpage.overall_rate >= 50 ? 'text-indigo-600' : 'text-red-500'">{{ dashboardWebpage.overall_rate }}%</div>
+                  <div class="text-[11px] text-slate-500">{{ dashboardWebpage.exposed_days.toLocaleString() }} / {{ dashboardWebpage.total_days.toLocaleString() }}일</div>
                 </div>
-                <div class="border border-slate-200 rounded p-2">
-                  <div class="text-[10px] text-slate-400">어제 노출</div>
+                <div class="border border-slate-200 rounded-md p-3">
+                  <div class="text-[11px] text-slate-500">어제 노출</div>
                   <div class="text-lg font-bold text-slate-700 leading-tight">{{ dashboardWebpage.yesterday_exposed }} / {{ dashboardWebpage.total_branches }}</div>
                   <div class="text-[10px]" :class="(dashboardWebpage.yesterday_exposed - dashboardWebpage.day_before_exposed) > 0 ? 'text-blue-500' : (dashboardWebpage.yesterday_exposed - dashboardWebpage.day_before_exposed) < 0 ? 'text-red-500' : 'text-slate-400'">
                     {{ (dashboardWebpage.yesterday_exposed - dashboardWebpage.day_before_exposed) > 0 ? '↑ 그저께 +' + (dashboardWebpage.yesterday_exposed - dashboardWebpage.day_before_exposed) : (dashboardWebpage.yesterday_exposed - dashboardWebpage.day_before_exposed) < 0 ? '↓ 그저께 ' + (dashboardWebpage.yesterday_exposed - dashboardWebpage.day_before_exposed) : '→ 동일' }}
                   </div>
                 </div>
-                <div class="border border-slate-200 rounded p-2">
-                  <div class="text-[10px] text-slate-400">평균 연속</div>
+                <div class="border border-slate-200 rounded-md p-3">
+                  <div class="text-[11px] text-slate-500">평균 연속</div>
                   <div class="text-lg font-bold text-slate-700 leading-tight">{{ dashboardWebpage.avg_streak }}일</div>
-                  <div class="text-[10px] text-slate-400">지점 평균</div>
+                  <div class="text-[11px] text-slate-500">지점 평균</div>
                 </div>
-                <div class="border border-slate-200 rounded p-2">
-                  <div class="text-[10px] text-slate-400">100% 유지</div>
+                <div class="border border-slate-200 rounded-md p-3">
+                  <div class="text-[11px] text-slate-500">100% 유지</div>
                   <div class="text-lg font-bold text-indigo-600 leading-tight">{{ dashboardWebpage.perfect_count }}개</div>
-                  <div class="text-[10px] text-slate-400">만점 지점</div>
+                  <div class="text-[11px] text-slate-500">만점 지점</div>
                 </div>
               </div>
 
               <!-- 월별 추이 -->
               <div>
-                <p class="text-[10px] font-semibold text-slate-500 mb-1.5">월별 전체 성공률</p>
-                <div class="flex gap-0.5 items-end" style="height: 60px">
+                <p class="text-[11px] font-semibold text-slate-600 mb-2">월별 전체 성공률</p>
+                <div class="flex gap-0.5 items-end" style="height: 80px">
                   <div v-for="(rate, m) in dashboardWebpage.monthly_rates" :key="m" class="flex-1 flex flex-col items-center">
-                    <div class="text-[9px] font-medium tabular-nums mb-0.5"
+                    <div class="text-[11px] font-semibold tabular-nums mb-1"
                       :class="rate >= 80 ? 'text-indigo-600' : rate >= 50 ? 'text-slate-500' : 'text-red-500'">
                       {{ rate }}
                     </div>
-                    <div class="w-full bg-slate-50 rounded-sm relative overflow-hidden" style="height: 34px">
+                    <div class="w-full bg-slate-50 rounded-sm relative overflow-hidden" style="height: 54px">
                       <div class="absolute bottom-0 w-full rounded-sm"
                         :class="rate >= 50 ? 'bg-indigo-400' : 'bg-red-400'"
                         :style="{ height: rate + '%' }"></div>
                     </div>
-                    <div class="text-[9px] text-slate-400 mt-0.5">{{ parseInt(String(m).split('-')[1] || '0') }}월</div>
+                    <div class="text-[10px] text-slate-400 mt-1">{{ parseInt(String(m).split('-')[1] || '0') }}월</div>
                   </div>
                 </div>
               </div>
 
               <!-- 분포 스택 바 -->
               <div>
-                <p class="text-[10px] font-semibold text-slate-500 mb-1.5">지점 성공률 분포 ({{ dashboardWebpage.total_branches }}개)</p>
-                <div class="flex h-5 rounded-sm overflow-hidden">
+                <p class="text-[11px] font-semibold text-slate-600 mb-2">지점 성공률 분포 ({{ dashboardWebpage.total_branches }}개)</p>
+                <div class="flex h-7 rounded overflow-hidden">
                   <div v-if="dashboardWebpage.distribution.excellent > 0"
-                    class="bg-indigo-500 flex items-center justify-center text-white text-[10px] font-medium"
+                    class="bg-indigo-500 flex items-center justify-center text-white text-xs font-semibold"
                     :style="{ width: (dashboardWebpage.distribution.excellent / dashboardWebpage.total_branches * 100) + '%' }">{{ dashboardWebpage.distribution.excellent }}</div>
                   <div v-if="dashboardWebpage.distribution.good > 0"
-                    class="bg-indigo-300 flex items-center justify-center text-white text-[10px] font-medium"
+                    class="bg-indigo-300 flex items-center justify-center text-white text-xs font-semibold"
                     :style="{ width: (dashboardWebpage.distribution.good / dashboardWebpage.total_branches * 100) + '%' }">{{ dashboardWebpage.distribution.good }}</div>
                   <div v-if="dashboardWebpage.distribution.fair > 0"
-                    class="bg-amber-400 flex items-center justify-center text-white text-[10px] font-medium"
+                    class="bg-amber-400 flex items-center justify-center text-white text-xs font-semibold"
                     :style="{ width: (dashboardWebpage.distribution.fair / dashboardWebpage.total_branches * 100) + '%' }">{{ dashboardWebpage.distribution.fair }}</div>
                   <div v-if="dashboardWebpage.distribution.poor > 0"
-                    class="bg-red-400 flex items-center justify-center text-white text-[10px] font-medium"
+                    class="bg-red-400 flex items-center justify-center text-white text-xs font-semibold"
                     :style="{ width: (dashboardWebpage.distribution.poor / dashboardWebpage.total_branches * 100) + '%' }">{{ dashboardWebpage.distribution.poor }}</div>
                 </div>
-                <div class="flex justify-between text-[9px] text-slate-400 mt-1">
+                <div class="flex justify-between text-[10px] text-slate-500 mt-1.5">
                   <span><span class="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-1"></span>우수(90%+)</span>
                   <span><span class="inline-block w-2 h-2 rounded-full bg-indigo-300 mr-1"></span>양호(70~89)</span>
                   <span><span class="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>보통(50~69)</span>
@@ -600,10 +600,10 @@ onUnmounted(() => {
 
               <!-- 급변 -->
               <div v-if="dashboardWebpage.top_changes.length > 0">
-                <p class="text-[10px] font-semibold text-slate-500 mb-1.5">전월 대비 급변 (±15%)</p>
+                <p class="text-[11px] font-semibold text-slate-600 mb-2">전월 대비 급변 (±15%)</p>
                 <div class="flex flex-wrap gap-1">
                   <div v-for="c in dashboardWebpage.top_changes" :key="c.branch"
-                    class="px-1.5 py-0.5 rounded text-[10px] tabular-nums"
+                    class="px-2 py-1 rounded text-[11px] font-medium tabular-nums"
                     :class="c.diff > 0 ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'"
                     :title="`${c.prev_rate}% → ${c.curr_rate}%`">
                     {{ c.branch.replace('유앤아이의원', '').replace('유앤아이', '').trim() }} {{ c.diff > 0 ? '+' : '' }}{{ c.diff }}
@@ -749,7 +749,7 @@ onUnmounted(() => {
               :class="[agencyColor(a.agency).border]">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-bold" :class="agencyColor(a.agency).text">{{ a.agency }}</span>
-                <span class="text-[10px] text-slate-400">{{ a.branch_count }}지점</span>
+                <span class="text-[11px] text-slate-500">{{ a.branch_count }}지점</span>
               </div>
               <div class="flex items-center gap-2 mb-2">
                 <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">

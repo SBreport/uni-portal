@@ -64,7 +64,7 @@ onMounted(() => {
   <div class="px-4 pt-3 pb-0 h-[calc(100vh-1rem)] flex flex-col">
     <!-- 헤더 -->
     <div class="flex items-center gap-2 mb-2 flex-none">
-      <h2 class="text-xl font-bold text-slate-800">{{ pageTitle }}</h2>
+      <h1 class="text-xl font-bold text-slate-800">{{ pageTitle }}</h1>
     </div>
 
     <!-- 탭 바 -->

@@ -124,8 +124,8 @@ function handleLogout() {
 <template>
   <aside class="w-48 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0">
     <!-- 로고 -->
-    <div class="px-5 py-6 border-b border-slate-100">
-      <h1 class="text-base font-bold text-slate-800">유앤아이의원</h1>
+    <div class="px-5 py-6 border-b border-slate-100" role="banner">
+      <div class="text-base font-bold text-slate-800">유앤아이의원</div>
       <p class="text-xs text-slate-400 mt-0.5">통합 관리 시스템</p>
     </div>
 

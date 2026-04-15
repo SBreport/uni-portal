@@ -519,16 +519,16 @@ onMounted(() => {
                       'bg-blue-50': selectedPost?.id === post.id,
                       'bg-amber-50/30': post.needs_review && selectedPost?.id !== post.id,
                     }">
-                  <td class="pl-2 pr-2 py-1">
+                  <td class="pl-2 pr-2 py-1 align-top">
                     <span class="text-xs px-1.5 py-0.5 rounded font-medium"
                           :class="channelColor(post.blog_channel)">
                       {{ channelLabel(post.blog_channel) }}
                     </span>
                   </td>
-                  <td class="px-2 py-1 text-[11px] text-slate-500 truncate">
+                  <td class="px-2 py-1 text-[11px] text-slate-500 truncate align-top">
                     {{ post.branch_name || '-' }}
                   </td>
-                  <td class="px-2 py-1">
+                  <td class="px-2 py-1 align-top">
                     <span v-if="post.post_type_main"
                           class="text-xs px-1.5 py-0.5 rounded font-medium"
                           :class="typeColor(post.post_type_main)">
@@ -536,7 +536,7 @@ onMounted(() => {
                     </span>
                     <span v-else class="text-slate-300 text-[10px]">-</span>
                   </td>
-                  <td class="px-2 py-1 text-slate-700 font-medium truncate text-xs">
+                  <td class="px-2 py-1 text-slate-700 font-medium truncate text-xs align-top">
                     {{ post.keyword || '-' }}
                   </td>
                   <td class="px-2 py-1 text-xs whitespace-normal align-top">
@@ -558,12 +558,12 @@ onMounted(() => {
                       {{ decodeHtml(post.clean_title) || post.keyword || '-' }}
                     </span>
                   </td>
-                  <td v-if="!shouldHideAuthor" class="px-2 py-1 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
-                  <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums">{{ post.published_at || '-' }}</td>
-                  <td class="px-2 py-1 text-[11px]" :class="statusColor(post.status_clean)">
+                  <td v-if="!shouldHideAuthor" class="px-2 py-1 text-slate-500 text-[11px] truncate align-top">{{ post.author_main || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums align-top">{{ post.published_at || '-' }}</td>
+                  <td class="px-2 py-1 text-[11px] align-top" :class="statusColor(post.status_clean)">
                     {{ post.status_clean || '-' }}
                   </td>
-                  <td class="px-1 py-1 whitespace-nowrap">
+                  <td class="px-1 py-1 whitespace-nowrap align-top">
                     <div class="opacity-0 group-hover:opacity-100 flex gap-0.5 transition-opacity">
                       <button @click.stop="openUrl(post.published_url)" title="URL 열기"
                               class="text-[10px] text-slate-400 hover:text-blue-600 px-1 py-0.5">&#x2197;</button>

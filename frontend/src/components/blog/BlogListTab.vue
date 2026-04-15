@@ -423,20 +423,25 @@ onMounted(() => {
       <div class="flex-1 bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col min-w-0">
         <!-- 스크롤 단일 영역 -->
         <div class="flex-1 overflow-auto min-h-0">
-          <table class="w-full text-sm table-auto whitespace-nowrap" style="min-width: 600px;">
+          <table class="w-full text-sm table-fixed whitespace-nowrap">
+            <colgroup>
+              <col style="width: 64px" />   <!-- 채널 -->
+              <col style="width: 76px" />   <!-- 원고종류 -->
+              <col style="width: 84px" />   <!-- 지점 -->
+              <col />                        <!-- 제목 (remaining) -->
+              <col style="width: 120px" />  <!-- 키워드 -->
+              <col v-if="!shouldHideAuthor" style="width: 80px" />  <!-- 담당자 (조건부) -->
+              <col style="width: 92px" />   <!-- 발행일 -->
+              <col style="width: 64px" />   <!-- 상태 -->
+              <col style="width: 44px" />   <!-- actions -->
+            </colgroup>
             <thead class="sticky top-0 z-10" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
               <tr class="text-left text-xs text-slate-500 border-b">
                 <th v-for="(col, idx) in columns" :key="col.key"
                     @click="toggleSort(col.key)"
                     class="px-2 py-1 bg-slate-50 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group"
                     :class="{
-                      'min-w-[52px]': col.key === 'blog_channel',
-                      'min-w-[68px]': col.key === 'branch_name',
-                      'min-w-[76px]': col.key === 'post_type_main',
-                      'min-w-[96px]': col.key === 'keyword',
-                      'min-w-[320px]': col.key === 'clean_title',
-                      'min-w-[92px]': col.key === 'published_at',
-                      'min-w-[64px]': col.key === 'status_clean',
+                      'hidden lg:table-cell': col.key === 'published_at',
                     }">
                   <span>{{ col.label }}</span>
                   <span v-if="sortColumn === col.key"
@@ -449,7 +454,9 @@ onMounted(() => {
               </tr>
               <!-- 인라인 헤더 필터 (토글) -->
               <tr v-if="showHeaderFilters" class="border-b">
-                <th v-for="col in columns" :key="'f-' + col.key" class="px-1 py-1 bg-slate-50">
+                <th v-for="col in columns" :key="'f-' + col.key"
+                    class="px-1 py-1 bg-slate-50"
+                    :class="{ 'hidden lg:table-cell': col.key === 'published_at' }">
                   <input v-model="headerFilters[col.key]"
                          :placeholder="col.label"
                          class="w-full border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-600
@@ -483,11 +490,11 @@ onMounted(() => {
                     </span>
                     <span v-else class="text-slate-300 text-[10px]">-</span>
                   </td>
-                  <td class="px-2 py-1 text-[11px] text-slate-500 truncate align-top">
+                  <td class="px-2 py-1 text-[11px] text-slate-500 truncate align-top" :title="post.branch_name || ''">
                     {{ post.branch_name || '-' }}
                   </td>
                   <td class="px-2 py-1 align-top">
-                    <div class="flex items-start gap-2">
+                    <div class="flex items-start gap-1.5">
                       <span class="text-sm text-slate-800 line-clamp-2 break-words flex-1 min-w-0"
                             :title="decodeHtml(post.clean_title) || post.keyword || ''">
                         {{ decodeHtml(post.clean_title) || post.keyword || '(제목 없음)' }}
@@ -497,16 +504,17 @@ onMounted(() => {
                          target="_blank"
                          rel="noopener noreferrer"
                          @click.stop
-                         class="inline-flex items-center gap-0.5 shrink-0 ml-2 px-2 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs hover:bg-blue-100 hover:border-blue-300 transition-colors">
+                         class="inline-flex items-center gap-0.5 shrink-0 px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 text-xs hover:bg-blue-100 hover:border-blue-300 transition-colors">
                         열기 <span class="text-[10px]">↗</span>
                       </a>
                     </div>
                   </td>
-                  <td class="px-2 py-1 text-slate-700 font-medium truncate text-xs align-top">
+                  <td class="px-2 py-1 text-slate-700 font-medium truncate text-xs align-top"
+                      :title="post.keyword || ''">
                     {{ post.keyword || '-' }}
                   </td>
-                  <td v-if="!shouldHideAuthor" class="px-2 py-1 text-slate-500 text-[11px] truncate align-top">{{ post.author_main || '-' }}</td>
-                  <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums align-top">{{ post.published_at || '-' }}</td>
+                  <td v-if="!shouldHideAuthor" class="px-2 py-1 text-slate-500 text-[11px] truncate align-top" :title="post.author_main || ''">{{ post.author_main || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums align-top hidden lg:table-cell">{{ post.published_at || '-' }}</td>
                   <td class="px-2 py-1 text-[11px] align-top" :class="statusColor(post.status_clean)">
                     {{ post.status_clean || '-' }}
                   </td>
@@ -542,7 +550,7 @@ onMounted(() => {
       </div>
 
       <!-- 우측: 상세 패널 (lg 이상에서만 표시) -->
-      <div class="hidden lg:flex lg:w-[320px] xl:w-[380px] 2xl:w-[440px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto flex-col">
+      <div class="hidden lg:flex lg:w-[280px] xl:w-[320px] 2xl:w-[380px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto flex-col">
         <div v-if="!selectedPost" class="flex items-center justify-center flex-1 text-slate-300 text-sm">
           게시글을 선택하세요
         </div>

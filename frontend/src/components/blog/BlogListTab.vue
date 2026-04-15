@@ -364,7 +364,7 @@ onMounted(() => {
 <template>
   <div class="h-full flex flex-col min-h-0">
     <!-- 필터 바 -->
-    <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 mb-2 flex-none">
+    <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 mb-1.5 flex-none">
       <!-- 기본 필터 행 -->
       <div class="flex items-center gap-2 overflow-x-auto">
         <input v-model="searchText" @keyup.enter="applyFilter"
@@ -457,7 +457,7 @@ onMounted(() => {
     </div>
 
     <!-- 요약 스트립 -->
-    <div class="flex-none mb-1 min-h-[18px]">
+    <div class="flex-none mb-1.5 min-h-[18px]">
       <p v-if="loading" class="text-xs text-slate-300 tabular-nums">로딩 중...</p>
       <p v-else-if="summaryStrip" class="text-xs text-slate-500 tabular-nums">
         검색결과 <span class="font-medium">{{ summaryStrip.total.toLocaleString() }}건</span>
@@ -518,8 +518,8 @@ onMounted(() => {
                       'bg-blue-50': selectedPost?.id === post.id,
                       'bg-amber-50/30': post.needs_review && selectedPost?.id !== post.id,
                     }">
-                  <td class="px-2 py-1">
-                    <span class="text-xs px-1.5 py-0.5 rounded-full font-medium"
+                  <td class="pl-2 pr-2 py-1">
+                    <span class="text-xs px-1.5 py-0.5 rounded font-medium"
                           :class="channelColor(post.blog_channel)">
                       {{ channelLabel(post.blog_channel) }}
                     </span>
@@ -567,7 +567,7 @@ onMounted(() => {
           </table>
         </div>
         <!-- 페이지네이션 -->
-        <div class="flex-none flex items-center gap-2 px-3 py-2 border-t bg-slate-50 text-xs text-slate-500">
+        <div class="flex-none flex items-center gap-2 px-3 py-1.5 border-t bg-slate-50 text-xs text-slate-500">
           <span class="tabular-nums">{{ totalCount.toLocaleString() }}건 중 {{ (page - 1) * perPage + 1 }}~{{ Math.min(page * perPage, totalCount) }}</span>
           <div class="flex gap-1 ml-auto">
             <button @click="page = 1" :disabled="page <= 1"

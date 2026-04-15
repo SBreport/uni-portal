@@ -473,16 +473,20 @@ onMounted(() => {
       <div class="flex-1 bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col min-w-0">
         <!-- 스크롤 단일 영역 -->
         <div class="flex-1 overflow-auto min-h-0">
-          <table class="w-full text-sm table-fixed whitespace-nowrap" style="min-width: 700px;">
-            <colgroup>
-              <col v-for="col in columns" :key="col.key"
-                   :style="col.width ? { width: col.width + 'px' } : {}" />
-            </colgroup>
+          <table class="w-full text-sm table-auto whitespace-nowrap" style="min-width: 600px;">
             <thead class="sticky top-0 z-10" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
               <tr class="text-left text-xs text-slate-500 border-b">
                 <th v-for="(col, idx) in columns" :key="col.key"
                     @click="toggleSort(col.key)"
-                    class="px-2 py-1.5 bg-slate-50 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group">
+                    class="px-2 py-1 bg-slate-50 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group"
+                    :class="{
+                      'min-w-[52px]': col.key === 'blog_channel',
+                      'min-w-[68px]': col.key === 'branch_name',
+                      'min-w-[76px]': col.key === 'post_type_main',
+                      'min-w-[96px]': col.key === 'keyword',
+                      'min-w-[92px]': col.key === 'published_at',
+                      'min-w-[64px]': col.key === 'status_clean',
+                    }">
                   <span>{{ col.label }}</span>
                   <span v-if="sortColumn === col.key"
                         class="ml-0.5 text-blue-500 text-[10px]">{{ sortIcon(col.key) }}</span>
@@ -534,7 +538,8 @@ onMounted(() => {
                   <td class="px-2 py-1 text-slate-700 font-medium truncate text-xs">
                     {{ post.keyword || '-' }}
                   </td>
-                  <td class="px-2 py-1 truncate text-xs"
+                  <td class="px-2 py-1 truncate text-xs max-w-0"
+                      :title="decodeHtml(post.clean_title) || post.keyword || ''"
                       :class="(post.title && post.title !== '' && !post.title.startsWith('http'))
                         ? 'text-slate-600'
                         : 'text-slate-400 italic'">

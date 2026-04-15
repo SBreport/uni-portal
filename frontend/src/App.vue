@@ -14,7 +14,7 @@ const auth = useAuthStore()
   <!-- 인증된 페이지: 사이드바 + 콘텐츠 -->
   <div v-else class="flex min-h-screen bg-slate-50">
     <AppSidebar />
-    <main class="ml-48 flex-1">
+    <main class="ml-48 flex-1 min-w-0">
       <RouterView :key="route.path" />
     </main>
   </div>

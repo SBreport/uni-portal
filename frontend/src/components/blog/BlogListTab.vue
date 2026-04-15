@@ -579,14 +579,22 @@ onMounted(() => {
       </div>
 
       <!-- 우측: 상세 패널 (lg 이상에서만 표시) -->
-      <div class="hidden lg:flex lg:w-[360px] xl:w-[400px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto flex-col">
+      <div class="hidden lg:flex lg:w-[380px] xl:w-[440px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto flex-col">
         <div v-if="!selectedPost" class="flex items-center justify-center flex-1 text-slate-300 text-sm">
           게시글을 선택하세요
         </div>
-        <div v-else class="p-2.5 space-y-2">
-          <div>
-            <div class="flex gap-1.5 mb-2 flex-wrap">
-              <span class="text-xs px-1.5 py-0.5 rounded-full font-medium"
+        <div v-else class="p-4">
+          <!-- 헤더 섹션 -->
+          <div class="mb-3">
+            <h3 class="text-base font-semibold leading-snug line-clamp-2 mb-2"
+                :class="selectedPost.title && !selectedPost.title.startsWith('http')
+                  ? 'text-slate-800' : 'text-slate-500'">
+              {{ decodeHtml(selectedPost.clean_title) || selectedPost.keyword || '(제목 없음)' }}
+              <span v-if="!selectedPost.title || selectedPost.title.startsWith('http')"
+                    class="text-[10px] text-slate-400 font-normal ml-1">(키워드)</span>
+            </h3>
+            <div class="flex gap-1.5 flex-wrap">
+              <span class="text-xs px-1.5 py-0.5 rounded font-medium"
                     :class="channelColor(selectedPost.blog_channel)">
                 {{ channelLabel(selectedPost.blog_channel) }}
               </span>
@@ -603,105 +611,116 @@ onMounted(() => {
                     class="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
                 검토필요
               </span>
-            </div>
-            <h3 class="font-bold text-sm leading-snug"
-                :class="selectedPost.title && !selectedPost.title.startsWith('http')
-                  ? 'text-slate-800' : 'text-slate-500'">
-              {{ decodeHtml(selectedPost.clean_title) || selectedPost.keyword || '(제목 없음)' }}
-              <span v-if="!selectedPost.title || selectedPost.title.startsWith('http')"
-                    class="text-[10px] text-slate-400 font-normal ml-1">(키워드)</span>
-            </h3>
-          </div>
-
-          <div class="grid text-xs gap-x-3 gap-y-1" style="grid-template-columns: auto 1fr;">
-            <span class="text-xs text-slate-500 whitespace-nowrap">키워드</span>
-            <span class="text-xs text-slate-800 font-medium">{{ selectedPost.keyword || '-' }}</span>
-
-            <template v-if="selectedPost.tags">
-              <span class="text-xs text-slate-500 whitespace-nowrap">태그</span>
-              <span class="text-xs text-slate-800">{{ selectedPost.tags }}</span>
-            </template>
-
-            <template v-if="!shouldHideAuthor && (selectedPost.author_main || selectedPost.author_sub)">
-              <span class="text-xs text-slate-500 whitespace-nowrap">담당자</span>
-              <span class="text-xs text-slate-800">
-                {{ selectedPost.author_main || '-' }}
-                <span v-if="selectedPost.author_sub" class="text-slate-500"> · {{ selectedPost.author_sub }}</span>
+              <span v-if="selectedPost.status_clean"
+                    class="text-xs px-1.5 py-0.5 rounded font-medium"
+                    :class="statusColor(selectedPost.status_clean)">
+                {{ selectedPost.status_clean }}
               </span>
-            </template>
-
-            <template v-if="selectedPost.branch_name">
-              <span class="text-xs text-slate-500 whitespace-nowrap">지점</span>
-              <span class="text-xs text-slate-800">
-                {{ selectedPost.branch_name }}
-                <span v-if="selectedPost.slot_number" class="text-slate-500">#{{ selectedPost.slot_number }}</span>
-              </span>
-            </template>
-
-            <template v-if="selectedPost.published_at">
-              <span class="text-xs text-slate-500 whitespace-nowrap">발행일</span>
-              <span class="text-xs text-slate-800 tabular-nums">{{ selectedPost.published_at }}</span>
-            </template>
-
-            <template v-if="selectedPost.deadline_at">
-              <span class="text-xs text-slate-500 whitespace-nowrap">마감일</span>
-              <span class="text-xs text-slate-800 tabular-nums">{{ selectedPost.deadline_at }}</span>
-            </template>
-
-            <template v-if="selectedPost.status_clean">
-              <span class="text-xs text-slate-500 whitespace-nowrap">상태</span>
-              <span class="text-xs" :class="statusColor(selectedPost.status_clean)">{{ selectedPost.status_clean }}</span>
-            </template>
-
-            <template v-if="selectedPost.blog_id">
-              <span class="text-xs text-slate-500 whitespace-nowrap">계정</span>
-              <span class="text-xs text-slate-800 font-mono">{{ selectedPost.blog_id }}</span>
-            </template>
-
-            <template v-if="selectedPost.project_month">
-              <span class="text-xs text-slate-500 whitespace-nowrap">프로젝트</span>
-              <span class="text-xs text-slate-800">
-                {{ selectedPost.project_month }}
-                <span v-if="selectedPost.project_branch" class="text-slate-500"> · {{ selectedPost.project_branch }}</span>
-              </span>
-            </template>
-
-            <template v-if="selectedPost.exposure_rank">
-              <span class="text-xs text-slate-500 whitespace-nowrap">노출순위</span>
-              <span class="text-xs text-slate-800 tabular-nums">{{ selectedPost.exposure_rank }}</span>
-            </template>
-          </div>
-
-          <div v-if="selectedPost.published_url" class="pt-2 border-t">
-            <a :href="selectedPost.published_url" target="_blank"
-               class="text-xs text-blue-600 hover:underline break-all">
-              {{ selectedPost.published_url }}
-            </a>
-          </div>
-
-          <div v-if="selectedPost.linked_papers?.length" class="pt-2 border-t">
-            <p class="text-[10px] text-slate-400 mb-1.5">연결된 논문</p>
-            <div v-for="lp in selectedPost.linked_papers" :key="lp.paper_id"
-                 class="p-2 bg-emerald-50 rounded text-xs mb-1">
-              <span class="text-emerald-700">{{ lp.title_ko }}</span>
-              <span class="text-emerald-500 ml-1">{{ lp.evidence_level }}/5</span>
             </div>
           </div>
 
-          <details v-if="selectedPost.needs_review" class="pt-2 border-t">
-            <summary class="text-xs text-amber-500 cursor-pointer">원본 데이터 보기</summary>
+          <!-- 본문 정보 섹션 -->
+          <div class="mt-3 pt-3 border-t border-slate-100">
+            <div class="grid gap-x-3 gap-y-2" style="grid-template-columns: auto 1fr;">
+              <template v-if="selectedPost.keyword">
+                <span class="text-xs text-slate-500 whitespace-nowrap self-center">키워드</span>
+                <span class="text-sm text-slate-800 font-medium">{{ selectedPost.keyword }}</span>
+              </template>
+
+              <template v-if="!shouldHideAuthor && (selectedPost.author_main || selectedPost.author_sub)">
+                <span class="text-xs text-slate-500 whitespace-nowrap self-center">작성자</span>
+                <span class="text-sm text-slate-700">
+                  {{ selectedPost.author_main || '-' }}
+                  <span v-if="selectedPost.author_sub" class="text-slate-400"> · {{ selectedPost.author_sub }}</span>
+                </span>
+              </template>
+
+              <template v-if="selectedPost.branch_name">
+                <span class="text-xs text-slate-500 whitespace-nowrap self-center">지점</span>
+                <span class="text-sm text-slate-700">
+                  {{ selectedPost.branch_name }}<span v-if="selectedPost.slot_number" class="text-slate-400"> #{{ selectedPost.slot_number }}</span>
+                </span>
+              </template>
+
+              <template v-if="selectedPost.published_at">
+                <span class="text-xs text-slate-500 whitespace-nowrap self-center">발행일</span>
+                <span class="text-sm text-slate-700 tabular-nums">{{ selectedPost.published_at }}</span>
+              </template>
+
+              <template v-if="selectedPost.project_month">
+                <span class="text-xs text-slate-500 whitespace-nowrap self-center">프로젝트월</span>
+                <span class="text-sm text-slate-700">
+                  {{ selectedPost.project_month }}<span v-if="selectedPost.project_branch" class="text-slate-400"> · {{ selectedPost.project_branch }}</span>
+                </span>
+              </template>
+
+              <template v-if="selectedPost.deadline_at">
+                <span class="text-xs text-slate-500 whitespace-nowrap self-center">마감일</span>
+                <span class="text-sm text-slate-700 tabular-nums">{{ selectedPost.deadline_at }}</span>
+              </template>
+
+              <template v-if="selectedPost.exposure_rank">
+                <span class="text-xs text-slate-500 whitespace-nowrap self-center">노출순위</span>
+                <span class="text-sm text-slate-700 tabular-nums">{{ selectedPost.exposure_rank }}</span>
+              </template>
+
+              <template v-if="selectedPost.blog_id">
+                <span class="text-xs text-slate-500 whitespace-nowrap self-center">계정 ID</span>
+                <span class="text-sm text-slate-700 font-mono">{{ selectedPost.blog_id }}</span>
+              </template>
+
+              <template v-if="selectedPost.linked_papers?.length">
+                <span class="text-xs text-slate-500 whitespace-nowrap self-center">연결 논문</span>
+                <span>
+                  <div class="relative group inline-block">
+                    <span class="text-sm text-blue-600 cursor-pointer">{{ selectedPost.linked_papers.length }}건</span>
+                    <div class="hidden group-hover:block absolute left-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded shadow-md py-1 min-w-[240px] max-w-[360px]">
+                      <router-link
+                        v-for="lp in selectedPost.linked_papers" :key="lp.paper_id"
+                        to="/papers"
+                        class="block px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 truncate"
+                        :title="lp.title_ko">
+                        {{ lp.title_ko }}
+                        <span v-if="lp.evidence_level" class="text-slate-400 ml-1">Lv.{{ lp.evidence_level }}</span>
+                      </router-link>
+                    </div>
+                  </div>
+                </span>
+              </template>
+            </div>
+          </div>
+
+          <!-- 링크 섹션 -->
+          <div v-if="selectedPost.published_url" class="mt-3 pt-3 border-t border-slate-100">
+            <div class="grid gap-x-3" style="grid-template-columns: auto 1fr;">
+              <span class="text-xs text-slate-500 whitespace-nowrap self-center">발행 URL</span>
+              <a :href="selectedPost.published_url" target="_blank"
+                 class="text-sm text-blue-600 hover:underline truncate">
+                {{ (() => { try { return new URL(selectedPost.published_url).hostname + '...' } catch { return selectedPost.published_url } })() }}
+                <span class="text-xs ml-0.5">&#x2197;</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- 비고 -->
+          <div v-if="selectedPost.note" class="mt-3 pt-3 border-t border-slate-100">
+            <p class="text-xs text-slate-400 mb-1">비고</p>
+            <p class="text-sm text-slate-600">{{ selectedPost.note }}</p>
+          </div>
+
+          <!-- 원본 데이터 (접힘) -->
+          <details class="mt-3 pt-3 border-t border-slate-100">
+            <summary class="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">원본 데이터</summary>
             <div class="mt-2 text-[11px] text-slate-500 space-y-1 bg-slate-50 p-2 rounded">
               <div><span class="text-slate-400">원본 제목:</span> {{ selectedPost.title || '(없음)' }}</div>
               <div><span class="text-slate-400">원본 종류:</span> {{ selectedPost.post_type || '(없음)' }}</div>
               <div><span class="text-slate-400">원본 상태:</span> {{ selectedPost.status || '(없음)' }}</div>
               <div><span class="text-slate-400">원본 프로젝트:</span> {{ selectedPost.project || '(없음)' }}</div>
+              <template v-if="selectedPost.tags">
+                <div><span class="text-slate-400">태그:</span> {{ selectedPost.tags }}</div>
+              </template>
             </div>
           </details>
-
-          <div v-if="selectedPost.note" class="pt-2 border-t">
-            <p class="text-[10px] text-slate-400 mb-1">비고</p>
-            <p class="text-xs text-slate-600">{{ selectedPost.note }}</p>
-          </div>
         </div>
       </div>
     </div>

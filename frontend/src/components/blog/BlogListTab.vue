@@ -341,7 +341,7 @@ onMounted(() => {
       <div class="flex flex-wrap items-center gap-2">
         <input v-model="searchText" @keyup.enter="applyFilter"
                placeholder="제목·키워드·태그 검색"
-               class="border border-slate-300 rounded px-2 h-7 text-xs flex-1 min-w-[180px] max-w-[280px] focus:border-blue-400 focus:outline-none shrink-0" />
+               class="border border-slate-300 rounded px-2 h-7 text-xs flex-1 min-w-[160px] max-w-[280px] focus:border-blue-400 focus:outline-none" />
         <select v-model="filterChannel" @change="applyFilter"
                 class="border border-slate-300 rounded px-2 h-7 text-xs shrink-0">
           <option value="">채널</option>
@@ -369,7 +369,7 @@ onMounted(() => {
         <span class="text-slate-400 text-xs shrink-0">~</span>
         <input v-model="dateTo" type="date" @change="activeDatePreset = 'year'; applyFilter()"
                class="border border-slate-300 rounded px-2 h-7 text-xs w-[128px] shrink-0" />
-        <div class="flex gap-0.5 shrink-0">
+        <div class="flex gap-0 border border-slate-200 rounded overflow-hidden shrink-0">
           <button v-for="dp in ([
             { key: 'year' as DatePreset, label: '올해' },
             { key: 'this_month' as DatePreset, label: '이번달' },
@@ -377,10 +377,10 @@ onMounted(() => {
             { key: 'all' as DatePreset, label: '전체' },
           ])" :key="dp.key"
             @click="setDatePreset(dp.key)"
-            class="px-2 h-7 text-xs rounded border transition-colors"
+            class="px-2 h-7 text-xs border-0 transition-colors"
             :class="activeDatePreset === dp.key
-              ? 'bg-slate-700 text-white border-slate-700'
-              : 'border-slate-300 text-slate-500 hover:bg-slate-100'">
+              ? 'bg-slate-700 text-white'
+              : 'text-slate-500 hover:bg-slate-100'">
             {{ dp.label }}
           </button>
         </div>
@@ -542,7 +542,7 @@ onMounted(() => {
       </div>
 
       <!-- 우측: 상세 패널 (lg 이상에서만 표시) -->
-      <div class="hidden lg:flex lg:w-[380px] xl:w-[440px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto flex-col">
+      <div class="hidden lg:flex lg:w-[320px] xl:w-[380px] 2xl:w-[440px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto flex-col">
         <div v-if="!selectedPost" class="flex items-center justify-center flex-1 text-slate-300 text-sm">
           게시글을 선택하세요
         </div>
@@ -658,7 +658,7 @@ onMounted(() => {
             <div class="grid gap-x-3" style="grid-template-columns: auto 1fr;">
               <span class="text-xs text-slate-500 whitespace-nowrap self-center">발행 URL</span>
               <a :href="selectedPost.published_url" target="_blank"
-                 class="text-sm text-blue-600 hover:underline truncate">
+                 class="text-sm text-blue-600 hover:underline break-all">
                 {{ (() => { try { return new URL(selectedPost.published_url).hostname + '...' } catch { return selectedPost.published_url } })() }}
                 <span class="text-xs ml-0.5">&#x2197;</span>
               </a>

@@ -540,7 +540,17 @@ onMounted(() => {
                     {{ post.keyword || '-' }}
                   </td>
                   <td class="px-2 py-1 text-xs whitespace-normal align-top">
-                    <span class="line-clamp-2 break-words"
+                    <a v-if="post.published_url"
+                       :href="post.published_url"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       @click.stop
+                       class="text-sm text-slate-800 hover:text-blue-600 hover:underline line-clamp-2 break-words block"
+                       :title="decodeHtml(post.clean_title) || post.keyword || ''">
+                      {{ decodeHtml(post.clean_title) || post.keyword || '(제목 없음)' }}
+                    </a>
+                    <span v-else
+                          class="line-clamp-2 break-words"
                           :title="decodeHtml(post.clean_title) || post.keyword || ''"
                           :class="(post.title && post.title !== '' && !post.title.startsWith('http'))
                             ? 'text-slate-600'

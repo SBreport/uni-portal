@@ -287,10 +287,7 @@ function restoreFromUrlQuery() {
   if (q.channel) filterChannel.value = q.channel as string
   if (q.branch) filterBranch.value = q.branch as string
   if (q.author) filterAuthor.value = q.author as string
-  if (q.post_type_main) {
-    filterTypeMain.value = q.post_type_main as string
-    showAdvancedFilters.value = true
-  }
+  if (q.post_type_main) filterTypeMain.value = q.post_type_main as string
   if (q.from) { dateFrom.value = q.from as string; activeDatePreset.value = 'year' }
   if (q.to) { dateTo.value = q.to as string; activeDatePreset.value = 'year' }
   if (q.needs_review === '1') {
@@ -348,7 +345,7 @@ onMounted(() => {
     // 대시보드에서 필터 지정 진입: initialFilters 우선
     applyInitialFilters(props.initialFilters)
     // 고급 필터에 속한 값이 주입된 경우 패널 자동 펼치기
-    if (props.initialFilters.post_type_main || props.initialFilters.needs_review) {
+    if (props.initialFilters.needs_review) {
       showAdvancedFilters.value = true
     }
   } else {
@@ -376,6 +373,13 @@ onMounted(() => {
           <option value="br">브랜드</option>
           <option value="opt">최적</option>
           <option value="cafe">카페</option>
+        </select>
+        <select v-model="filterTypeMain" @change="applyFilter"
+                class="border border-slate-300 rounded px-2 h-7 text-xs shrink-0">
+          <option value="">원고종류</option>
+          <option v-for="t in filterOptions?.post_types_main" :key="t.post_type_main" :value="t.post_type_main">
+            {{ t.post_type_main }} ({{ t.cnt }})
+          </option>
         </select>
         <select v-model="filterBranch" @change="applyFilter"
                 class="border border-slate-300 rounded px-2 h-7 text-xs max-w-[120px] shrink-0">
@@ -425,13 +429,6 @@ onMounted(() => {
       </div>
       <!-- 고급 필터 패널 -->
       <div v-if="showAdvancedFilters" class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
-        <select v-model="filterTypeMain" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-7 text-xs">
-          <option value="">원고종류</option>
-          <option v-for="t in filterOptions?.post_types_main" :key="t.post_type_main" :value="t.post_type_main">
-            {{ t.post_type_main }} ({{ t.cnt }})
-          </option>
-        </select>
         <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer shrink-0">
           <input type="checkbox"
                  :checked="filterNeedsReview === 1"

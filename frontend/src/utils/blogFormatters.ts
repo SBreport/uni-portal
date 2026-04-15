@@ -6,10 +6,10 @@ export function channelLabel(ch: string) {
 }
 
 export function channelColor(ch: string) {
-  if (ch === 'br') return 'bg-blue-50 text-blue-700'
-  if (ch === 'opt') return 'bg-indigo-50 text-indigo-700'
-  if (ch === 'cafe') return 'bg-amber-50 text-amber-700'
-  return 'bg-slate-100 text-slate-600'
+  if (ch === 'br') return 'border border-slate-300 text-slate-700'
+  if (ch === 'opt') return 'border border-blue-300 text-blue-700'
+  if (ch === 'cafe') return 'border border-amber-300 text-amber-700'
+  return 'border border-slate-300 text-slate-500'
 }
 
 export function typeColor(t: string) {

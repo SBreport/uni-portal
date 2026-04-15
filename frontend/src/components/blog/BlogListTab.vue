@@ -128,20 +128,20 @@ const columns = ref(
   props.mode !== 'all'
     ? [
         { key: 'blog_channel', label: '채널', width: 64, minWidth: 50 },
-        { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
         { key: 'post_type_main', label: '원고종류', width: 72, minWidth: 50 },
-        { key: 'keyword', label: '키워드', width: 200, minWidth: 120 },
+        { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
         { key: 'clean_title', label: '제목', width: 0, minWidth: 120 },
+        { key: 'keyword', label: '키워드', width: 200, minWidth: 120 },
         { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
         { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
         { key: '_actions', label: '', width: 52, minWidth: 52 },
       ]
     : [
         { key: 'blog_channel', label: '채널', width: 64, minWidth: 50 },
-        { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
         { key: 'post_type_main', label: '원고종류', width: 72, minWidth: 50 },
-        { key: 'keyword', label: '키워드', width: 200, minWidth: 120 },
+        { key: 'branch_name', label: '지점', width: 90, minWidth: 60 },
         { key: 'clean_title', label: '제목', width: 0, minWidth: 120 },
+        { key: 'keyword', label: '키워드', width: 200, minWidth: 120 },
         ...(canSeeAuthor.value ? [{ key: 'author_main', label: '담당', width: 56, minWidth: 44 }] : []),
         { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
         { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
@@ -525,9 +525,6 @@ onMounted(() => {
                       {{ channelLabel(post.blog_channel) }}
                     </span>
                   </td>
-                  <td class="px-2 py-1 text-[11px] text-slate-500 truncate align-top">
-                    {{ post.branch_name || '-' }}
-                  </td>
                   <td class="px-2 py-1 align-top">
                     <span v-if="post.post_type_main"
                           class="text-xs px-1.5 py-0.5 rounded font-medium"
@@ -536,8 +533,8 @@ onMounted(() => {
                     </span>
                     <span v-else class="text-slate-300 text-[10px]">-</span>
                   </td>
-                  <td class="px-2 py-1 text-slate-700 font-medium truncate text-xs align-top">
-                    {{ post.keyword || '-' }}
+                  <td class="px-2 py-1 text-[11px] text-slate-500 truncate align-top">
+                    {{ post.branch_name || '-' }}
                   </td>
                   <td class="px-2 py-1 text-xs whitespace-normal align-top">
                     <a v-if="post.published_url"
@@ -557,6 +554,9 @@ onMounted(() => {
                             : 'text-slate-400 italic'">
                       {{ decodeHtml(post.clean_title) || post.keyword || '-' }}
                     </span>
+                  </td>
+                  <td class="px-2 py-1 text-slate-700 font-medium truncate text-xs align-top">
+                    {{ post.keyword || '-' }}
                   </td>
                   <td v-if="!shouldHideAuthor" class="px-2 py-1 text-slate-500 text-[11px] truncate align-top">{{ post.author_main || '-' }}</td>
                   <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums align-top">{{ post.published_at || '-' }}</td>

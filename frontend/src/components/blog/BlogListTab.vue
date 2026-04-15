@@ -726,19 +726,6 @@ onMounted(() => {
             <p class="text-sm text-slate-600">{{ selectedPost.note }}</p>
           </div>
 
-          <!-- 원본 데이터 (접힘) -->
-          <details class="mt-3 pt-3 border-t border-slate-100">
-            <summary class="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">원본 데이터</summary>
-            <div class="mt-2 text-[11px] text-slate-500 space-y-1 bg-slate-50 p-2 rounded">
-              <div><span class="text-slate-400">원본 제목:</span> {{ selectedPost.title || '(없음)' }}</div>
-              <div><span class="text-slate-400">원본 종류:</span> {{ selectedPost.post_type || '(없음)' }}</div>
-              <div><span class="text-slate-400">원본 상태:</span> {{ selectedPost.status || '(없음)' }}</div>
-              <div><span class="text-slate-400">원본 프로젝트:</span> {{ selectedPost.project || '(없음)' }}</div>
-              <template v-if="selectedPost.tags">
-                <div><span class="text-slate-400">태그:</span> {{ selectedPost.tags }}</div>
-              </template>
-            </div>
-          </details>
         </div>
       </div>
     </div>

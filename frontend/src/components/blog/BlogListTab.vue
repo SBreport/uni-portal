@@ -484,6 +484,7 @@ onMounted(() => {
                       'min-w-[68px]': col.key === 'branch_name',
                       'min-w-[76px]': col.key === 'post_type_main',
                       'min-w-[96px]': col.key === 'keyword',
+                      'min-w-[320px]': col.key === 'clean_title',
                       'min-w-[92px]': col.key === 'published_at',
                       'min-w-[64px]': col.key === 'status_clean',
                     }">
@@ -538,12 +539,14 @@ onMounted(() => {
                   <td class="px-2 py-1 text-slate-700 font-medium truncate text-xs">
                     {{ post.keyword || '-' }}
                   </td>
-                  <td class="px-2 py-1 truncate text-xs max-w-0"
-                      :title="decodeHtml(post.clean_title) || post.keyword || ''"
-                      :class="(post.title && post.title !== '' && !post.title.startsWith('http'))
-                        ? 'text-slate-600'
-                        : 'text-slate-400 italic'">
-                    {{ decodeHtml(post.clean_title) || post.keyword || '-' }}
+                  <td class="px-2 py-1 text-xs whitespace-normal align-top">
+                    <span class="line-clamp-2 break-words"
+                          :title="decodeHtml(post.clean_title) || post.keyword || ''"
+                          :class="(post.title && post.title !== '' && !post.title.startsWith('http'))
+                            ? 'text-slate-600'
+                            : 'text-slate-400 italic'">
+                      {{ decodeHtml(post.clean_title) || post.keyword || '-' }}
+                    </span>
                   </td>
                   <td v-if="!shouldHideAuthor" class="px-2 py-1 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
                   <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums">{{ post.published_at || '-' }}</td>

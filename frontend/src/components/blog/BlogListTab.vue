@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as blogApi from '@/api/blog'
 import { useColumnResize } from '@/composables/useResizePanel'
+import { useAuthorVisibility } from '@/composables/useAuthorVisibility'
 import { channelLabel, channelColor, typeColor, statusColor } from '@/utils/blogFormatters'
 
 const props = defineProps<{
@@ -14,6 +15,9 @@ const route = useRoute()
 const router = useRouter()
 
 const isUandi = computed(() => props.mode !== 'all')
+
+const { canSeeAuthor } = useAuthorVisibility()
+const shouldHideAuthor = computed(() => isUandi.value || !canSeeAuthor.value)
 
 // ── 목록 ──
 const posts = ref<any[]>([])
@@ -138,7 +142,7 @@ const columns = ref(
         { key: 'post_type_main', label: '원고종류', width: 72, minWidth: 50 },
         { key: 'keyword', label: '키워드', width: 200, minWidth: 120 },
         { key: 'clean_title', label: '제목', width: 0, minWidth: 120 },
-        { key: 'author_main', label: '담당', width: 56, minWidth: 44 },
+        ...(canSeeAuthor.value ? [{ key: 'author_main', label: '담당', width: 56, minWidth: 44 }] : []),
         { key: 'published_at', label: '발행일', width: 82, minWidth: 60 },
         { key: 'status_clean', label: '상태', width: 68, minWidth: 50 },
         { key: '_actions', label: '', width: 52, minWidth: 52 },
@@ -435,7 +439,7 @@ onMounted(() => {
                  class="rounded border-slate-300" />
           검토필요
         </label>
-        <select v-if="!isUandi" v-model="filterAuthor" @change="applyFilter"
+        <select v-if="!shouldHideAuthor" v-model="filterAuthor" @change="applyFilter"
                 class="border border-slate-300 rounded px-2 h-7 text-xs">
           <option value="">담당자</option>
           <option v-for="a in filterOptions?.authors" :key="a.author" :value="a.author">
@@ -536,7 +540,7 @@ onMounted(() => {
                         : 'text-slate-400 italic'">
                     {{ decodeHtml(post.clean_title) || post.keyword || '-' }}
                   </td>
-                  <td v-if="!isUandi" class="px-2 py-1 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
+                  <td v-if="!shouldHideAuthor" class="px-2 py-1 text-slate-500 text-[11px] truncate">{{ post.author_main || '-' }}</td>
                   <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums">{{ post.published_at || '-' }}</td>
                   <td class="px-2 py-1 text-[11px]" :class="statusColor(post.status_clean)">
                     {{ post.status_clean || '-' }}
@@ -618,7 +622,7 @@ onMounted(() => {
               <span class="text-xs text-slate-800">{{ selectedPost.tags }}</span>
             </template>
 
-            <template v-if="!isUandi && (selectedPost.author_main || selectedPost.author_sub)">
+            <template v-if="!shouldHideAuthor && (selectedPost.author_main || selectedPost.author_sub)">
               <span class="text-xs text-slate-500 whitespace-nowrap">담당자</span>
               <span class="text-xs text-slate-800">
                 {{ selectedPost.author_main || '-' }}

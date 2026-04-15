@@ -429,10 +429,10 @@ onMounted(() => {
               <col style="width: 76px" />   <!-- 원고종류 -->
               <col style="width: 84px" />   <!-- 지점 -->
               <col />                        <!-- 제목 (remaining) -->
-              <col style="width: 120px" />  <!-- 키워드 -->
+              <col style="width: 100px" />  <!-- 키워드 -->
               <col v-if="!shouldHideAuthor" style="width: 80px" />  <!-- 담당자 (조건부) -->
               <col style="width: 92px" />   <!-- 발행일 -->
-              <col style="width: 64px" />   <!-- 상태 -->
+              <col style="width: 56px" />   <!-- 상태 -->
               <col style="width: 44px" />   <!-- actions -->
             </colgroup>
             <thead class="sticky top-0 z-10" style="box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
@@ -441,7 +441,7 @@ onMounted(() => {
                     @click="toggleSort(col.key)"
                     class="px-2 py-1 bg-slate-50 relative select-none cursor-pointer hover:bg-slate-100 transition-colors group"
                     :class="{
-                      'hidden lg:table-cell': col.key === 'published_at',
+                      'hidden xl:table-cell': col.key === 'published_at',
                     }">
                   <span>{{ col.label }}</span>
                   <span v-if="sortColumn === col.key"
@@ -456,7 +456,7 @@ onMounted(() => {
               <tr v-if="showHeaderFilters" class="border-b">
                 <th v-for="col in columns" :key="'f-' + col.key"
                     class="px-1 py-1 bg-slate-50"
-                    :class="{ 'hidden lg:table-cell': col.key === 'published_at' }">
+                    :class="{ 'hidden xl:table-cell': col.key === 'published_at' }">
                   <input v-model="headerFilters[col.key]"
                          :placeholder="col.label"
                          class="w-full border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-600
@@ -514,7 +514,7 @@ onMounted(() => {
                     {{ post.keyword || '-' }}
                   </td>
                   <td v-if="!shouldHideAuthor" class="px-2 py-1 text-slate-500 text-[11px] truncate align-top" :title="post.author_main || ''">{{ post.author_main || '-' }}</td>
-                  <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums align-top hidden lg:table-cell">{{ post.published_at || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-400 text-[11px] tabular-nums align-top hidden xl:table-cell">{{ post.published_at || '-' }}</td>
                   <td class="px-2 py-1 text-[11px] align-top" :class="statusColor(post.status_clean)">
                     {{ post.status_clean || '-' }}
                   </td>
@@ -550,7 +550,7 @@ onMounted(() => {
       </div>
 
       <!-- 우측: 상세 패널 (lg 이상에서만 표시) -->
-      <div class="hidden lg:flex lg:w-[280px] xl:w-[320px] 2xl:w-[380px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto flex-col">
+      <div class="hidden lg:flex lg:w-[260px] xl:w-[280px] 2xl:w-[360px] shrink-0 bg-white border border-slate-200 rounded-lg overflow-auto flex-col">
         <div v-if="!selectedPost" class="flex items-center justify-center flex-1 text-slate-300 text-sm">
           게시글을 선택하세요
         </div>

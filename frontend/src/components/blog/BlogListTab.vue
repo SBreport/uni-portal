@@ -70,8 +70,6 @@ function setDatePreset(preset: DatePreset) {
   applyFilter()
 }
 
-// 필터 패널 토글
-const showAdvancedFilters = ref(false)
 // 인라인 헤더 필터
 const showHeaderFilters = ref(false)
 const headerFilters = ref<Record<string, string>>({
@@ -190,24 +188,6 @@ async function loadFilterOptions() {
   }
 }
 
-// 요약 스트립 (채널별 카운트)
-const summaryStrip = computed(() => {
-  if (loading.value) return null
-  if (!posts.value.length) return null
-  const counts: Record<string, number> = {}
-  for (const p of posts.value) {
-    const ch = p.blog_channel || 'etc'
-    counts[ch] = (counts[ch] || 0) + 1
-  }
-  const channelMap: Record<string, string> = { br: '브랜드', opt: '최적', cafe: '카페' }
-  const parts = Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([ch, n]) => `${channelMap[ch] || ch} ${n}`)
-  const reviewCount = posts.value.filter((p: any) => p.needs_review).length
-  if (reviewCount > 0) parts.push(`검토필요 ${reviewCount}`)
-  return { total: totalCount.value, parts }
-})
-
 // 인라인 헤더 필터 + 정렬 적용
 const filteredPosts = computed(() => {
   let result = posts.value
@@ -292,7 +272,6 @@ function restoreFromUrlQuery() {
   if (q.to) { dateTo.value = q.to as string; activeDatePreset.value = 'year' }
   if (q.needs_review === '1') {
     filterNeedsReview.value = 1
-    showAdvancedFilters.value = true
   }
 }
 
@@ -344,10 +323,6 @@ onMounted(() => {
   if (props.initialFilters) {
     // 대시보드에서 필터 지정 진입: initialFilters 우선
     applyInitialFilters(props.initialFilters)
-    // 고급 필터에 속한 값이 주입된 경우 패널 자동 펼치기
-    if (props.initialFilters.needs_review) {
-      showAdvancedFilters.value = true
-    }
   } else {
     // URL 쿼리에서 필터 복원 (북마크/새로고침)
     restoreFromUrlQuery()
@@ -363,7 +338,7 @@ onMounted(() => {
     <!-- 필터 바 -->
     <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 mb-1.5 flex-none">
       <!-- 기본 필터 행 -->
-      <div class="flex items-center gap-2 overflow-x-auto">
+      <div class="flex flex-wrap items-center gap-2">
         <input v-model="searchText" @keyup.enter="applyFilter"
                placeholder="제목·키워드·태그 검색"
                class="border border-slate-300 rounded px-2 h-7 text-xs flex-1 min-w-[180px] max-w-[280px] focus:border-blue-400 focus:outline-none shrink-0" />
@@ -409,26 +384,20 @@ onMounted(() => {
             {{ dp.label }}
           </button>
         </div>
-        <button @click="resetFilter" class="text-xs text-slate-400 hover:text-slate-600 shrink-0">초기화</button>
-        <!-- 고급 필터 토글 -->
-        <button @click="showAdvancedFilters = !showAdvancedFilters"
-                class="text-xs px-2 h-7 rounded border transition-colors shrink-0"
-                :class="showAdvancedFilters
-                  ? 'border-blue-400 text-blue-600 bg-blue-50'
-                  : 'border-slate-300 text-slate-500 hover:bg-slate-50'">
-          고급 {{ showAdvancedFilters ? '▴' : '▾' }}
-        </button>
-        <button @click="showHeaderFilters = !showHeaderFilters"
-                class="text-xs px-2 h-7 rounded border transition-colors shrink-0"
-                :class="showHeaderFilters
-                  ? 'border-blue-400 text-blue-600 bg-blue-50'
-                  : 'border-slate-300 text-slate-400 hover:text-slate-600'">
-          {{ showHeaderFilters ? '컬럼필터 닫기' : '컬럼필터' }}
-        </button>
-        <span class="ml-auto text-xs text-slate-400 shrink-0 tabular-nums">{{ totalCount.toLocaleString() }}건</span>
-      </div>
-      <!-- 고급 필터 패널 -->
-      <div v-if="showAdvancedFilters" class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
+        <select v-model="filterProjectMonth" @change="applyFilter"
+                class="border border-slate-300 rounded px-2 h-7 text-xs shrink-0">
+          <option value="">프로젝트월</option>
+          <option v-for="m in filterOptions?.project_months?.slice(0, 24)" :key="m.project_month" :value="m.project_month">
+            {{ m.project_month }} ({{ m.cnt }})
+          </option>
+        </select>
+        <select v-if="!shouldHideAuthor" v-model="filterAuthor" @change="applyFilter"
+                class="border border-slate-300 rounded px-2 h-7 text-xs shrink-0">
+          <option value="">담당자</option>
+          <option v-for="a in filterOptions?.authors" :key="a.author" :value="a.author">
+            {{ a.author }} ({{ a.cnt }})
+          </option>
+        </select>
         <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer shrink-0">
           <input type="checkbox"
                  :checked="filterNeedsReview === 1"
@@ -436,32 +405,16 @@ onMounted(() => {
                  class="rounded border-slate-300" />
           검토필요
         </label>
-        <select v-if="!shouldHideAuthor" v-model="filterAuthor" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-7 text-xs">
-          <option value="">담당자</option>
-          <option v-for="a in filterOptions?.authors" :key="a.author" :value="a.author">
-            {{ a.author }} ({{ a.cnt }})
-          </option>
-        </select>
-        <select v-model="filterProjectMonth" @change="applyFilter"
-                class="border border-slate-300 rounded px-2 h-7 text-xs">
-          <option value="">프로젝트 월</option>
-          <option v-for="m in filterOptions?.project_months?.slice(0, 24)" :key="m.project_month" :value="m.project_month">
-            {{ m.project_month }} ({{ m.cnt }})
-          </option>
-        </select>
+        <button @click="showHeaderFilters = !showHeaderFilters"
+                class="text-xs px-2 h-7 rounded border transition-colors shrink-0"
+                :class="showHeaderFilters
+                  ? 'border-blue-400 text-blue-600 bg-blue-50'
+                  : 'border-slate-300 text-slate-400 hover:text-slate-600'">
+          컬럼필터
+        </button>
+        <button @click="resetFilter" class="text-xs text-slate-400 hover:text-slate-600 shrink-0">초기화</button>
+        <span class="ml-auto text-xs text-slate-400 shrink-0 tabular-nums">{{ totalCount.toLocaleString() }}건</span>
       </div>
-    </div>
-
-    <!-- 요약 스트립 -->
-    <div class="flex-none mb-1.5 min-h-[18px]">
-      <p v-if="loading" class="text-xs text-slate-300 tabular-nums">로딩 중...</p>
-      <p v-else-if="summaryStrip" class="text-xs text-slate-500 tabular-nums">
-        검색결과 <span class="font-medium">{{ summaryStrip.total.toLocaleString() }}건</span>
-        <template v-for="(part, i) in summaryStrip.parts" :key="i">
-          <span class="text-slate-300 mx-1">·</span>{{ part }}
-        </template>
-      </p>
     </div>
 
     <!-- 메인 2컬럼 -->

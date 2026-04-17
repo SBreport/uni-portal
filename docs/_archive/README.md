@@ -15,6 +15,7 @@
 |------|------|
 | `completed/` | 이미 완료된 기획안 (구현 완료, 더 이상 액션 불필요) |
 | `legacy/` | 폐기된 기술 스택·기능 설명 (참고용 스냅샷) |
+| `stale/` | 현재 상태를 반영하지 못하는 구 문서 (STRUCTURE.md, DEPLOY.md로 대체됨) |
 
 ---
 
@@ -24,6 +25,8 @@
 |--------|------|----------|------|
 | 2026-04-17 | `completed/PLAN-001_DB분리.md` | `docs/plans/` | 4-DB 분리 구현 + NAS 배포 완료. 기획안으로서의 역할 종료. |
 | 2026-04-17 | `legacy/HANDOVER_streamlit_sections.md` | `docs/HANDOVER.md` 내 Streamlit 관련 섹션 | Streamlit은 2026-03-22 완전 폐기, FastAPI 단독 운영. 혼동 방지 위해 분리. |
+| 2026-04-17 | `stale/HANDOVER.md` | `docs/HANDOVER.md` | 블로그/플레이스/웹페이지를 "placeholder"로 기술하지만 실제로는 모두 구현 완료. 현재 상태는 `STRUCTURE.md` + `DEPLOY.md`가 대체. |
+| 2026-04-17 | `stale/PROJECT_ROADMAP.md` | 루트 | v1.9 기준이나 실제는 v2.0+. 현재 상태 기록은 `STRUCTURE.md`가 대체. 미래 로드맵은 별도 세션에서 재작성 예정. |
 
 ---
 

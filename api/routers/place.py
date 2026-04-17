@@ -9,6 +9,10 @@ from api.deps import get_current_user, require_role
 
 router = APIRouter(prefix="/place", tags=["Place"])
 
+# 회복 이벤트 집계 기준: 이 일수 이상 실패가 이어진 뒤 다시 성공해야 '회복'으로 본다.
+# (실패 일수 기준 — gap_days = 실패 일수 + 1 이므로 gap >= RECOVERY_MIN_FAILURE_DAYS + 1 일 때 회복)
+RECOVERY_MIN_FAILURE_DAYS = 3
+
 
 @router.get("/daily")
 async def get_daily(
@@ -226,6 +230,8 @@ async def get_ranking_daily(
                 return recovery_date, None
             from datetime import datetime as _dt
             gap = (_dt.strptime(recovery_date, "%Y-%m-%d") - _dt.strptime(prev_success_date, "%Y-%m-%d")).days
+            if gap - 1 < RECOVERY_MIN_FAILURE_DAYS:
+                return None, None
             return recovery_date, gap
 
         recovery_map: dict = {}
@@ -356,6 +362,7 @@ async def get_branch_detail(
                     "success": {"days": 0, "from": None, "to": None},
                     "fail":    {"days": 0, "from": None, "to": None},
                 },
+                "current_success": {"days": 0, "from": None, "to": None},
                 "recovery_history": [],
                 "agency_history": [],
             }
@@ -448,6 +455,10 @@ async def get_branch_detail(
                         else:
                             from datetime import datetime as _dt
                             gap = (_dt.strptime(d, "%Y-%m-%d") - _dt.strptime(prev_success_date, "%Y-%m-%d")).days
+                            if gap - 1 < RECOVERY_MIN_FAILURE_DAYS:
+                                while i < n and history[i][1]:
+                                    i += 1
+                                continue
                             events.append({
                                 "recovery_date": d,
                                 "gap_days": gap,
@@ -464,6 +475,16 @@ async def get_branch_detail(
         recovery_events = _all_recovery_events(history)
         # 최근 10건 (최신 순)
         recovery_history = list(reversed(recovery_events[-10:]))
+
+        # 현재 연속 성공 streak (reference_date 기준 역방향으로 카운트)
+        cur_success_days = 0
+        cur_success_from: str | None = None
+        for d, ok in reversed(history):
+            if ok:
+                cur_success_days += 1
+                cur_success_from = d
+            else:
+                break
 
         # 실행사 변경 이력 (map_type='place')
         agency_rows = conn.execute("""
@@ -488,6 +509,11 @@ async def get_branch_detail(
             "longest": {
                 "success": {"days": suc_days,  "from": suc_from,  "to": suc_to},
                 "fail":    {"days": fail_days, "from": fail_from, "to": fail_to},
+            },
+            "current_success": {
+                "days": cur_success_days,
+                "from": cur_success_from,
+                "to": reference_date if cur_success_days > 0 else None,
             },
             "recovery_history": recovery_history,
             "agency_history": agency_history,

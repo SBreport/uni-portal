@@ -8,6 +8,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends
+from fastapi.staticfiles import StaticFiles
 from api.deps import get_current_user
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -83,6 +84,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 정적 파일 서빙 — 업로드 이미지
+_UPLOAD_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "uploads")
+os.makedirs(_UPLOAD_ROOT, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_UPLOAD_ROOT), name="uploads")
 
 # 라우터 등록
 from api.routers import auth, users, cafe, equipment, events, papers, blog, place, webpage, treatment_catalog, complaints, reports, branch_info, rank_checker, encyclopedia, branches, config, explorer

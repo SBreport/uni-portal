@@ -2,7 +2,8 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from pydantic import BaseModel
 
 from api.deps import get_current_user, require_role
 
@@ -80,11 +81,18 @@ def get_ranking(
         raise HTTPException(status_code=503, detail=f"구글 시트 연결 실패: {e}")
 
 
+class SyncRequest(BaseModel):
+    target_month: str | None = None
+
+
 @router.post("/sync-to-db")
-async def sync_webpage_to_db(user: dict = Depends(require_role("admin"))):
-    """구글시트 → DB 전체 동기화 (admin 전용)."""
+async def sync_webpage_to_db(
+    body: SyncRequest = Body(default_factory=SyncRequest),
+    user: dict = Depends(require_role("admin")),
+):
+    """구글시트 → DB 동기화 (admin 전용). target_month 없으면 이번 달만."""
     from webpage.sync_to_db import sync_all_to_db
-    return sync_all_to_db()
+    return sync_all_to_db(target_month=body.target_month)
 
 
 @router.get("/last-sync")

@@ -47,7 +47,10 @@ function getAgency(branch: string): string {
 const loading = ref(true)
 const error = ref('')
 const data = ref<WebpageData | null>(null)
-const syncing = ref(false)
+const syncing = ref<'current' | 'specific' | false>(false)
+const showMonthPicker = ref(false)
+const pickerYear = ref(new Date().getFullYear())
+const pickerMonth = ref<number | null>(null)
 const lastSync = ref<string | null>(null)
 
 const today = new Date()
@@ -264,13 +267,39 @@ async function loadData() {
   }
 }
 
-async function handleSync() {
-  if (!confirm('구글시트 데이터를 DB에 동기화합니다. 시간이 걸릴 수 있습니다.')) return
-  syncing.value = true
+async function handleSyncCurrentMonth() {
+  if (!confirm('이번 달 데이터를 동기화합니다. 시간이 걸릴 수 있습니다.')) return
+  syncing.value = 'current'
   error.value = ''
   try {
     const { data: res } = await syncWebpageToDB()
     let msg = `동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved?.toLocaleString()}건 저장`
+    if (res.agency_changes?.length) {
+      msg += `\n\n실행사 변경 ${res.agency_changes.length}건:`
+      for (const c of res.agency_changes) {
+        msg += `\n  ${c.branch}: ${c.from} → ${c.to}`
+      }
+    }
+    alert(msg)
+    await loadData()
+    await loadLastSync()
+  } catch (e: any) {
+    error.value = e.response?.data?.detail || '동기화 실패'
+  } finally {
+    syncing.value = false
+  }
+}
+
+async function handleSyncSpecificMonth() {
+  if (pickerMonth.value === null) return
+  const ym = `${pickerYear.value}-${String(pickerMonth.value).padStart(2, '0')}`
+  if (!confirm(`${pickerYear.value}년 ${pickerMonth.value}월 데이터를 동기화합니다. 시간이 걸릴 수 있습니다.`)) return
+  showMonthPicker.value = false
+  syncing.value = 'specific'
+  error.value = ''
+  try {
+    const { data: res } = await syncWebpageToDB(ym)
+    let msg = `동기화 완료 (${ym}): ${res.sheets_processed}개 시트, ${res.records_saved?.toLocaleString()}건 저장`
     if (res.agency_changes?.length) {
       msg += `\n\n실행사 변경 ${res.agency_changes.length}건:`
       for (const c of res.agency_changes) {
@@ -325,10 +354,59 @@ onMounted(async () => {
           class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 transition text-xs">&gt;</button>
       </div>
 
-      <button v-if="isAdmin" @click="handleSync" :disabled="syncing"
-        class="text-xs px-3 py-1 rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-50 shrink-0">
-        {{ syncing ? '동기화 중...' : '시트 → DB 동기화' }}
+      <!-- 오늘 동기화 (primary) -->
+      <button v-if="isAdmin" @click="handleSyncCurrentMonth" :disabled="!!syncing"
+        class="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 shrink-0 font-medium">
+        {{ syncing === 'current' ? '동기화 중...' : '오늘 동기화' }}
       </button>
+
+      <!-- 선택 동기화 (secondary) -->
+      <button v-if="isAdmin" @click="showMonthPicker = true; pickerMonth = null; pickerYear = new Date().getFullYear()" :disabled="!!syncing"
+        class="text-xs px-3 py-1 rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-50 shrink-0 text-slate-600">
+        {{ syncing === 'specific' ? '동기화 중...' : '선택 동기화' }}
+      </button>
+
+      <!-- 월 선택 모달 -->
+      <Teleport to="body">
+        <div v-if="showMonthPicker" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          @click.self="showMonthPicker = false">
+          <div class="bg-white rounded-lg shadow-xl p-4 w-64">
+            <!-- 연도 네비게이션 -->
+            <div class="flex items-center justify-between mb-3">
+              <button @click="pickerYear--" class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500">&lt;</button>
+              <span class="text-sm font-semibold text-slate-700">{{ pickerYear }}년</span>
+              <button @click="pickerYear++" :disabled="pickerYear >= new Date().getFullYear()"
+                class="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500 disabled:opacity-30">&gt;</button>
+            </div>
+
+            <!-- 월 그리드 (3×4) -->
+            <div class="grid grid-cols-3 gap-1.5 mb-4">
+              <button
+                v-for="m in 12" :key="m"
+                @click="pickerMonth = m"
+                :disabled="pickerYear === new Date().getFullYear() && m > new Date().getMonth() + 1"
+                :class="[
+                  'py-1.5 text-sm rounded border transition',
+                  pickerMonth === m
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'border-slate-200 hover:bg-slate-50 text-slate-700',
+                  pickerYear === new Date().getFullYear() && m > new Date().getMonth() + 1
+                    ? 'opacity-30 cursor-not-allowed' : ''
+                ]">
+                {{ m }}월
+              </button>
+            </div>
+
+            <!-- 하단 버튼 -->
+            <div class="flex gap-2 justify-end">
+              <button @click="showMonthPicker = false"
+                class="text-xs px-3 py-1.5 rounded border border-slate-300 hover:bg-slate-50 text-slate-600">취소</button>
+              <button @click="handleSyncSpecificMonth" :disabled="pickerMonth === null"
+                class="text-xs px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">갱신</button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
       <span v-if="lastSync" class="text-[10px] text-slate-400 shrink-0">최종 동기화: {{ lastSync }}</span>
       <!-- 노출/미노출/미달 큰 숫자 -->
       <template v-if="data">

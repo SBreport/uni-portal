@@ -85,8 +85,12 @@ def sync_all_to_db_legacy() -> dict:
         conn.close()
 
 
-def sync_all_to_db(max_months: int = 3) -> dict:
-    """실행사별 시트에서 webpage_daily + agency_map 동기화."""
+def sync_all_to_db(target_month: str | None = None) -> dict:
+    """실행사별 시트에서 webpage_daily + agency_map 동기화.
+
+    Args:
+        target_month: "YYYY-MM" 형식. None이면 이번 달만.
+    """
     from webpage.sheets import list_months_from_agency, get_ranking_by_agency, _parse_sheet_name
     import json
 
@@ -97,7 +101,14 @@ def sync_all_to_db(max_months: int = 3) -> dict:
 
     try:
         months = list_months_from_agency()
-        months = months[:max_months]
+        if target_month:
+            try:
+                t_year, t_month = map(int, target_month.split("-"))
+                months = [m for m in months if _parse_sheet_name(m) == (t_year, t_month)]
+            except Exception:
+                months = []
+        else:
+            months = months[:1]  # 기본: 이번 달만
 
         latest_agency_map = {}
         latest_fetched = False

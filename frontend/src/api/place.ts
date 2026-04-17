@@ -9,8 +9,8 @@ export const getPlaceRanking = (month: string) =>
 export const getPlaceRankingDB = (year: number, month: number) =>
   api.get('/place/ranking-db', { params: { year, month } })
 
-export const syncPlaceToDB = () =>
-  api.post('/place/sync-to-db', {}, { timeout: 180000 })
+export const syncPlaceToDB = (targetMonth?: string) =>
+  api.post('/place/sync-to-db', { target_month: targetMonth ?? null }, { timeout: 180000 })
 
 export const getPlaceDaily = (params?: { branch_id?: number; date_from?: string; date_to?: string }) =>
   api.get('/place/daily', { params })

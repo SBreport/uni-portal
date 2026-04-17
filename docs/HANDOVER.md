@@ -18,19 +18,15 @@
 | UI | Tailwind CSS 4.2 | 유틸리티 기반 |
 | 백엔드 | FastAPI (Python) | JWT 인증, 47개 API |
 | DB | SQLite (WAL 모드) | `data/equipment.db` 단일 파일 |
-| 레거시 | Streamlit | 병행 운영 중, 추후 제거 예정 |
+
+> ⚠️ 2026-03-22 기준 Streamlit 폐기, FastAPI+Vue 단독 운영.
+> 과거 Streamlit 병행 운영 관련 설명은 `docs/_archive/legacy/HANDOVER_streamlit_sections.md` 참고.
 
 ### 운영 구조
 
 ```
-사용자 → 포털 페이지 (portal/index.html)
-           ├─ [Stream 버전] → Streamlit (:8501) — 레거시
-           └─ [Fast 버전]   → Vue.js (:5173) → FastAPI (:8000)
+사용자 → Vue.js (SPA) → FastAPI (:8000) → SQLite DB
 ```
-
-- **DB 공유**: Streamlit과 FastAPI 양쪽에서 동일한 `data/equipment.db` 사용
-- **비즈니스 로직 공유**: `cafe/db.py`, `equipment/db.py`, `events/db.py`를 양쪽에서 import
-- **독립 인증**: Streamlit은 HMAC 토큰, FastAPI는 JWT(HS256)
 
 ---
 
@@ -39,16 +35,14 @@
 ```
 uni-portal/
 │
-├── data/equipment.db              ← 공유 DB (SQLite, WAL)
+├── data/equipment.db              ← 메인 DB (SQLite, WAL)
 ├── credentials.json               ← Google Sheets API 인증 키
 │
-├── app.py, ui_tabs.py, auth.py    ← Streamlit 레거시 (수정 금지)
 ├── config.py, init_db.py, users.py
 │
 ├── cafe/                          ← 카페 마케팅 비즈니스 로직
-│   ├── db.py                      # DB CRUD (양쪽 공유)
-│   ├── sync.py                    # Google Sheets → DB 동기화
-│   └── ui.py                      # Streamlit UI (레거시)
+│   ├── db.py                      # DB CRUD
+│   └── sync.py                    # Google Sheets → DB 동기화
 │
 ├── equipment/                     ← 보유장비 비즈니스 로직
 │   ├── db.py                      # DB CRUD + 장비사전
@@ -106,8 +100,7 @@ uni-portal/
 │       │       └── ArticleEditor.vue
 │       └── router/index.ts
 │
-├── portal/index.html              ← 버전 선택 포털
-├── docker-compose.yml             ← 4 컨테이너 (portal, streamlit, api, frontend)
+├── docker-compose.yml             ← api, frontend 컨테이너
 └── HANDOVER.md                    ← 이 문서
 ```
 
@@ -132,12 +125,6 @@ npm run dev
 ```
 
 Vite 개발 서버가 `/api/*` 요청을 `localhost:8000`으로 프록시한다.
-
-### 레거시 Streamlit
-```bash
-cd uni-portal
-streamlit run app.py --server.port 8501
-```
 
 ---
 
@@ -427,10 +414,8 @@ CREATE TABLE treatment_papers (
 
 1. **DB 컬럼명 불일치**: `equipment/db.py`의 `load_data()`가 `지점명`을 반환하지만, API에서 `지점`으로 정규화. 수정 시 양쪽 확인 필요.
 2. **사진 값 정규화**: DB에서 `O`, API에서 `있음`으로 변환. 프론트엔드는 `있음` 기준.
-3. **Streamlit import**: `cafe/db.py` 등에서 `import streamlit as st`가 try/except로 감싸져 있음. FastAPI에서도 import 가능.
-4. **CAFE_SHEET_ID 환경변수**: 카페 동기화 시 프론트에서 전달한 sheet_url에서 추출하여 동적으로 설정. 영구 설정이 아닌 요청별 오버라이드.
-5. **Vite 프록시 rewrite**: `/api` prefix를 제거하고 `localhost:8000`으로 전달. FastAPI의 `root_path="/api"`는 Swagger UI용.
-6. **Streamlit 백업**: `_streamlit_backup/` 폴더에 기존 Streamlit 관련 파일이 보존됨. 복원 방법은 해당 폴더의 README.md 참고.
+3. **CAFE_SHEET_ID 환경변수**: 카페 동기화 시 프론트에서 전달한 sheet_url에서 추출하여 동적으로 설정. 영구 설정이 아닌 요청별 오버라이드.
+4. **Vite 프록시 rewrite**: `/api` prefix를 제거하고 `localhost:8000`으로 전달. FastAPI의 `root_path="/api"`는 Swagger UI용.
 
 ---
 

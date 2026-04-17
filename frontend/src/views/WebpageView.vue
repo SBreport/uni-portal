@@ -185,6 +185,13 @@ function recentDays(b: BranchRanking): { day: number; exposed: number; mark: str
 function getRecoveryInfo(b: BranchRanking): { show: boolean; label: string } {
   if (!b.today_exposed) return { show: false, label: '' }
   if (b.recovery_date == null) return { show: false, label: '' }
+
+  // 복귀 후 7일이 지나면 녹색 불 OFF
+  const recovery = new Date(b.recovery_date)
+  const ref = new Date(selectedDate.value)
+  const daysSinceRecovery = Math.floor((ref.getTime() - recovery.getTime()) / (1000 * 60 * 60 * 24))
+  if (daysSinceRecovery > 7) return { show: false, label: '' }
+
   const recoveryPart = b.recovery_gap == null ? '첫 성공' : `${b.recovery_gap}일 만에 회복`
   const holdPart = (b.streak && b.streak > 1) ? ` · ${b.streak}일째 유지` : ''
   return { show: true, label: recoveryPart + holdPart }
@@ -577,73 +584,90 @@ onMounted(async () => {
                       <div v-if="detailLoading" class="text-xs text-slate-400">불러오는 중...</div>
                       <div v-else-if="detailError" class="text-xs text-red-500">{{ detailError }}</div>
                       <template v-else-if="detailData && detailData.success_rate.all.total > 0">
-                        <div class="grid grid-cols-[auto_auto_auto_auto] gap-x-3 gap-y-0.5 text-xs max-w-md">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-xs max-w-3xl">
 
-                          <!-- ── 성공률 섹션 ── -->
-                          <!-- 전체 -->
-                          <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">성공률</span>
-                          <span class="text-xs text-slate-500 self-center py-0.5">전체</span>
-                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
-                            {{ detailData.success_rate.all.success }}/{{ detailData.success_rate.all.total }}일
-                          </span>
-                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">({{ detailData.success_rate.all.pct }}%)</span>
-                          <!-- 이번 달 -->
-                          <span class="py-0.5"></span>
-                          <span class="text-xs text-slate-500 self-center py-0.5">이번 달</span>
-                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
-                            <template v-if="detailData.success_rate.this_month.total > 0">{{ detailData.success_rate.this_month.success }}/{{ detailData.success_rate.this_month.total }}일</template>
-                            <span v-else class="text-slate-300">-</span>
-                          </span>
-                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
-                            <template v-if="detailData.success_rate.this_month.total > 0">({{ detailData.success_rate.this_month.pct }}%)</template>
-                          </span>
-                          <!-- 지난 달 -->
-                          <span class="py-0.5"></span>
-                          <span class="text-xs text-slate-500 self-center py-0.5">지난 달</span>
-                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
-                            <template v-if="detailData.success_rate.last_month.total > 0">{{ detailData.success_rate.last_month.success }}/{{ detailData.success_rate.last_month.total }}일</template>
-                            <span v-else class="text-slate-300">-</span>
-                          </span>
-                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
-                            <template v-if="detailData.success_rate.last_month.total > 0">({{ detailData.success_rate.last_month.pct }}%)</template>
-                          </span>
+                          <!-- 왼쪽 열: 성공률 + 연속 -->
+                          <div class="grid grid-cols-[auto_auto_auto_auto] gap-x-3 gap-y-0.5">
 
-                          <!-- ── 연속 섹션 구분선 ── -->
-                          <div class="col-span-4 border-t border-slate-100 my-0.5"></div>
+                            <!-- ── 성공률 섹션 ── -->
+                            <!-- 전체 -->
+                            <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">성공률</span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">전체</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              {{ detailData.success_rate.all.success }}/{{ detailData.success_rate.all.total }}일
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">({{ detailData.success_rate.all.pct }}%)</span>
+                            <!-- 이번 달 -->
+                            <span class="py-0.5"></span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">이번 달</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.success_rate.this_month.total > 0">{{ detailData.success_rate.this_month.success }}/{{ detailData.success_rate.this_month.total }}일</template>
+                              <span v-else class="text-slate-300">-</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.success_rate.this_month.total > 0">({{ detailData.success_rate.this_month.pct }}%)</template>
+                            </span>
+                            <!-- 지난 달 -->
+                            <span class="py-0.5"></span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">지난 달</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.success_rate.last_month.total > 0">{{ detailData.success_rate.last_month.success }}/{{ detailData.success_rate.last_month.total }}일</template>
+                              <span v-else class="text-slate-300">-</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.success_rate.last_month.total > 0">({{ detailData.success_rate.last_month.pct }}%)</template>
+                            </span>
 
-                          <!-- 최장 노출 -->
-                          <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">연속</span>
-                          <span class="text-xs text-slate-500 self-center py-0.5">최장 노출</span>
-                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
-                            <template v-if="detailData.longest.success.days > 0">{{ detailData.longest.success.days }}일</template>
-                            <span v-else class="text-slate-300">-</span>
-                          </span>
-                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
-                            <template v-if="detailData.longest.success.days > 0">
-                              {{ fmtDate(detailData.longest.success.from) }} ~
-                              <template v-if="detailData.longest.success.to">{{ fmtDate(detailData.longest.success.to) }}</template>
-                              <template v-else>진행중</template>
-                            </template>
-                          </span>
-                          <!-- 최장 미노출 -->
-                          <span class="py-0.5"></span>
-                          <span class="text-xs text-slate-500 self-center py-0.5">최장 미노출</span>
-                          <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
-                            <template v-if="detailData.longest.fail.days > 0">{{ detailData.longest.fail.days }}일</template>
-                            <span v-else class="text-slate-300">-</span>
-                          </span>
-                          <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
-                            <template v-if="detailData.longest.fail.days > 0">
-                              {{ fmtDate(detailData.longest.fail.from) }} ~
-                              <template v-if="detailData.longest.fail.to">{{ fmtDate(detailData.longest.fail.to) }}</template>
-                              <template v-else>진행중</template>
-                            </template>
-                          </span>
-
-                          <!-- ── 회복 섹션 (이력이 있을 때만) ── -->
-                          <template v-if="detailData.recovery_history.length > 0">
+                            <!-- ── 연속 섹션 구분선 ── -->
                             <div class="col-span-4 border-t border-slate-100 my-0.5"></div>
-                            <template v-for="(ev, idx) in detailData.recovery_history.slice(0, 5)" :key="ev.recovery_date">
+
+                            <!-- 현재 연속 -->
+                            <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">연속</span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">현재 연속</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.current_success && detailData.current_success.days > 0">{{ detailData.current_success.days }}일</template>
+                              <span v-else class="text-slate-300">-</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.current_success && detailData.current_success.days > 0">
+                                {{ fmtDate(detailData.current_success.from) }} ~ 진행중
+                              </template>
+                            </span>
+                            <!-- 최장 노출 -->
+                            <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]"></span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">최장 노출</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.longest.success.days > 0">{{ detailData.longest.success.days }}일</template>
+                              <span v-else class="text-slate-300">-</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.longest.success.days > 0">
+                                {{ fmtDate(detailData.longest.success.from) }} ~
+                                <template v-if="detailData.longest.success.to">{{ fmtDate(detailData.longest.success.to) }}</template>
+                                <template v-else>진행중</template>
+                              </template>
+                            </span>
+                            <!-- 최장 미노출 -->
+                            <span class="py-0.5"></span>
+                            <span class="text-xs text-slate-500 self-center py-0.5">최장 미노출</span>
+                            <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.longest.fail.days > 0">{{ detailData.longest.fail.days }}일</template>
+                              <span v-else class="text-slate-300">-</span>
+                            </span>
+                            <span class="text-[11px] text-slate-400 self-center py-0.5 tabular-nums">
+                              <template v-if="detailData.longest.fail.days > 0">
+                                {{ fmtDate(detailData.longest.fail.from) }} ~
+                                <template v-if="detailData.longest.fail.to">{{ fmtDate(detailData.longest.fail.to) }}</template>
+                                <template v-else>진행중</template>
+                              </template>
+                            </span>
+
+                          </div>
+
+                          <!-- 오른쪽 열: 회복 (0건이면 미렌더) -->
+                          <div v-if="detailData.recovery_history.length > 0"
+                            class="grid grid-cols-[auto_auto_auto_auto] gap-x-3 gap-y-0.5">
+                            <template v-for="(ev, idx) in detailData.recovery_history.slice(0, 10)" :key="ev.recovery_date">
                               <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">{{ idx === 0 ? '회복' : '' }}</span>
                               <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">{{ fmtDate(ev.recovery_date) }}</span>
                               <span class="text-xs font-medium text-slate-900 self-center py-0.5 col-span-2">
@@ -651,7 +675,7 @@ onMounted(async () => {
                                 <span v-else class="tabular-nums">{{ ev.gap_days }}일 만에</span>
                               </span>
                             </template>
-                          </template>
+                          </div>
 
                         </div>
                       </template>

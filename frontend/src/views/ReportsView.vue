@@ -246,67 +246,65 @@ watch(isDetailView, (val) => {
   <div v-else class="flex flex-col overflow-hidden" style="height: calc(100vh - 48px)">
 
     <!-- ROW 1: 상단바 -->
-    <div class="flex items-center gap-3 px-4 py-2 border-b border-slate-200 bg-white shrink-0">
-      <h1 class="text-sm font-bold text-slate-800">주간 보고서</h1>
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 pt-3 pb-2 shrink-0">
+      <h1 class="text-lg font-bold text-slate-800 shrink-0">주간 보고서</h1>
 
       <!-- 월 네비 -->
-      <div class="flex items-center gap-1 ml-3">
+      <div class="flex items-center gap-1">
         <button
           @click="prevMonth"
-          class="px-1.5 py-0.5 text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded text-xs"
-        >&#8249;</button>
-        <span class="text-xs font-medium text-slate-700 w-20 text-center tabular-nums">
+          class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 transition text-xs"
+        >&lt;</button>
+        <span class="px-2 text-sm font-medium text-slate-700 min-w-[120px] text-center tabular-nums">
           {{ viewMonthLabel }}
         </span>
         <button
           @click="nextMonth"
-          class="px-1.5 py-0.5 text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded text-xs"
-        >&#8250;</button>
+          class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:bg-slate-50 transition text-xs"
+        >&gt;</button>
         <button
           @click="goToday"
           :disabled="isThisMonth"
-          class="ml-1 px-2 py-0.5 text-[10px] rounded border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          class="ml-1 text-xs px-3 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >오늘</button>
       </div>
 
       <!-- 캘린더/목록 스위처 + 이번 주 작성 버튼 -->
-      <div class="ml-auto flex items-center gap-2">
-        <div class="flex items-center border border-slate-200 rounded overflow-hidden">
+      <div class="flex items-center gap-2">
+        <div class="flex items-center border border-slate-200 rounded overflow-hidden shrink-0">
           <button
             @click="viewMode = 'calendar'"
-            class="px-2 py-0.5 text-[10px] transition-colors"
+            class="px-2.5 py-1 text-xs transition-colors"
             :class="viewMode === 'calendar' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'"
           >캘린더</button>
           <button
             @click="viewMode = 'list'"
-            class="px-2 py-0.5 text-[10px] transition-colors"
+            class="px-2.5 py-1 text-xs transition-colors"
             :class="viewMode === 'list' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'"
           >목록</button>
         </div>
         <button
           v-if="canEdit"
           @click="goToThisWeek"
-          class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-        >
-          이번 주 작성
-        </button>
+          class="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 shrink-0 font-medium"
+        >이번 주 작성</button>
       </div>
     </div>
 
     <!-- 에러 바 -->
-    <div v-if="error" class="px-4 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700 shrink-0">
+    <div v-if="error" class="mx-5 mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 shrink-0">
       {{ error }}
     </div>
 
     <!-- 본문 -->
-    <div class="flex-1 overflow-y-auto bg-slate-50 py-4 px-4">
+    <div class="flex-1 overflow-y-auto px-5 pb-3">
 
       <!-- 로딩 -->
       <div v-if="loading" class="flex items-center justify-center py-12">
         <LoadingSpinner message="불러오는 중..." />
       </div>
 
-      <div v-else class="max-w-3xl mx-auto space-y-4">
+      <div v-else class="max-w-4xl mx-auto space-y-4">
         <!-- 캘린더 -->
         <div v-if="viewMode === 'calendar'">
           <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">

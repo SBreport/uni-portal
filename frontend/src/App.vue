@@ -8,8 +8,8 @@ const auth = useAuthStore()
 </script>
 
 <template>
-  <!-- 로그인 페이지: 사이드바 없음 -->
-  <RouterView v-if="route.name === 'login'" />
+  <!-- 공개 라우트 (로그인 / 공유 링크): 사이드바 없음 -->
+  <RouterView v-if="route.meta.public" />
 
   <!-- 인증된 페이지: 사이드바 + 콘텐츠 -->
   <div v-else class="flex min-h-screen bg-slate-50">

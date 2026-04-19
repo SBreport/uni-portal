@@ -102,7 +102,7 @@ const visibleMiddleItems = computed(() => middleItems.filter(canSee))
 const visibleTopItems = computed(() => topItems.filter(canSee))
 
 const bottomItems: MenuItem[] = [
-  { path: '/reports', label: '보고서', icon: 'R' },
+  { path: '/reports', label: '주간 보고서', icon: 'R' },
   { path: '/admin', label: '관리자 모드', icon: 'A', adminOnly: true },
 ]
 

@@ -103,6 +103,13 @@ const router = createRouter({
       name: 'reports',
       component: () => import('@/views/ReportsView.vue'),
     },
+    // ── 공개 보고서 공유 링크 ──
+    {
+      path: '/r/:weekStart',
+      name: 'publicReport',
+      component: () => import('@/views/PublicReportView.vue'),
+      meta: { public: true },
+    },
     // ── 관리자 ──
     {
       path: '/admin',

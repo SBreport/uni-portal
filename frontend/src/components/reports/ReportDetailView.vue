@@ -6,6 +6,7 @@ import { getWeeklyReport, updateWeeklyReport, deleteWeeklyReport, uploadReportIm
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { mergeReportData, createEmptyReportData, type ReportData } from './reportSchema'
 import { parseWeeklyReportText } from './parseWeeklyReportText'
+import ResultContent from './ResultContent.vue'
 
 // ── props ──
 const props = defineProps<{ weekStart: string }>()
@@ -216,38 +217,28 @@ const navItems = [
 const inputCls = 'w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white disabled:bg-slate-50 disabled:text-slate-400'
 const textareaCls = 'w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y bg-white disabled:bg-slate-50 disabled:text-slate-400'
 
-// ── 결과 탭 ──
-const resultSectionRefs = ref<Record<string, HTMLElement | null>>({})
+// ── 공유 모달 ──────────────────────────────────────────────────────────────────
+const showShareModal = ref(false)
+const copied = ref(false)
 
-function scrollToResult(key: string) {
-  resultSectionRefs.value[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+const fullShareUrl = computed(() =>
+  `${window.location.origin}/r/${props.weekStart}`
+)
+
+function openShareModal() {
+  showShareModal.value = true
 }
 
-const resultNavItems = [
-  { key: 'blogDistribution', label: '01 블로그배포' },
-  { key: 'place', label: '02 플레이스' },
-  { key: 'website', label: '03 웹사이트' },
-  { key: 'blogExposure', label: '04 블로그 상위노출' },
-  { key: 'related', label: '05 함께찾는' },
-]
-
-interface Kpi { key: string; label: string; value: string }
-const kpis = computed<Kpi[]>(() => {
-  const fmt = (a: string, b: string) => (a && b ? `${a} / ${b}` : '—')
-  return [
-    { key: 'blog',     label: '블로그배포', value: fmt(data.value.blogDistribution.ranked,  data.value.blogDistribution.keywords) },
-    { key: 'place',    label: '플레이스',   value: fmt(data.value.place.occupied,           data.value.place.total) },
-    { key: 'website',  label: '웹사이트',   value: fmt(data.value.website.visible,          data.value.website.total) },
-    { key: 'exposure', label: '블로그노출', value: fmt(data.value.blogExposure.visible,      data.value.blogExposure.total) },
-    { key: 'related',  label: '함께찾는',   value: fmt(data.value.related.created,          data.value.related.total) },
-  ]
-})
-
-const generatedAtLabel = computed(() => {
-  const now = new Date()
-  const fmt = (n: number) => String(n).padStart(2, '0')
-  return `${now.getFullYear()}.${fmt(now.getMonth() + 1)}.${fmt(now.getDate())} ${fmt(now.getHours())}:${fmt(now.getMinutes())}`
-})
+async function copyShareUrl() {
+  if (!fullShareUrl.value) return
+  try {
+    await navigator.clipboard.writeText(fullShareUrl.value)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1500)
+  } catch {
+    alert('복사 실패 — URL을 직접 선택해 복사하세요.')
+  }
+}
 
 // ── 이미지 업로드 ──────────────────────────────────────────────────────────────
 const uploadingFor = ref<string | null>(null)
@@ -311,29 +302,25 @@ function openImagePreview(path: string) {
   <div class="flex flex-col overflow-hidden" style="height: calc(100vh - 48px)">
 
     <!-- ── 상단바 ── -->
-    <div class="shrink-0 border-b border-slate-200 bg-white">
+    <div class="shrink-0">
       <!-- 1행: 목록 / 제목 / 탭 / 저장상태 / 삭제 -->
-      <div class="flex items-center gap-2 px-3 py-2">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 pt-3 pb-1">
         <!-- 목록 -->
         <button
           @click="router.push('/reports')"
           class="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 shrink-0"
-        >
-          &#8592; 목록
-        </button>
-
-        <span class="text-slate-200 select-none">|</span>
+        >&larr; 목록</button>
 
         <!-- 제목 인라인 편집 -->
         <input
           v-model="title"
           :disabled="!canEdit"
           placeholder="보고서 제목"
-          class="flex-1 min-w-0 text-sm font-semibold text-slate-800 border-0 outline-none bg-transparent placeholder:text-slate-300 disabled:text-slate-600"
+          class="flex-1 min-w-0 text-lg font-bold text-slate-800 border-0 outline-none bg-transparent placeholder:text-slate-300 disabled:text-slate-600"
         />
 
         <!-- 탭 -->
-        <div class="flex items-center gap-0.5 shrink-0 border border-slate-200 rounded overflow-hidden">
+        <div class="flex items-center border border-slate-200 rounded overflow-hidden shrink-0">
           <button
             @click="tab = 'write'"
             class="px-2.5 py-1 text-xs transition-colors"
@@ -364,16 +351,23 @@ function openImagePreview(path: string) {
           class="text-[10px] text-slate-500 hover:text-slate-800 shrink-0 px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
         >불러오기</button>
 
+        <!-- 공유 (editor+) -->
+        <button
+          v-if="canEdit"
+          @click="openShareModal"
+          class="text-xs px-2.5 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 shrink-0"
+        >공유</button>
+
         <!-- 삭제 (admin) -->
         <button
           v-if="isAdmin"
           @click="handleDelete"
-          class="text-[10px] text-red-400 hover:text-red-600 shrink-0 px-1.5 py-1 rounded hover:bg-red-50"
+          class="text-xs px-2.5 py-1 rounded border border-slate-300 text-red-500 hover:bg-red-50 shrink-0"
         >삭제</button>
       </div>
 
       <!-- 2행: 기간 + 안내 -->
-      <div class="px-3 pb-1.5 flex items-center gap-2 text-[10px]">
+      <div class="px-5 pb-2 flex items-center gap-2 text-[10px]">
         <span v-if="periodLabel" class="text-slate-400 tabular-nums shrink-0">
           기간: {{ periodLabel }}
         </span>
@@ -425,14 +419,14 @@ function openImagePreview(path: string) {
 
         <!-- 오른쪽 컨텐츠 (스크롤) -->
         <div class="flex-1 overflow-y-auto">
-          <div class="py-3 pr-4 pl-4 space-y-3 max-w-3xl">
+          <div class="px-5 py-3 space-y-3 max-w-3xl">
 
           <!-- ─── 01 블로그배포 ─── -->
           <section
             :ref="(el) => { sectionRefs['blogDistribution'] = el as HTMLElement }"
             class="bg-white border border-slate-200 rounded-lg overflow-hidden"
           >
-            <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+            <div class="flex items-center justify-between px-4 py-2 border-b border-slate-100">
               <span class="text-xs font-semibold text-slate-700">01 블로그배포</span>
               <button
                 @click="collapsed.blogDistribution = !collapsed.blogDistribution"
@@ -502,7 +496,7 @@ function openImagePreview(path: string) {
             :ref="(el) => { sectionRefs['place'] = el as HTMLElement }"
             class="bg-white border border-slate-200 rounded-lg overflow-hidden"
           >
-            <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+            <div class="flex items-center justify-between px-4 py-2 border-b border-slate-100">
               <span class="text-xs font-semibold text-slate-700">02 플레이스</span>
               <button
                 @click="collapsed.place = !collapsed.place"
@@ -591,7 +585,7 @@ function openImagePreview(path: string) {
             :ref="(el) => { sectionRefs['website'] = el as HTMLElement }"
             class="bg-white border border-slate-200 rounded-lg overflow-hidden"
           >
-            <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+            <div class="flex items-center justify-between px-4 py-2 border-b border-slate-100">
               <span class="text-xs font-semibold text-slate-700">03 웹사이트</span>
               <button
                 @click="collapsed.website = !collapsed.website"
@@ -664,7 +658,7 @@ function openImagePreview(path: string) {
             :ref="(el) => { sectionRefs['blogExposure'] = el as HTMLElement }"
             class="bg-white border border-slate-200 rounded-lg overflow-hidden"
           >
-            <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+            <div class="flex items-center justify-between px-4 py-2 border-b border-slate-100">
               <span class="text-xs font-semibold text-slate-700">04 블로그 상위노출</span>
               <button
                 @click="collapsed.blogExposure = !collapsed.blogExposure"
@@ -728,7 +722,7 @@ function openImagePreview(path: string) {
             :ref="(el) => { sectionRefs['related'] = el as HTMLElement }"
             class="bg-white border border-slate-200 rounded-lg overflow-hidden"
           >
-            <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+            <div class="flex items-center justify-between px-4 py-2 border-b border-slate-100">
               <span class="text-xs font-semibold text-slate-700">05 함께찾는</span>
               <button
                 @click="collapsed.related = !collapsed.related"
@@ -803,326 +797,42 @@ function openImagePreview(path: string) {
       </div>
 
       <!-- 결과 탭 -->
-      <div v-if="tab === 'result'" class="h-full flex flex-col overflow-hidden">
-
-        <!-- 앵커 바 (sticky 상단) -->
-        <nav class="shrink-0 border-b border-slate-200 bg-white px-4 py-2 flex items-center gap-3 overflow-x-auto">
-          <button
-            v-for="item in resultNavItems"
-            :key="item.key"
-            @click="scrollToResult(item.key)"
-            class="text-[11px] text-slate-500 hover:text-slate-900 whitespace-nowrap shrink-0"
-          >{{ item.label }}</button>
-        </nav>
-
-        <!-- 문서 스크롤 영역 -->
-        <div class="flex-1 overflow-y-auto bg-slate-100 py-8 px-4">
-          <article class="max-w-4xl mx-auto bg-white border border-slate-200 rounded-lg shadow-sm">
-
-            <!-- 헤더 블록 -->
-            <header class="px-10 pt-10 pb-6 border-b border-slate-100">
-              <p class="text-[10px] tracking-[0.2em] text-slate-400 font-medium mb-3">WEEKLY RANKING REPORT</p>
-              <h1 class="text-2xl font-bold text-slate-800 mb-2">{{ title || '제목 없음' }}</h1>
-              <p class="text-xs text-slate-500 tabular-nums">{{ periodLabel }}</p>
-              <p v-if="data.basic.notice" class="text-[11px] text-slate-400 mt-2">{{ data.basic.notice }}</p>
-            </header>
-
-            <!-- KPI strip -->
-            <div class="grid grid-cols-5 gap-px bg-slate-100 border-b border-slate-100">
-              <div v-for="kpi in kpis" :key="kpi.key" class="bg-white px-4 py-3 text-center">
-                <div class="text-[10px] text-slate-500 mb-1">{{ kpi.label }}</div>
-                <div class="text-lg font-semibold text-slate-800 tabular-nums">{{ kpi.value }}</div>
-              </div>
-            </div>
-
-            <!-- 섹션 5개 -->
-            <div class="divide-y divide-slate-100">
-
-              <!-- §1 블로그배포 -->
-              <section
-                :ref="(el) => { resultSectionRefs['blogDistribution'] = el as HTMLElement }"
-                class="px-10 py-8"
-              >
-                <div class="flex items-baseline gap-3 mb-4">
-                  <span class="text-sm font-bold text-slate-400">01</span>
-                  <h3 class="text-base font-bold text-slate-800">최적블로그 배포</h3>
-                </div>
-                <div class="grid grid-cols-3 gap-4 mb-4">
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">누적 발행 글</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.blogDistribution.posts || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">금일 상위노출 지점</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.blogDistribution.ranked || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">타겟 키워드</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.blogDistribution.keywords || '—' }}</div>
-                  </div>
-                </div>
-                <p v-if="data.blogDistribution.summary" class="text-sm text-slate-700 leading-relaxed mb-4">{{ data.blogDistribution.summary }}</p>
-                <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-                  <template v-if="data.blogDistribution.response">
-                    <dt class="text-slate-400 shrink-0">대응 중</dt>
-                    <dd class="text-slate-700">{{ data.blogDistribution.response }}</dd>
-                  </template>
-                  <template v-if="data.blogDistribution.link1 || data.blogDistribution.link2">
-                    <dt class="text-slate-400 shrink-0">원본 링크</dt>
-                    <dd class="text-slate-700">
-                      <a v-if="data.blogDistribution.link1" :href="data.blogDistribution.link1" target="_blank" rel="noopener" class="text-blue-600 hover:underline mr-2">링크1</a>
-                      <a v-if="data.blogDistribution.link2" :href="data.blogDistribution.link2" target="_blank" rel="noopener" class="text-blue-600 hover:underline">링크2</a>
-                    </dd>
-                  </template>
-                </dl>
-                <div v-if="data.blogDistribution.images.length > 0" class="mt-3 grid grid-cols-4 gap-2">
-                  <img
-                    v-for="img in data.blogDistribution.images"
-                    :key="img"
-                    :src="resolveImageUrl(img)"
-                    class="w-full h-24 object-cover rounded border border-slate-100 cursor-pointer"
-                    @click="openImagePreview(img)"
-                  />
-                </div>
-              </section>
-
-              <!-- §2 플레이스 -->
-              <section
-                :ref="(el) => { resultSectionRefs['place'] = el as HTMLElement }"
-                class="px-10 py-8"
-              >
-                <div class="flex items-baseline gap-3 mb-4">
-                  <span class="text-sm font-bold text-slate-400">02</span>
-                  <h3 class="text-base font-bold text-slate-800">플레이스</h3>
-                </div>
-                <div class="grid grid-cols-4 gap-4 mb-4">
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">총 지점</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.place.total || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">점유</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.place.occupied || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">이탈</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.place.dropped || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">휴식</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.place.paused || '—' }}</div>
-                  </div>
-                </div>
-                <p v-if="data.place.summary" class="text-sm text-slate-700 leading-relaxed mb-4">{{ data.place.summary }}</p>
-                <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-                  <template v-if="data.place.droppedList">
-                    <dt class="text-slate-400 shrink-0">이탈 지점</dt>
-                    <dd class="text-slate-700 whitespace-pre-wrap">{{ data.place.droppedList }}</dd>
-                  </template>
-                  <template v-if="data.place.newList">
-                    <dt class="text-slate-400 shrink-0">신규 지점</dt>
-                    <dd class="text-slate-700 whitespace-pre-wrap">{{ data.place.newList }}</dd>
-                  </template>
-                  <template v-if="data.place.pausedList">
-                    <dt class="text-slate-400 shrink-0">휴식 지점</dt>
-                    <dd class="text-slate-700 whitespace-pre-wrap">{{ data.place.pausedList }}</dd>
-                  </template>
-                  <template v-if="data.place.comment">
-                    <dt class="text-slate-400 shrink-0">작업 코멘트</dt>
-                    <dd class="text-slate-700 whitespace-pre-wrap">{{ data.place.comment }}</dd>
-                  </template>
-                  <template v-if="data.place.response">
-                    <dt class="text-slate-400 shrink-0">대응 중</dt>
-                    <dd class="text-slate-700">{{ data.place.response }}</dd>
-                  </template>
-                  <template v-if="data.place.link">
-                    <dt class="text-slate-400 shrink-0">원본 링크</dt>
-                    <dd class="text-slate-700">
-                      <a :href="data.place.link" target="_blank" rel="noopener" class="text-blue-600 hover:underline">링크</a>
-                    </dd>
-                  </template>
-                </dl>
-                <div v-if="data.place.images.length > 0" class="mt-3 grid grid-cols-4 gap-2">
-                  <img
-                    v-for="img in data.place.images"
-                    :key="img"
-                    :src="resolveImageUrl(img)"
-                    class="w-full h-24 object-cover rounded border border-slate-100 cursor-pointer"
-                    @click="openImagePreview(img)"
-                  />
-                </div>
-              </section>
-
-              <!-- §3 웹사이트 -->
-              <section
-                :ref="(el) => { resultSectionRefs['website'] = el as HTMLElement }"
-                class="px-10 py-8"
-              >
-                <div class="flex items-baseline gap-3 mb-4">
-                  <span class="text-sm font-bold text-slate-400">03</span>
-                  <h3 class="text-base font-bold text-slate-800">웹사이트</h3>
-                </div>
-                <div class="grid grid-cols-4 gap-4 mb-4">
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">총 키워드</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.website.total || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">노출 지점</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.website.visible || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">이탈 지점</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.website.dropped || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">미점유 지점</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.website.missing || '—' }}</div>
-                  </div>
-                </div>
-                <p v-if="data.website.summary" class="text-sm text-slate-700 leading-relaxed mb-4">{{ data.website.summary }}</p>
-                <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-                  <template v-if="data.website.visibleList">
-                    <dt class="text-slate-400 shrink-0">현재 노출 지점</dt>
-                    <dd class="text-slate-700 whitespace-pre-wrap">{{ data.website.visibleList }}</dd>
-                  </template>
-                  <template v-if="data.website.response">
-                    <dt class="text-slate-400 shrink-0">대응 중</dt>
-                    <dd class="text-slate-700">{{ data.website.response }}</dd>
-                  </template>
-                  <template v-if="data.website.link">
-                    <dt class="text-slate-400 shrink-0">원본 링크</dt>
-                    <dd class="text-slate-700">
-                      <a :href="data.website.link" target="_blank" rel="noopener" class="text-blue-600 hover:underline">링크</a>
-                    </dd>
-                  </template>
-                </dl>
-                <div v-if="data.website.images.length > 0" class="mt-3 grid grid-cols-4 gap-2">
-                  <img
-                    v-for="img in data.website.images"
-                    :key="img"
-                    :src="resolveImageUrl(img)"
-                    class="w-full h-24 object-cover rounded border border-slate-100 cursor-pointer"
-                    @click="openImagePreview(img)"
-                  />
-                </div>
-              </section>
-
-              <!-- §4 블로그 상위노출 -->
-              <section
-                :ref="(el) => { resultSectionRefs['blogExposure'] = el as HTMLElement }"
-                class="px-10 py-8"
-              >
-                <div class="flex items-baseline gap-3 mb-4">
-                  <span class="text-sm font-bold text-slate-400">04</span>
-                  <h3 class="text-base font-bold text-slate-800">블로그 상위노출</h3>
-                </div>
-                <div class="grid grid-cols-3 gap-4 mb-4">
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">총 키워드</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.blogExposure.total || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">노출</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.blogExposure.visible || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">이탈</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.blogExposure.dropped || '—' }}</div>
-                  </div>
-                </div>
-                <p v-if="data.blogExposure.summary" class="text-sm text-slate-700 leading-relaxed mb-4">{{ data.blogExposure.summary }}</p>
-                <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-                  <template v-if="data.blogExposure.response">
-                    <dt class="text-slate-400 shrink-0">대응 중</dt>
-                    <dd class="text-slate-700">{{ data.blogExposure.response }}</dd>
-                  </template>
-                  <template v-if="data.blogExposure.link">
-                    <dt class="text-slate-400 shrink-0">원본 링크</dt>
-                    <dd class="text-slate-700">
-                      <a :href="data.blogExposure.link" target="_blank" rel="noopener" class="text-blue-600 hover:underline">링크</a>
-                    </dd>
-                  </template>
-                </dl>
-                <div v-if="data.blogExposure.images.length > 0" class="mt-3 grid grid-cols-4 gap-2">
-                  <img
-                    v-for="img in data.blogExposure.images"
-                    :key="img"
-                    :src="resolveImageUrl(img)"
-                    class="w-full h-24 object-cover rounded border border-slate-100 cursor-pointer"
-                    @click="openImagePreview(img)"
-                  />
-                </div>
-              </section>
-
-              <!-- §5 함께찾는 -->
-              <section
-                :ref="(el) => { resultSectionRefs['related'] = el as HTMLElement }"
-                class="px-10 py-8"
-              >
-                <div class="flex items-baseline gap-3 mb-4">
-                  <span class="text-sm font-bold text-slate-400">05</span>
-                  <h3 class="text-base font-bold text-slate-800">함께 많이 찾는</h3>
-                </div>
-                <div class="grid grid-cols-4 gap-4 mb-4">
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">총 키워드</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.related.total || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">생성</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.related.created || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">이탈</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.related.dropped || '—' }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] text-slate-500 mb-0.5">신규</div>
-                    <div class="text-xl font-semibold text-slate-800 tabular-nums">{{ data.related.newCount || '—' }}</div>
-                  </div>
-                </div>
-                <p v-if="data.related.summary" class="text-sm text-slate-700 leading-relaxed mb-4">{{ data.related.summary }}</p>
-                <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
-                  <template v-if="data.related.keywords">
-                    <dt class="text-slate-400 shrink-0">생성 키워드</dt>
-                    <dd class="text-slate-700 whitespace-pre-wrap">{{ data.related.keywords }}</dd>
-                  </template>
-                  <template v-if="data.related.response">
-                    <dt class="text-slate-400 shrink-0">대응 중</dt>
-                    <dd class="text-slate-700">{{ data.related.response }}</dd>
-                  </template>
-                  <template v-if="data.related.link">
-                    <dt class="text-slate-400 shrink-0">원본 링크</dt>
-                    <dd class="text-slate-700">
-                      <a :href="data.related.link" target="_blank" rel="noopener" class="text-blue-600 hover:underline">링크</a>
-                    </dd>
-                  </template>
-                </dl>
-                <div v-if="data.related.images.length > 0" class="mt-3 grid grid-cols-4 gap-2">
-                  <img
-                    v-for="img in data.related.images"
-                    :key="img"
-                    :src="resolveImageUrl(img)"
-                    class="w-full h-24 object-cover rounded border border-slate-100 cursor-pointer"
-                    @click="openImagePreview(img)"
-                  />
-                </div>
-              </section>
-
-            </div>
-
-            <!-- Footer -->
-            <footer class="px-10 py-4 border-t border-slate-100 text-[10px] text-slate-400 tabular-nums">
-              Generated · {{ generatedAtLabel }}
-            </footer>
-
-          </article>
-        </div>
-      </div>
+      <ResultContent
+        v-if="tab === 'result'"
+        :title="title"
+        :period-label="periodLabel"
+        :data="data"
+      />
 
     </div>
   </div>
+
+  <!-- ── 공유 모달 ── -->
+  <Teleport to="body">
+    <div v-if="showShareModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="showShareModal = false">
+      <div class="bg-white rounded-lg shadow-xl p-5 w-[480px] max-w-[90vw]">
+        <h3 class="text-sm font-bold text-slate-800 mb-1">공유 링크</h3>
+        <p class="text-[10px] text-slate-400 mb-3">링크를 받은 사람은 로그인 없이 이 보고서를 볼 수 있습니다.</p>
+
+        <div class="flex gap-2">
+          <input :value="fullShareUrl" readonly
+            class="flex-1 text-xs px-2 py-1.5 border border-slate-200 rounded bg-slate-50 text-slate-700 tabular-nums select-all" />
+          <button @click="copyShareUrl"
+            class="text-xs px-3 py-1.5 rounded bg-slate-800 text-white hover:bg-slate-700 shrink-0">
+            {{ copied ? '복사됨' : '복사' }}
+          </button>
+        </div>
+
+        <div class="flex justify-end pt-3 mt-3 border-t border-slate-100">
+          <button @click="showShareModal = false"
+            class="text-xs px-3 py-1.5 rounded border border-slate-300 text-slate-600 hover:bg-slate-50">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 
   <!-- ── 불러오기 모달 ── -->
   <Teleport to="body">

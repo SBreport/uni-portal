@@ -281,6 +281,17 @@ def _get_realtime_webpage(conn, target_date: str) -> dict:
     }
 
 
+@router.get("/public/{week_start}")
+async def get_public_report(week_start: str):
+    """주차 월요일 날짜 기반 공개 조회. 인증 없음. 영구 유효."""
+    _validate_monday(week_start)
+    from reports.db import get_report
+    report = get_report(week_start)
+    if not report:
+        raise HTTPException(404, "보고서를 찾을 수 없습니다.")
+    return report
+
+
 @router.get("/dashboard")
 async def get_dashboard(
     user: dict = Depends(get_current_user),

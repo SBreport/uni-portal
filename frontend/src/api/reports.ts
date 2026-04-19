@@ -108,3 +108,8 @@ export const uploadReportImage = (
 
 export const deleteReportImage = (weekStart: string, path: string) =>
   api.delete(`/reports/weekly/${weekStart}/images`, { params: { path } })
+
+// 공개 조회는 axios client의 기본 interceptor가 토큰을 붙이지만,
+// 백엔드 /public/{week_start}은 인증 헤더를 무시하므로 같은 인스턴스 사용 가능
+export const getPublicReport = (weekStart: string) =>
+  api.get<WeeklyReport>(`/reports/public/${weekStart}`)

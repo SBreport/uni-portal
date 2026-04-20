@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { getWeeklyReport, updateWeeklyReport, deleteWeeklyReport, uploadReportImage, deleteReportImage } from '@/api/reports'
+import { getWeeklyReport, updateWeeklyReport, deleteWeeklyReport, uploadReportImage, deleteReportImage, autofillWeeklyReport } from '@/api/reports'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { mergeReportData, createEmptyReportData, type ReportData } from './reportSchema'
 import { parseWeeklyReportText } from './parseWeeklyReportText'
@@ -43,6 +43,11 @@ const lastSavedLabel = ref('')
 
 // 자동저장 트리거 플래그
 let watchActive = false
+
+// 자동 채우기 상태
+const autofillLoading = ref(false)
+const autofillToast = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
 
 // ── 날짜 유틸 ──
 function formatPeriod(start: string, end: string): string {
@@ -137,7 +142,59 @@ onMounted(() => {
 import { onUnmounted } from 'vue'
 onUnmounted(() => {
   if (labelTimer) clearInterval(labelTimer)
+  if (toastTimer) clearTimeout(toastTimer)
 })
+
+// ── 자동 채우기 ──
+async function handleAutofill() {
+  if (!canEdit.value || autofillLoading.value) return
+  autofillLoading.value = true
+  try {
+    const res = await autofillWeeklyReport(props.weekStart)
+    watchActive = false
+    data.value = mergeReportData(res.data.data ?? {})
+    setTimeout(() => { watchActive = true }, 50)
+    showToast('자동 채우기 완료')
+  } catch {
+    showToast('자동 채우기 실패')
+  } finally {
+    autofillLoading.value = false
+  }
+}
+
+function showToast(msg: string) {
+  autofillToast.value = msg
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { autofillToast.value = '' }, 2500)
+}
+
+// ── override 처리 ──
+function setOverride(section: string, field: string, value: string) {
+  const sec = (data.value as any)[section]
+  sec[field] = value
+  sec[`${field}_override`] = value
+}
+
+function clearOverride(section: string, field: string) {
+  const sec = (data.value as any)[section]
+  sec[`${field}_override`] = null
+  sec[field] = sec[`${field}_auto`] ?? ''
+}
+
+function hasAuto(section: string, field: string): boolean {
+  return (data.value as any)[section]?.[`${field}_auto`] !== undefined
+}
+
+function isOverridden(section: string, field: string): boolean {
+  const v = (data.value as any)[section]?.[`${field}_override`]
+  return v !== null && v !== undefined
+}
+
+function autoUpdatedAt(section: string): string {
+  const ts = (data.value as any)[section]?.auto_updated_at
+  if (!ts) return ''
+  return ts.slice(0, 16).replace('T', ' ')
+}
 
 // ── 삭제 ──
 async function handleDelete() {
@@ -344,6 +401,14 @@ function openImagePreview(path: string) {
           <template v-else-if="saveState === 'saved'">{{ lastSavedLabel }}</template>
         </span>
 
+        <!-- 자동 채우기 (editor 이상, 작성 탭) -->
+        <button
+          v-if="canEdit && tab === 'write'"
+          @click="handleAutofill"
+          :disabled="autofillLoading"
+          class="text-[10px] text-slate-500 hover:text-slate-800 shrink-0 px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50"
+        >{{ autofillLoading ? '집계 중...' : '자동 채우기' }}</button>
+
         <!-- 불러오기 (editor 이상, 작성 탭일 때) -->
         <button
           v-if="canEdit && tab === 'write'"
@@ -366,7 +431,7 @@ function openImagePreview(path: string) {
         >삭제</button>
       </div>
 
-      <!-- 2행: 기간 + 안내 -->
+      <!-- 2행: 기간 + 안내 + 토스트 -->
       <div class="px-5 pb-2 flex items-center gap-2 text-[10px]">
         <span v-if="periodLabel" class="text-slate-400 tabular-nums shrink-0">
           기간: {{ periodLabel }}
@@ -381,6 +446,7 @@ function openImagePreview(path: string) {
             class="flex-1 min-w-0 border-0 outline-none bg-transparent text-slate-500 placeholder:text-slate-300 disabled:text-slate-400"
           />
         </label>
+        <span v-if="autofillToast" class="text-[10px] text-blue-500 shrink-0">{{ autofillToast }}</span>
       </div>
     </div>
 
@@ -504,23 +570,79 @@ function openImagePreview(path: string) {
               >{{ collapsed.place ? '▶' : '▼' }}</button>
             </div>
             <div v-show="!collapsed.place" class="p-4 space-y-3">
+              <!-- 자동 집계 시각 -->
+              <div v-if="autoUpdatedAt('place')" class="text-[9px] text-slate-400 -mt-1">
+                자동 집계: {{ autoUpdatedAt('place') }}
+              </div>
               <!-- 지표 4개 -->
               <div class="grid grid-cols-4 gap-2">
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">총 지점 수</label>
-                  <input v-model="data.place.total" :disabled="!canEdit" type="text" placeholder="0" :class="inputCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">총 지점 수</label>
+                    <span v-if="hasAuto('place','total') && !isOverridden('place','total')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('place','total')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('place','total')" @click="clearOverride('place','total')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <input
+                    :value="data.place.total"
+                    @input="setOverride('place', 'total', ($event.target as HTMLInputElement).value)"
+                    :disabled="!canEdit"
+                    type="text" placeholder="0" :class="inputCls"
+                  />
                 </div>
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">점유 지점 수</label>
-                  <input v-model="data.place.occupied" :disabled="!canEdit" type="text" placeholder="0" :class="inputCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">점유 지점 수</label>
+                    <span v-if="hasAuto('place','occupied') && !isOverridden('place','occupied')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('place','occupied')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('place','occupied')" @click="clearOverride('place','occupied')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <input
+                    :value="data.place.occupied"
+                    @input="setOverride('place', 'occupied', ($event.target as HTMLInputElement).value)"
+                    :disabled="!canEdit"
+                    type="text" placeholder="0" :class="inputCls"
+                  />
                 </div>
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">이탈 지점 수</label>
-                  <input v-model="data.place.dropped" :disabled="!canEdit" type="text" placeholder="0" :class="inputCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">이탈 지점 수</label>
+                    <span v-if="hasAuto('place','dropped') && !isOverridden('place','dropped')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('place','dropped')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('place','dropped')" @click="clearOverride('place','dropped')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <input
+                    :value="data.place.dropped"
+                    @input="setOverride('place', 'dropped', ($event.target as HTMLInputElement).value)"
+                    :disabled="!canEdit"
+                    type="text" placeholder="0" :class="inputCls"
+                  />
                 </div>
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">휴식 지점 수</label>
-                  <input v-model="data.place.paused" :disabled="!canEdit" type="text" placeholder="0" :class="inputCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">휴식 지점 수</label>
+                    <span v-if="hasAuto('place','paused') && !isOverridden('place','paused')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('place','paused')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('place','paused')" @click="clearOverride('place','paused')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <input
+                    :value="data.place.paused"
+                    @input="setOverride('place', 'paused', ($event.target as HTMLInputElement).value)"
+                    :disabled="!canEdit"
+                    type="text" placeholder="0" :class="inputCls"
+                  />
                 </div>
               </div>
               <!-- 대응 -->
@@ -536,18 +658,42 @@ function openImagePreview(path: string) {
               <!-- 목록 텍스트 영역 -->
               <div class="grid grid-cols-2 gap-2">
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">이탈 지점 목록</label>
-                  <textarea v-model="data.place.droppedList" :disabled="!canEdit" rows="3" :class="textareaCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">이탈 지점 목록</label>
+                    <span v-if="hasAuto('place','droppedList') && !isOverridden('place','droppedList')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('place','droppedList')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('place','droppedList')" @click="clearOverride('place','droppedList')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <textarea
+                    :value="data.place.droppedList"
+                    @input="setOverride('place', 'droppedList', ($event.target as HTMLTextAreaElement).value)"
+                    :disabled="!canEdit" rows="3" :class="textareaCls"
+                  />
                 </div>
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">신규 지점 목록</label>
+                  <label class="block text-[10px] text-slate-500 mb-1">미점유 지점 목록</label>
                   <textarea v-model="data.place.newList" :disabled="!canEdit" rows="3" :class="textareaCls" />
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-2">
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">휴식 지점 목록</label>
-                  <textarea v-model="data.place.pausedList" :disabled="!canEdit" rows="3" :class="textareaCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">휴식 지점 목록</label>
+                    <span v-if="hasAuto('place','pausedList') && !isOverridden('place','pausedList')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('place','pausedList')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('place','pausedList')" @click="clearOverride('place','pausedList')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <textarea
+                    :value="data.place.pausedList"
+                    @input="setOverride('place', 'pausedList', ($event.target as HTMLTextAreaElement).value)"
+                    :disabled="!canEdit" rows="3" :class="textareaCls"
+                  />
                 </div>
                 <div>
                   <label class="block text-[10px] text-slate-500 mb-1">작업 코멘트</label>
@@ -593,23 +739,79 @@ function openImagePreview(path: string) {
               >{{ collapsed.website ? '▶' : '▼' }}</button>
             </div>
             <div v-show="!collapsed.website" class="p-4 space-y-3">
+              <!-- 자동 집계 시각 -->
+              <div v-if="autoUpdatedAt('website')" class="text-[9px] text-slate-400 -mt-1">
+                자동 집계: {{ autoUpdatedAt('website') }}
+              </div>
               <!-- 지표 4개 -->
               <div class="grid grid-cols-4 gap-2">
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">총 키워드 수</label>
-                  <input v-model="data.website.total" :disabled="!canEdit" type="text" placeholder="0" :class="inputCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">총 키워드 수</label>
+                    <span v-if="hasAuto('website','total') && !isOverridden('website','total')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('website','total')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('website','total')" @click="clearOverride('website','total')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <input
+                    :value="data.website.total"
+                    @input="setOverride('website', 'total', ($event.target as HTMLInputElement).value)"
+                    :disabled="!canEdit"
+                    type="text" placeholder="0" :class="inputCls"
+                  />
                 </div>
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">노출 지점 수</label>
-                  <input v-model="data.website.visible" :disabled="!canEdit" type="text" placeholder="0" :class="inputCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">노출 지점 수</label>
+                    <span v-if="hasAuto('website','visible') && !isOverridden('website','visible')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('website','visible')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('website','visible')" @click="clearOverride('website','visible')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <input
+                    :value="data.website.visible"
+                    @input="setOverride('website', 'visible', ($event.target as HTMLInputElement).value)"
+                    :disabled="!canEdit"
+                    type="text" placeholder="0" :class="inputCls"
+                  />
                 </div>
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">이탈 지점 수</label>
-                  <input v-model="data.website.dropped" :disabled="!canEdit" type="text" placeholder="0" :class="inputCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">이탈 지점 수</label>
+                    <span v-if="hasAuto('website','dropped') && !isOverridden('website','dropped')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('website','dropped')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('website','dropped')" @click="clearOverride('website','dropped')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <input
+                    :value="data.website.dropped"
+                    @input="setOverride('website', 'dropped', ($event.target as HTMLInputElement).value)"
+                    :disabled="!canEdit"
+                    type="text" placeholder="0" :class="inputCls"
+                  />
                 </div>
                 <div>
-                  <label class="block text-[10px] text-slate-500 mb-1">미점유 지점 수</label>
-                  <input v-model="data.website.missing" :disabled="!canEdit" type="text" placeholder="0" :class="inputCls" />
+                  <div class="flex items-center gap-1 mb-1">
+                    <label class="text-[10px] text-slate-500">미점유 지점 수</label>
+                    <span v-if="hasAuto('website','missing') && !isOverridden('website','missing')"
+                      class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                    <span v-if="isOverridden('website','missing')"
+                      class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                    <button v-if="isOverridden('website','missing')" @click="clearOverride('website','missing')"
+                      class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                  </div>
+                  <input
+                    :value="data.website.missing"
+                    @input="setOverride('website', 'missing', ($event.target as HTMLInputElement).value)"
+                    :disabled="!canEdit"
+                    type="text" placeholder="0" :class="inputCls"
+                  />
                 </div>
               </div>
               <!-- 대응 -->
@@ -624,8 +826,20 @@ function openImagePreview(path: string) {
               </div>
               <!-- 현재 노출 지점 -->
               <div>
-                <label class="block text-[10px] text-slate-500 mb-1">현재 노출 지점</label>
-                <textarea v-model="data.website.visibleList" :disabled="!canEdit" rows="3" :class="textareaCls" />
+                <div class="flex items-center gap-1 mb-1">
+                  <label class="text-[10px] text-slate-500">현재 노출 지점</label>
+                  <span v-if="hasAuto('website','visibleList') && !isOverridden('website','visibleList')"
+                    class="text-[9px] px-1 rounded bg-sky-50 text-sky-600 border border-sky-200">자동</span>
+                  <span v-if="isOverridden('website','visibleList')"
+                    class="text-[9px] px-1 rounded bg-amber-50 text-amber-600 border border-amber-200">수정됨</span>
+                  <button v-if="isOverridden('website','visibleList')" @click="clearOverride('website','visibleList')"
+                    class="text-[9px] text-slate-400 hover:text-red-500 underline">되돌리기</button>
+                </div>
+                <textarea
+                  :value="data.website.visibleList"
+                  @input="setOverride('website', 'visibleList', ($event.target as HTMLTextAreaElement).value)"
+                  :disabled="!canEdit" rows="3" :class="textareaCls"
+                />
               </div>
               <!-- 링크 -->
               <div>

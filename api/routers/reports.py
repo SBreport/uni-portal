@@ -80,9 +80,9 @@ async def create_weekly(
     """신규 주간 보고서 생성 (editor+)."""
     monday = _validate_monday(body.week_start)
     sunday = monday + timedelta(days=6)
-    from reports.db import create_report
+    from reports.db import create_report, update_report
     try:
-        return create_report(
+        created = create_report(
             week_start=monday.isoformat(),
             week_end=sunday.isoformat(),
             title=body.title or "",
@@ -91,6 +91,16 @@ async def create_weekly(
         )
     except sqlite3.IntegrityError:
         raise HTTPException(409, f"{monday.isoformat()} 주차 보고서가 이미 존재합니다.")
+
+    # 생성 직후 자동 집계 (실패해도 보고서 생성은 유지)
+    try:
+        from reports.autofill import compute_autofill
+        auto = compute_autofill(monday.isoformat(), sunday.isoformat())
+        merged_data = _apply_autofill((created.get("data") or {}).copy(), auto)
+        created = update_report(monday.isoformat(), None, merged_data)
+    except Exception:
+        pass
+    return created
 
 
 @router.put("/weekly/{week_start}")
@@ -119,6 +129,44 @@ async def delete_weekly(
     if not delete_report(week_start):
         raise HTTPException(404, f"{week_start} 주차 보고서가 없습니다.")
     return {"deleted": week_start}
+
+
+# ── autofill 헬퍼 ─────────────────────────────────────────────────────────────
+
+def _apply_autofill(data: dict, auto: dict) -> dict:
+    """auto 값을 data_json에 병합. _override 필드는 건드리지 않음."""
+    for section_key, section_auto in auto.items():
+        section = data.setdefault(section_key, {})
+        for field_key, auto_val in section_auto.items():
+            section[field_key] = auto_val  # _auto 또는 auto_updated_at 저장
+            if field_key.endswith("_auto"):
+                base = field_key[:-5]  # "total_auto" → "total"
+                override = section.get(f"{base}_override")
+                # override가 None 또는 빈 문자열이면 auto 사용
+                section[base] = override if (override is not None and override != "") else auto_val
+    return data
+
+
+@router.post("/weekly/{week_start}/autofill")
+async def autofill_weekly(
+    week_start: str,
+    user: dict = Depends(require_role("editor")),
+):
+    """해당 주차 자동 집계값 계산 및 저장. _override 필드는 유지."""
+    d = _validate_monday(week_start)
+    week_end = (d + timedelta(days=6)).isoformat()
+
+    from reports.db import get_report, update_report
+    from reports.autofill import compute_autofill
+
+    report = get_report(week_start)
+    if not report:
+        raise HTTPException(404, f"{week_start} 주차 보고서가 없습니다.")
+
+    auto = compute_autofill(week_start, week_end)
+    data = _apply_autofill(report["data"], auto)
+    updated = update_report(week_start, None, data)
+    return updated
 
 
 # ── 이미지 업로드/삭제 ─────────────────────────────────────────────────────────

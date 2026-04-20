@@ -113,3 +113,6 @@ export const deleteReportImage = (weekStart: string, path: string) =>
 // 백엔드 /public/{week_start}은 인증 헤더를 무시하므로 같은 인스턴스 사용 가능
 export const getPublicReport = (weekStart: string) =>
   api.get<WeeklyReport>(`/reports/public/${weekStart}`)
+
+export const autofillWeeklyReport = (weekStart: string) =>
+  api.post<WeeklyReport>(`/reports/weekly/${weekStart}/autofill`)

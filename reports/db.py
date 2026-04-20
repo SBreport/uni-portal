@@ -34,8 +34,21 @@ def _ensure_tables():
         conn.close()
 
 
+def _ensure_is_paused_column():
+    """evt_branches.is_paused 컬럼 보장 (SQLite는 IF NOT EXISTS 미지원)."""
+    conn = sqlite3.connect(EQUIPMENT_DB)
+    try:
+        conn.execute("ALTER TABLE evt_branches ADD COLUMN is_paused INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # 이미 존재하면 무시
+    finally:
+        conn.close()
+
+
 # 모듈 import 시점에 테이블 보장
 _ensure_tables()
+_ensure_is_paused_column()
 
 
 def list_reports(limit: Optional[int] = None) -> list[dict]:

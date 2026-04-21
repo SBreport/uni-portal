@@ -166,6 +166,13 @@ async def get_ranking_daily(
         """, (target_year, target_month)).fetchall()
         nosul_db = {r["branch_name"]: r["nosul_count"] for r in nosul_rows}
 
+        # short_name 맵 (evt_branches.id → short_name)
+        short_name_map = {
+            r[0]: r[1] for r in conn.execute(
+                "SELECT id, short_name FROM evt_branches WHERE short_name IS NOT NULL AND short_name != ''"
+            ).fetchall()
+        }
+
         # paused 맵 로드 — resolver 기반 (가장 긴 short_name 우선 매칭)
         paused_ids = {
             r[0] for r in conn.execute(
@@ -310,6 +317,7 @@ async def get_ranking_daily(
             result.append({
                 "branch": bname,
                 "branch_id": bid,
+                "short_name": short_name_map.get(bid),
                 "keyword": kw,
                 "today_rank": today_rank,
                 "today_success": today_exposed,
@@ -565,6 +573,13 @@ async def get_ranking_from_db(
             ORDER BY branch_name, date
         """, (date_from, date_to)).fetchall()
 
+        # short_name 맵 (evt_branches.id → short_name)
+        short_name_map_m = {
+            r[0]: r[1] for r in conn.execute(
+                "SELECT id, short_name FROM evt_branches WHERE short_name IS NOT NULL AND short_name != ''"
+            ).fetchall()
+        }
+
         # paused 맵 로드 — resolver 기반 (가장 긴 short_name 우선 매칭)
         paused_ids_m = {
             r[0] for r in conn.execute(
@@ -584,9 +599,11 @@ async def get_ranking_from_db(
         for r in rows:
             bname = r["branch_name"]
             if bname not in branches:
+                bid_m = r["branch_id"]
                 branches[bname] = {
                     "branch": bname,
-                    "branch_id": r["branch_id"],
+                    "branch_id": bid_m,
+                    "short_name": short_name_map_m.get(bid_m),
                     "keyword": r["keyword"],
                     "daily": [],
                 }

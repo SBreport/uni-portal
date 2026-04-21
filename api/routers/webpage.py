@@ -137,6 +137,13 @@ async def get_ranking_daily(
             ORDER BY branch_name, date
         """, (range_from, range_to)).fetchall()
 
+        # short_name 맵 (evt_branches.id → short_name)
+        short_name_map = {
+            r[0]: r[1] for r in conn.execute(
+                "SELECT id, short_name FROM evt_branches WHERE short_name IS NOT NULL AND short_name != ''"
+            ).fetchall()
+        }
+
         branches: dict = {}
         for r in rows:
             bname = r["branch_name"]
@@ -271,6 +278,7 @@ async def get_ranking_daily(
             result.append({
                 "branch": bname,
                 "branch_id": bid,
+                "short_name": short_name_map.get(bid),
                 "keyword": kw,
                 "today_exposed": today_exposed,
                 "streak": streak,
@@ -489,14 +497,23 @@ async def get_ranking_from_db(
             ORDER BY branch_name, date
         """, (date_from, date_to)).fetchall()
 
+        # short_name 맵 (evt_branches.id → short_name)
+        short_name_map_m = {
+            r[0]: r[1] for r in conn.execute(
+                "SELECT id, short_name FROM evt_branches WHERE short_name IS NOT NULL AND short_name != ''"
+            ).fetchall()
+        }
+
         # 지점별 그룹핑
         branches: dict = {}
         for r in rows:
             bname = r["branch_name"]
             if bname not in branches:
+                bid_m = r["branch_id"]
                 branches[bname] = {
                     "branch": bname,
-                    "branch_id": r["branch_id"],
+                    "branch_id": bid_m,
+                    "short_name": short_name_map_m.get(bid_m),
                     "keyword": r["keyword"],
                     "daily": [],
                 }

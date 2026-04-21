@@ -79,7 +79,8 @@ def get_evt_branch_id(conn, query: str) -> int | None:
     if row:
         return row[0]
 
-    # 4. 부분매칭 (홍대 → 홍대신촌점)
+    # 4. 의도적 퍼지 검색 — raw 파싱 텍스트("홍대점" 등) 폴백용.
+    #    정제된 branch_name 해석에는 shared.branch_resolver.resolve_evt_branch_id 사용.
     c.execute("SELECT id FROM evt_branches WHERE name LIKE ? OR short_name LIKE ?",
               (f"%{q_no_suffix}%", f"%{q_no_suffix}%"))
     row = c.fetchone()

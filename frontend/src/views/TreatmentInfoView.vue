@@ -14,7 +14,12 @@ const auth = useAuthStore()
 const isInternal = computed(() => auth.role === 'admin' || auth.role === 'editor')
 
 // ── 탭: 시술카탈로그 / 시술논문 ──
-const activeTab = ref<'encyclopedia' | 'catalog' | 'papers'>('encyclopedia')
+const activeTab = ref<'encyclopedia' | 'catalog' | 'papers'>(
+  (route.query.tab as any) === 'catalog' || (route.query.tab as any) === 'papers'
+    ? (route.query.tab as any) : 'encyclopedia'
+)
+
+const externalEq = ref<string | undefined>(undefined)
 const tabs = [
   { key: 'encyclopedia', label: '시술백과' },
   { key: 'catalog', label: '시술카탈로그' },
@@ -177,17 +182,31 @@ function handlePopState() {
   }
 }
 
+async function applyRouteQuery() {
+  const eq = route.query.eq as string | undefined
+  const q = route.query.q as string | undefined
+  const tab = route.query.tab as string | undefined
+
+  if (eq && activeTab.value === 'encyclopedia') {
+    externalEq.value = eq
+    router.replace({ path: route.path })
+  } else if (q && !externalHandled.value) {
+    externalHandled.value = true
+    activeTab.value = 'catalog'
+    await searchByName(q)
+    router.replace({ path: route.path })
+  } else if (tab && tab !== activeTab.value) {
+    activeTab.value = tab as any
+  }
+}
+
 onMounted(async () => {
   window.addEventListener('popstate', handlePopState)
   loadCatalog()
-  // 외부에서 쿼리 파라미터로 진입 (지점정보 → 크로스체크)
-  if (route.query.q && !externalHandled.value) {
-    const q = route.query.q as string
-    externalHandled.value = true
-    await searchByName(q)
-    router.replace({ path: route.path })
-  }
+  await applyRouteQuery()
 })
+
+watch(() => route.query, () => { applyRouteQuery() })
 
 onUnmounted(() => {
   window.removeEventListener('popstate', handlePopState)
@@ -202,7 +221,7 @@ onUnmounted(() => {
     <TabBar :model-value="activeTab" :tabs="tabs" @update:model-value="(v) => { activeTab = v as any; viewMode = 'list' }" />
 
     <!-- ========== 시술백과 탭 ========== -->
-    <EncyclopediaView v-if="activeTab === 'encyclopedia'" />
+    <EncyclopediaView v-if="activeTab === 'encyclopedia'" :external-equipment="externalEq" @equipment-handled="externalEq = undefined" />
 
     <!-- ========== 시술카탈로그 탭 ========== -->
     <div v-if="activeTab === 'catalog'">

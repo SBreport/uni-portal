@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import * as encApi from '@/api/encyclopedia'
 import TabBar from '@/components/common/TabBar.vue'
+import { stripBrand } from '@/utils/branchName'
+
+const props = defineProps<{ externalEquipment?: string }>()
+const emit = defineEmits<{ (e: 'equipment-handled'): void }>()
 
 const auth = useAuthStore()
 const isAdmin = computed(() => auth.role === 'admin')
@@ -21,6 +25,7 @@ const purposes = ref<any[]>([])
 const bodyParts = ref<any[]>([])
 const equipmentList = ref<any[]>([])
 const loading = ref(false)
+const notFoundHint = ref<string>('')
 
 // ── 상세 데이터 ──
 type DetailMode = 'list' | 'detail'
@@ -160,7 +165,60 @@ async function handleApproveAll() {
   finally { approving.value = false }
 }
 
-onMounted(() => { loadLists(); loadPendingSummary() })
+function normalizeEqName(s: string) {
+  return s.trim().normalize('NFC').toLowerCase()
+}
+
+async function handleExternalEquipment(name: string | undefined) {
+  if (!name) return
+  activeTab.value = 'equipment'
+  const target = normalizeEqName(name)
+
+  // 1차: 정확 매칭 (정규화)
+  let matched = equipmentList.value.find((eq: any) => normalizeEqName(eq.name) === target)
+
+  // 2차: 부분 매칭 (양방향 includes) — equipment.name variant 대응
+  if (!matched) {
+    matched = equipmentList.value.find((eq: any) => {
+      const a = normalizeEqName(eq.name)
+      return a.includes(target) || target.includes(a)
+    })
+  }
+
+  if (matched) {
+    notFoundHint.value = ''
+    await openEquipment(matched.name)
+    emit('equipment-handled')
+    return
+  }
+
+  // 3차: 서버 직접 호출 (equipmentList가 아직 로드 전이거나 tag에 없는 경우 대응)
+  try {
+    const { data } = await encApi.getByEquipment(name)
+    const hasContent = data && (
+      data.body_parts?.length || data.purposes?.length ||
+      data.branches?.length || data.device_info
+    )
+    if (hasContent) {
+      notFoundHint.value = ''
+      detailTitle.value = name
+      detailType.value = 'equipment'
+      detailData.value = data
+      mode.value = 'detail'
+      emit('equipment-handled')
+      return
+    }
+  } catch { /* ignore, fall through */ }
+
+  // 최종: 진짜 매칭 실패
+  notFoundHint.value = name
+  mode.value = 'list'
+  detailData.value = null
+  emit('equipment-handled')
+}
+
+onMounted(async () => { await loadLists(); loadPendingSummary(); await handleExternalEquipment(props.externalEquipment) })
+watch(() => props.externalEquipment, (v) => { handleExternalEquipment(v) })
 </script>
 
 <template>
@@ -201,6 +259,9 @@ onMounted(() => { loadLists(); loadPendingSummary() })
 
       <!-- ═══ 장비별 ═══ -->
       <template v-else-if="activeTab === 'equipment'">
+        <p v-if="notFoundHint" class="text-xs text-amber-600 mb-2">
+          '{{ notFoundHint }}'과(와) 일치하는 장비 정보를 찾지 못했습니다. 아래 목록에서 선택해주세요.
+        </p>
         <div class="space-y-1">
           <button v-for="eq in equipmentList" :key="eq.name" @click="openEquipment(eq.name)"
             class="w-full flex items-center gap-3 px-4 py-2.5 bg-white border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/50 transition text-left">
@@ -320,7 +381,7 @@ onMounted(() => { loadLists(); loadPendingSummary() })
           <div class="flex flex-wrap gap-1">
             <span v-for="b in detailData.branches" :key="b.branch_name"
               class="px-2 py-0.5 text-[11px] bg-green-50 border border-green-200 rounded text-green-700">
-              {{ b.branch_name?.replace('유앤아이', '') }}
+              {{ stripBrand(b.branch_name) }}
             </span>
           </div>
         </div>

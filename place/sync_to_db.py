@@ -4,6 +4,10 @@ import logging
 from datetime import date
 
 from shared.db import get_conn, EQUIPMENT_DB
+from shared.branch_resolver import resolve_evt_branch_id
+
+# 수동 매핑은 evt_branches.aliases 컬럼으로 이전됨 (resolver가 자동 처리).
+# 신규 별칭이 필요하면: UPDATE evt_branches SET aliases = '["..."]' WHERE id = ?
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +70,7 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
                 keyword = b.get("keyword", "")
                 daily = b.get("daily", [])
 
-                row = conn.execute(
-                    "SELECT id FROM evt_branches WHERE name = ?", (branch_name,)
-                ).fetchone()
-                branch_id = row["id"] if row else 0
+                branch_id = resolve_evt_branch_id(conn, branch_name) or 0
 
                 # is_paused: 시트 short_name 매칭으로 나중에 일괄 반영
                 paused_flags[branch_name] = 1 if b.get("is_paused") else 0
@@ -84,9 +85,9 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
 
                     conn.execute("""
                         INSERT OR REPLACE INTO place_daily
-                        (date, branch_id, branch_name, keyword, is_exposed, rank, source)
-                        VALUES (?, ?, ?, ?, ?, ?, 'sheets')
-                    """, (date_str, branch_id, branch_name, keyword, is_exposed, rank))
+                        (date, branch_id, branch_name, keyword, is_exposed, rank, source, evt_branch_id)
+                        VALUES (?, ?, ?, ?, ?, ?, 'sheets', ?)
+                    """, (date_str, branch_id, branch_name, keyword, is_exposed, rank, branch_id))
                     total_inserted += 1
 
             sheets_processed += 1

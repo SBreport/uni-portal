@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import * as rcApi from '@/api/rankChecker'
+import { shortName } from '@/utils/branchName'
 
 const props = defineProps<{ branches: { id: number; name: string }[] }>()
 
@@ -70,9 +71,6 @@ const groupedKeywords = computed(() => {
   return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
 })
 
-function shortName(name: string) {
-  return name.replace('유앤아이', '')
-}
 
 // 등록
 function onBranchSelect() {

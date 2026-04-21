@@ -72,8 +72,9 @@ async def list_equipment(user: dict = Depends(get_current_user)):
             name = r["tag_value"]
             # 보유 지점 수
             branch_cnt = conn.execute("""
-                SELECT COUNT(DISTINCT branch_id) FROM equipment
-                WHERE name LIKE ?
+                SELECT COUNT(DISTINCT e.branch_id) FROM equipment e
+                INNER JOIN evt_branches b ON e.branch_id = b.id
+                WHERE e.name LIKE ?
             """, (f"%{name}%",)).fetchone()[0]
             # device_info 설명
             di = conn.execute("""
@@ -299,11 +300,11 @@ async def get_by_equipment(
             (name, f"%{name}%")
         ).fetchone()
 
-        # 보유 지점
+        # 보유 지점 (orphan 제거 + variant 중복 제거)
         branches = conn.execute("""
-            SELECT e.name as equip_name, b.name as branch_name
+            SELECT DISTINCT b.name as branch_name
             FROM equipment e
-            LEFT JOIN evt_branches b ON e.branch_id = b.id
+            INNER JOIN evt_branches b ON e.branch_id = b.id
             WHERE e.name LIKE ?
             ORDER BY b.name
         """, (f"%{name}%",)).fetchall()
@@ -319,7 +320,7 @@ async def get_by_equipment(
             "device_info": dict(di) if di else None,
             "body_parts": [{"part": r[0], "region": r[1], "count": r[2]} for r in body_rows],
             "purposes": [{"name": r[0], "count": r[1]} for r in purpose_rows],
-            "branches": [{"equip_name": r[0], "branch_name": r[1]} for r in branches],
+            "branches": [{"branch_name": r[0]} for r in branches],
             "price_min": prices["min_p"] if prices else None,
             "price_max": prices["max_p"] if prices else None,
         }

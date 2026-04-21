@@ -44,11 +44,17 @@ def merge_branches(rows) -> list:
     return result
 
 
+# 브랜드 식별 패턴 — 향후 브랜드 추가 시 여기에
+BRAND_PATTERNS = ["유앤아이", "유앤"]
+
+
 # ── 브랜치 필터 WHERE 절 헬퍼 ──
 
 def _bf_clause(branch_filter: str | None, column: str = "branch_name", prefix: str = "AND") -> str:
     if branch_filter == "uandi":
-        return f" {prefix} {column} LIKE '%유앤%'"
+        # BRAND_PATTERNS 기준 OR 결합 퍼지 검색
+        or_clause = " OR ".join(f"{column} LIKE '%{p}%'" for p in BRAND_PATTERNS)
+        return f" {prefix} ({or_clause})"
     return ""
 
 
@@ -65,7 +71,8 @@ def list_posts(*, page: int, per_page: int, channel=None, platform=None,
         params = []
 
         if branch_filter == "uandi":
-            conditions.append("branch_name LIKE '%유앤%'")
+            or_clause = " OR ".join(f"branch_name LIKE '%{p}%'" for p in BRAND_PATTERNS)
+            conditions.append(f"({or_clause})")
         if channel:
             conditions.append("blog_channel = ?")
             params.append(channel)

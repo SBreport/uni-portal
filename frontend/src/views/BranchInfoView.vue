@@ -49,9 +49,13 @@ async function selectBranch(branchId: number) {
   }
 }
 
-function goToCrossref(itemName: string) {
-  // 시술정보 카탈로그의 크로스체크 상세로 이동 (replace로 히스토리 안 쌓음)
-  router.push({ path: '/treatment-info', query: { q: itemName } })
+function goToEquipment(name: string) {
+  if (!name) return
+  router.push({ path: '/treatment-info', query: { tab: 'encyclopedia', eq: name } })
+}
+function goToEvent(eventName: string) {
+  if (!eventName || !branchData.value?.branch_name) return
+  router.push({ path: '/events', query: { branch: branchData.value.branch_name, search: eventName } })
 }
 
 function formatPrice(p: number | null) {
@@ -162,7 +166,7 @@ onMounted(loadBranches)
             >
               <div class="flex items-center gap-2">
                 <span
-                  @click="goToCrossref(eq.name)"
+                  @click="goToEquipment(eq.name)"
                   class="text-slate-700 hover:text-blue-600 cursor-pointer hover:underline"
                 >{{ eq.name }}</span>
                 <span class="text-xs text-slate-400">{{ eq.category }}</span>
@@ -190,7 +194,7 @@ onMounted(loadBranches)
             >
               <div class="flex items-center gap-2 min-w-0">
                 <span
-                  @click="goToCrossref(ev.display_name || ev.raw_event_name)"
+                  @click="goToEvent(ev.display_name || ev.raw_event_name)"
                   class="text-slate-700 hover:text-blue-600 cursor-pointer hover:underline truncate"
                 >{{ ev.display_name || ev.raw_event_name }}</span>
                 <span class="text-xs text-slate-400 shrink-0">{{ ev.category }}</span>

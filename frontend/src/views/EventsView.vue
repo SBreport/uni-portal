@@ -1,17 +1,38 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useEventsStore } from '@/stores/events'
+import { stripBrand } from '@/utils/branchName'
 import DataTable from '@/components/common/DataTable.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
 import { createColumnHelper, type CellContext } from '@tanstack/vue-table'
 import { h } from 'vue'
 
+const route = useRoute()
 const store = useEventsStore()
 const col = createColumnHelper<any>()
 
+async function applyQueryFilters() {
+  const branchQ = route.query.branch as string | undefined
+  const searchQ = route.query.search as string | undefined
+  if (branchQ) {
+    const exact = store.branches.find((b: any) => b.name === branchQ)
+    if (exact) {
+      store.filterBranch = branchQ
+    } else {
+      const stripped = stripBrand(branchQ)
+      const match = store.branches.find((b: any) => stripBrand(b.name) === stripped)
+      if (match) store.filterBranch = match.name
+    }
+  }
+  if (searchQ) store.filterSearch = searchQ
+}
+
 onMounted(async () => {
   try { await store.loadAll() } catch (e) { console.error('[EventsView] 로드 실패:', e) }
+  await applyQueryFilters()
 })
+watch(() => route.query, () => { applyQueryFilters() })
 
 function priceCell(info: CellContext<any, any>) {
   const v = info.getValue()

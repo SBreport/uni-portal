@@ -17,7 +17,7 @@ from blog.post_queries import (
     list_posts, get_post, get_filter_options, get_dashboard, get_stats,
     list_accounts, update_account as _update_account,
     get_notion_token, get_notion_token_status, save_notion_token,
-    get_last_sync_status,
+    get_last_sync_status, BRAND_PATTERNS,
 )
 
 router = APIRouter(prefix="/blog", tags=["Blog"])
@@ -252,9 +252,9 @@ def data_quality_summary(user: dict = Depends(require_role("admin"))):
             "AND (scraped_title IS NULL OR scraped_title = '') "
             "AND published_url IS NOT NULL AND published_url != ''"
         ).fetchone()[0]
+        _brand_or = " OR ".join(f"branch_name LIKE '%{p}%'" for p in BRAND_PATTERNS)
         no_branch = conn.execute(
-            "SELECT COUNT(*) FROM blog_posts WHERE evt_branch_id IS NULL "
-            "AND branch_name LIKE '유앤%'"
+            f"SELECT COUNT(*) FROM blog_posts WHERE evt_branch_id IS NULL AND ({_brand_or})"
         ).fetchone()[0]
         return {
             "total": total,
@@ -284,7 +284,7 @@ def data_quality_details(
             "needs_review": "needs_review = 1",
             "no_title": "(title IS NULL OR title = '') AND (scraped_title IS NULL OR scraped_title = '') "
                         "AND published_url IS NOT NULL AND published_url != ''",
-            "no_branch": "evt_branch_id IS NULL AND branch_name LIKE '유앤%'",
+            "no_branch": "evt_branch_id IS NULL AND (" + " OR ".join(f"branch_name LIKE '%{p}%'" for p in BRAND_PATTERNS) + ")",
         }
         where = conditions.get(category)
         if not where:

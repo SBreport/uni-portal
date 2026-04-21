@@ -3,23 +3,48 @@
 place_daily.evt_branch_id가 아직 채워지지 않은 레거시 데이터를 위해
 branch_name 문자열에서 evt_branches를 해석하는 공통 로직을 제공한다.
 
-핵심 원칙: `short_name`이 `branch_name`에 포함되는 경우 중
-**가장 긴 short_name을 우선** 매칭. 이로써 '광주'와 '경기광주' 처럼
-한쪽이 다른쪽의 부분 문자열인 경우에도 정확히 분리된다.
+매칭 우선순위:
+1. **aliases 정확 매칭** — `evt_branches.aliases` (JSON 배열)에 branch_name이 포함되면 바로 매칭.
+   예: 부산점.aliases = ["유앤아이의원 서면점"] → '유앤아이의원 서면점'은 부산점으로.
+2. **short_name INSTR 매칭** — `short_name`이 `branch_name`에 포함되는 경우 중
+   **가장 긴 short_name을 우선** 매칭. '광주'와 '경기광주'처럼
+   한쪽이 다른쪽의 부분 문자열인 경우에도 정확히 분리된다.
+
+aliases는 시트별로 같은 지점을 다른 이름으로 기록하는 케이스(예: 플레이스 지명 vs 공식 지점명)를
+구조적으로 해결하기 위한 1차 매칭 경로다. 신규 별칭이 필요하면
+`UPDATE evt_branches SET aliases = json_array(...) WHERE id = ?` 로 등록한다.
 """
 
+import json
 import sqlite3
 from typing import Optional
 
 
 def resolve_evt_branch_id(conn: sqlite3.Connection, branch_name: str) -> Optional[int]:
-    """branch_name ('광주유앤아이')을 evt_branches.id로 해석.
+    """branch_name을 evt_branches.id로 해석.
 
     Returns:
         해당 지점 id. 매칭 안 되면 None.
     """
     if not branch_name:
         return None
+
+    # 1차: aliases 정확 매칭
+    alias_rows = conn.execute(
+        "SELECT id, aliases FROM evt_branches WHERE aliases IS NOT NULL AND aliases != ''"
+    ).fetchall()
+    for r in alias_rows:
+        aliases_raw = r["aliases"] if hasattr(r, "keys") else r[1]
+        if not aliases_raw:
+            continue
+        try:
+            aliases = json.loads(aliases_raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(aliases, list) and branch_name in aliases:
+            return r["id"] if hasattr(r, "keys") else r[0]
+
+    # 2차: short_name INSTR 매칭 (가장 긴 것 우선)
     row = conn.execute(
         """SELECT id FROM evt_branches
            WHERE short_name IS NOT NULL AND short_name != ''

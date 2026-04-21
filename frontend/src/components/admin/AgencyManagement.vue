@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { fetchAgencyMap, saveAgencyMap, fetchAgencySheets, saveAgencySheets } from '@/api/branches'
+import { stripBrand } from '@/utils/branchName'
 import RankChecker from '@/components/admin/RankChecker.vue'
 import api from '@/api/client'
 
@@ -515,7 +516,7 @@ onUnmounted(() => {
                     class="px-2 py-1 rounded text-[11px] font-medium tabular-nums"
                     :class="c.diff > 0 ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'"
                     :title="`${c.prev_rate}% → ${c.curr_rate}%`">
-                    {{ c.branch.replace('유앤아이', '') }} {{ c.diff > 0 ? '+' : '' }}{{ c.diff }}
+                    {{ stripBrand(c.branch) }} {{ c.diff > 0 ? '+' : '' }}{{ c.diff }}
                   </div>
                 </div>
               </div>
@@ -609,7 +610,7 @@ onUnmounted(() => {
                     class="px-2 py-1 rounded text-[11px] font-medium tabular-nums"
                     :class="c.diff > 0 ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'"
                     :title="`${c.prev_rate}% → ${c.curr_rate}%`">
-                    {{ c.branch.replace('유앤아이의원', '').replace('유앤아이', '').trim() }} {{ c.diff > 0 ? '+' : '' }}{{ c.diff }}
+                    {{ stripBrand(c.branch) }} {{ c.diff > 0 ? '+' : '' }}{{ c.diff }}
                   </div>
                 </div>
               </div>

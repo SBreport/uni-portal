@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAgencyVisibility } from '@/composables/useAgencyVisibility'
 import { getWebpageRankingDaily, syncWebpageToDB, getWebpageLastSync, getWebpageBranchDetail } from '@/api/webpage'
 import { fetchAgencyMap } from '@/api/branches'
+import { shortName } from '@/utils/branchName'
 
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
@@ -18,6 +19,8 @@ interface DailyData {
 
 interface BranchRanking {
   branch: string
+  branch_id: number
+  short_name?: string | null
   keyword: string
   nosul_count: number
   total_exposed: number
@@ -98,7 +101,7 @@ const filteredBranches = computed(() => {
     list = list.filter(b =>
       b.branch.toLowerCase().includes(q) ||
       b.keyword.toLowerCase().includes(q) ||
-      shortName(b.branch).toLowerCase().includes(q)
+      shortName(b).toLowerCase().includes(q)
     )
   }
 
@@ -106,7 +109,7 @@ const filteredBranches = computed(() => {
   list.sort((a, b) => {
     let av: any, bv: any
     switch (sortKey.value) {
-      case 'branch': av = shortName(a.branch); bv = shortName(b.branch); break
+      case 'branch': av = shortName(a); bv = shortName(b); break
       case 'keyword': av = a.keyword; bv = b.keyword; break
       case 'today_exposed': av = a.today_exposed ? 0 : 1; bv = b.today_exposed ? 0 : 1; break
       case 'streak': av = a.streak; bv = b.streak; break
@@ -228,9 +231,6 @@ function statusBadge(status: string): { text: string; cls: string } {
   }
 }
 
-function shortName(branch: string): string {
-  return branch.replace('유앤아이의원 ', '').replace('유앤아이의원', '').replace('유앤아이 ', '').replace('점', '')
-}
 
 // ── 확장 행 토글 ──
 const expandedBranch = ref<string | null>(null)
@@ -464,14 +464,14 @@ onMounted(async () => {
             <span class="text-[11px] text-slate-400 mr-1 shrink-0">미노출</span>
             <span v-for="b in failedBranches" :key="b.branch"
               class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-50 border border-red-100 rounded text-[11px] text-red-600">
-              {{ shortName(b.branch) }}
+              {{ shortName(b) }}
             </span>
             <template v-if="midalBranches.length > 0">
               <span class="text-slate-300 mx-1">|</span>
               <span class="text-[11px] text-slate-400 mr-1 shrink-0">미점유</span>
               <span v-for="b in midalBranches" :key="b.branch"
                 class="px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-500">
-                {{ shortName(b.branch) }}
+                {{ shortName(b) }}
               </span>
             </template>
           </div>
@@ -547,7 +547,7 @@ onMounted(async () => {
                         : (expandedBranch === b.branch ? 'bg-blue-50/50' : 'hover:bg-blue-50/30')]">
                     <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap min-w-[120px]">
                       <span v-if="isEditor" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>
-                      {{ shortName(b.branch) }}
+                      {{ shortName(b) }}
                       <span v-if="getRecoveryInfo(b).show" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" :title="getRecoveryInfo(b).label"></span>
                     </td>
                     <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
@@ -702,7 +702,7 @@ onMounted(async () => {
             </div>
             <div class="flex-1 min-h-0 overflow-y-auto space-y-[3px]">
               <div v-for="b in sortedByNosul" :key="b.branch" class="flex items-center gap-1.5">
-                <span class="w-16 text-[11px] text-right text-slate-500 truncate shrink-0">{{ shortName(b.branch) }}</span>
+                <span class="w-16 text-[11px] text-right text-slate-500 truncate shrink-0">{{ shortName(b) }}</span>
                 <div class="flex-1 h-[14px] bg-slate-100 rounded-sm overflow-hidden">
                   <div class="h-full rounded-sm transition-all duration-300" :class="barColor(b.nosul_count)"
                     :style="{ width: barWidth(b.nosul_count) + '%' }"></div>
@@ -715,7 +715,7 @@ onMounted(async () => {
               <div class="flex items-center gap-1.5">
                 <span class="text-[11px] text-slate-400">미점유:</span>
                 <span v-for="b in midalBranches" :key="b.branch"
-                  class="text-[11px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">{{ shortName(b.branch) }}</span>
+                  class="text-[11px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">{{ shortName(b) }}</span>
               </div>
             </div>
           </div>

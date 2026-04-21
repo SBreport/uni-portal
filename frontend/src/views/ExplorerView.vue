@@ -614,10 +614,6 @@ function togglePaper(id: number) {
         <div>
           <h3 class="text-base font-bold text-slate-800 mb-3">
             {{ branchData.branch?.name ?? '지점 정보' }}
-            <span v-if="branchData.branch?.region_name"
-              class="text-sm font-normal text-slate-400 ml-2">
-              {{ branchData.branch.region_name }}
-            </span>
           </h3>
           <div class="grid grid-cols-3 gap-3">
             <button @click="toggleBranch('equip')"
@@ -658,11 +654,9 @@ function togglePaper(id: number) {
               :class="['bg-white border rounded-lg p-3 text-center transition',
                 webpageSummary ? 'border-slate-200 hover:border-indigo-300 cursor-pointer' : 'border-slate-100 cursor-default']">
               <template v-if="webpageSummary">
-                <p class="text-sm font-bold">
-                  <span class="text-indigo-600">{{ webpageSummary.exposed }}</span>
-                  <span class="text-xs text-slate-400 font-normal">노출</span>
-                  <span class="text-red-400 ml-1">{{ webpageSummary.notExposed }}</span>
-                  <span class="text-xs text-slate-400 font-normal">미노출</span>
+                <p class="text-base font-bold"
+                  :class="webpageSummary.exposed > 0 ? 'text-indigo-600' : 'text-red-400'">
+                  {{ webpageSummary.exposed > 0 ? '상위노출 중' : '미노출 중' }}
                 </p>
                 <p class="text-[10px] text-slate-400 mt-0.5">{{ webpageSummary.total }}개 키워드</p>
               </template>

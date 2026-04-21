@@ -14,7 +14,7 @@ const store = useEquipmentStore()
 const auth = useAuthStore()
 
 // 패널 리사이즈
-const { leftWidth, startResize } = usePanelResize()
+const { leftWidth, startResize } = usePanelResize({ initialRatio: 0.55 })
 
 // 수정 추적
 const pendingChanges = ref<Map<number, Record<string, any>>>(new Map())
@@ -121,7 +121,7 @@ function formatPrice(n: number | null) {
 </script>
 
 <template>
-  <div class="p-5 h-[calc(100vh-1rem)]">
+  <div class="p-5 h-full flex flex-col">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-xl font-bold text-slate-800">보유장비</h2>
       <div v-if="canEdit" class="flex items-center gap-3">
@@ -160,12 +160,12 @@ function formatPrice(n: number | null) {
     </div>
 
     <!-- 2컬럼: 테이블(좌) + 상세 정보(우, 상시 존재) -->
-    <div class="flex" style="height: calc(100vh - 160px)">
+    <div class="flex flex-1 min-h-0">
 
       <!-- ===== 좌측: 장비 테이블 ===== -->
       <div :style="{ width: leftWidth + 'px' }" class="shrink-0 bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col">
         <div class="overflow-auto flex-1">
-          <table class="w-full text-[13px] table-fixed">
+          <table class="w-full text-xs">
             <thead class="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr>
                 <th class="text-left pl-3 pr-1 py-2 font-medium text-slate-500 whitespace-nowrap w-14">지점</th>
@@ -173,7 +173,7 @@ function formatPrice(n: number | null) {
                 <th class="text-left px-1 py-2 font-medium text-slate-500 whitespace-nowrap w-28">장비명</th>
                 <th class="text-center px-1 py-2 font-medium text-slate-500 w-8">수량</th>
                 <th class="text-center px-1 py-2 font-medium text-slate-500 w-6">사진</th>
-                <th class="text-left px-1 pr-2 py-2 font-medium text-slate-500 w-16">비고</th>
+                <th class="text-left px-1 pr-2 py-2 font-medium text-slate-500">비고</th>
               </tr>
             </thead>
             <tbody>
@@ -185,20 +185,20 @@ function formatPrice(n: number | null) {
                   'hover:bg-slate-50': selectedRow?.id !== row.id
                 }"
                 @click="openDetail(row)">
-                <td class="pl-3 pr-1 py-1 text-slate-500 whitespace-nowrap text-xs">{{ row['지점'] }}</td>
-                <td class="px-1 py-1 whitespace-nowrap">
-                  <span class="px-1 py-0.5 bg-slate-100 rounded text-[11px] text-slate-500 leading-none">{{ row['카테고리'] }}</span>
+                <td class="px-2 py-1.5 text-slate-500 whitespace-nowrap text-xs">{{ row['지점'] }}</td>
+                <td class="px-2 py-1.5 whitespace-nowrap">
+                  <span class="px-1 py-0.5 bg-slate-100 rounded text-xs text-slate-500 leading-none">{{ row['카테고리'] }}</span>
                 </td>
-                <td class="px-1 py-1 font-medium text-slate-800 text-xs truncate max-w-[112px]" :title="row['기기명']">{{ row['기기명'] }}</td>
-                <td class="px-1 py-1 text-center text-xs" @click.stop>
+                <td class="px-2 py-1.5 font-medium text-slate-800 text-xs truncate" :title="row['기기명']">{{ row['기기명'] }}</td>
+                <td class="px-2 py-1.5 text-center text-xs" @click.stop>
                   <template v-if="canEdit">
                     <input type="number" :value="row['수량']" min="1"
                       @change="updateQuantity(row, ($event.target as HTMLInputElement).value)"
-                      class="w-9 text-center py-0.5 border border-slate-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      class="w-9 text-center py-0.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
                   </template>
                   <template v-else>{{ row['수량'] }}</template>
                 </td>
-                <td class="px-1 py-1 text-center" @click.stop>
+                <td class="px-2 py-1.5 text-center" @click.stop>
                   <template v-if="canEdit">
                     <button @click="togglePhoto(row)"
                       class="w-4 h-4 rounded border transition inline-flex items-center justify-center"
@@ -212,15 +212,15 @@ function formatPrice(n: number | null) {
                     <span class="text-[10px]">{{ row['사진'] === '있음' ? '✅' : '' }}</span>
                   </template>
                 </td>
-                <td class="px-1 pr-2 py-1" @click.stop>
+                <td class="px-2 py-1.5" @click.stop>
                   <template v-if="canEdit">
                     <input :value="row['비고']"
                       @change="updateNote(row, ($event.target as HTMLInputElement).value)"
-                      class="w-full px-1 py-0.5 border border-slate-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      class="w-full px-1 py-0.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
                       placeholder="비고" />
                   </template>
                   <template v-else>
-                    <span class="text-slate-400 text-[11px] truncate block max-w-[60px]" :title="row['비고']">{{ row['비고'] || '-' }}</span>
+                    <span class="text-slate-400 text-xs truncate block" :title="row['비고']">{{ row['비고'] || '-' }}</span>
                   </template>
                 </td>
               </tr>
@@ -236,7 +236,7 @@ function formatPrice(n: number | null) {
       ></div>
 
       <!-- ===== 우측: 장비 상세 정보 (상시 표시) ===== -->
-      <div class="flex-1 min-w-0 overflow-auto">
+      <div class="flex-1 min-w-[320px] overflow-auto">
         <!-- 미선택 상태: 안내 -->
         <div v-if="!selectedRow" class="h-full flex items-center justify-center bg-white border border-slate-200 rounded-lg">
           <div class="text-center">
@@ -281,35 +281,35 @@ function formatPrice(n: number | null) {
                 시술 정보
               </h4>
               <template v-if="detailData.device_info">
-                <div class="bg-slate-50 rounded-lg p-4 space-y-2.5">
-                  <div v-if="detailData.device_info.category" class="flex gap-3">
-                    <span class="text-xs text-slate-400 w-10 shrink-0 pt-0.5">분류</span>
-                    <span class="text-sm text-slate-700 font-medium">{{ detailData.device_info.category }}</span>
-                  </div>
-                  <div v-if="detailData.device_info.summary" class="flex gap-3">
-                    <span class="text-xs text-slate-400 w-10 shrink-0 pt-0.5">설명</span>
-                    <span class="text-sm text-slate-700 leading-relaxed">{{ detailData.device_info.summary }}</span>
-                  </div>
-                  <div v-if="detailData.device_info.target" class="flex gap-3">
-                    <span class="text-xs text-slate-400 w-10 shrink-0 pt-0.5">부위</span>
-                    <span class="text-sm text-slate-700">{{ detailData.device_info.target }}</span>
-                  </div>
-                  <div v-if="detailData.device_info.mechanism">
-                    <span class="text-xs text-slate-400 block mb-1">작용 원리</span>
-                    <p class="text-sm text-slate-600 leading-relaxed bg-white rounded p-3 border border-slate-200">{{ detailData.device_info.mechanism }}</p>
-                  </div>
-                  <div class="flex flex-wrap gap-x-6 gap-y-1 pt-1">
-                    <div v-if="detailData.device_info.aliases" class="flex gap-2 items-start">
-                      <span class="text-xs text-slate-400 shrink-0">별칭</span>
+                <div class="bg-slate-50 rounded-lg p-4">
+                  <div class="grid grid-cols-[80px_1fr] gap-x-3 gap-y-2">
+                    <template v-if="detailData.device_info.category">
+                      <span class="text-xs text-slate-400 pt-0.5">분류</span>
+                      <span class="text-xs text-slate-700 font-medium">{{ detailData.device_info.category }}</span>
+                    </template>
+                    <template v-if="detailData.device_info.summary">
+                      <span class="text-xs text-slate-400 pt-0.5">설명</span>
+                      <span class="text-xs text-slate-700 leading-relaxed">{{ detailData.device_info.summary }}</span>
+                    </template>
+                    <template v-if="detailData.device_info.target">
+                      <span class="text-xs text-slate-400 pt-0.5">부위</span>
+                      <span class="text-xs text-slate-700">{{ detailData.device_info.target }}</span>
+                    </template>
+                    <template v-if="detailData.device_info.mechanism">
+                      <span class="text-xs text-slate-400 pt-0.5">작용 원리</span>
+                      <p class="text-xs text-slate-600 leading-relaxed bg-white rounded p-2 border border-slate-200">{{ detailData.device_info.mechanism }}</p>
+                    </template>
+                    <template v-if="detailData.device_info.aliases">
+                      <span class="text-xs text-slate-400 pt-0.5">별칭</span>
                       <div class="flex flex-wrap gap-1">
                         <span v-for="alias in detailData.device_info.aliases.split(',')" :key="alias"
-                          class="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[11px] text-slate-600">{{ alias.trim() }}</span>
+                          class="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-xs text-slate-600">{{ alias.trim() }}</span>
                       </div>
-                    </div>
-                    <div v-if="detailData.device_info.usage_count" class="flex gap-2 items-center">
-                      <span class="text-xs text-slate-400">보유</span>
-                      <span class="text-sm text-blue-600 font-semibold">{{ detailData.device_info.usage_count }}개 지점</span>
-                    </div>
+                    </template>
+                    <template v-if="detailData.device_info.usage_count">
+                      <span class="text-xs text-slate-400 pt-0.5">보유</span>
+                      <span class="text-xs text-blue-600 font-semibold">{{ detailData.device_info.usage_count }}개 지점</span>
+                    </template>
                   </div>
                 </div>
               </template>

@@ -85,14 +85,14 @@ const categoryOptions = computed(() => store.categories.map((c: any) => ({ value
 </script>
 
 <template>
-  <div class="p-5">
-    <h2 class="text-xl font-bold text-slate-800 mb-4">
+  <div class="p-5 h-full flex flex-col">
+    <h2 class="text-xl font-bold text-slate-800 mb-4 shrink-0">
       이벤트
       <span v-if="store.isFallback" class="text-xs text-amber-500 font-normal ml-2">(이전 기간 데이터)</span>
     </h2>
 
     <!-- 필터 바 -->
-    <div class="flex items-center gap-2.5 mb-4 flex-wrap">
+    <div class="flex items-center gap-2.5 mb-4 flex-wrap shrink-0">
       <FilterSelect v-model="store.filterBranch" :options="branchOptions" placeholder="전체 지점" />
 
       <FilterSelect v-model="store.filterCategory" :options="categoryOptions" placeholder="전체 카테고리" />
@@ -121,11 +121,13 @@ const categoryOptions = computed(() => store.categories.map((c: any) => ({ value
     </div>
 
     <!-- 테이블 -->
-    <DataTable
-      :data="store.filteredEvents"
-      :columns="columns"
-      :page-size="100"
-      height="600px"
-    />
+    <div class="flex-1 min-h-0" style="overflow: hidden;">
+      <DataTable
+        :data="store.filteredEvents"
+        :columns="columns"
+        :page-size="100"
+        height="100%"
+      />
+    </div>
   </div>
 </template>

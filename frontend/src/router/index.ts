@@ -37,7 +37,7 @@ const router = createRouter({
       path: '/treatment-info',
       name: 'treatment-info',
       component: () => import('@/views/TreatmentInfoView.vue'),
-      meta: { roles: ['admin', 'editor'] },
+      meta: { roles: ['admin', 'editor', 'viewer-hq'] },
     },
     {
       path: '/papers',
@@ -53,7 +53,7 @@ const router = createRouter({
       path: '/info',
       name: 'info',
       component: () => import('@/views/InfoView.vue'),
-      meta: { roles: ['admin', 'editor'] },
+      meta: { roles: ['admin', 'editor', 'viewer-hq'] },
     },
     {
       path: '/branch-info',
@@ -72,7 +72,7 @@ const router = createRouter({
       name: 'blog',
       component: () => import('@/views/BlogView.vue'),
       props: { mode: 'uandi' },
-      meta: { roles: ['admin', 'editor'] },
+      meta: { roles: ['admin', 'editor', 'viewer-hq'] },
     },
     {
       path: '/blog-all',

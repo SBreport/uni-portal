@@ -23,17 +23,19 @@ const activeTab = ref((route.query.tab as string) || 'branch')
 </script>
 
 <template>
-  <div class="p-5 max-w-4xl">
-    <div class="mb-5">
+  <div class="h-screen flex flex-col overflow-hidden p-5">
+    <div class="mb-5 shrink-0">
       <h2 class="text-xl font-bold text-slate-800">정보 관리</h2>
       <p class="text-sm text-slate-400 mt-1">지점 · 장비 · 이벤트 · 시술 정보를 조회하고 관리합니다</p>
     </div>
 
-    <TabBar :tabs="tabs" v-model="activeTab" class="mb-4" />
+    <TabBar :tabs="tabs" v-model="activeTab" class="mb-4 shrink-0" />
 
-    <BranchInfoView v-if="activeTab === 'branch'" :embedded="true" />
-    <EquipmentView v-else-if="activeTab === 'equipment'" :embedded="true" />
-    <EventsView v-else-if="activeTab === 'events'" :embedded="true" />
-    <TreatmentInfoView v-else-if="activeTab === 'treatment'" :embedded="true" />
+    <div class="flex-1 min-h-0 overflow-hidden">
+      <BranchInfoView v-if="activeTab === 'branch'" :embedded="true" />
+      <EquipmentView v-else-if="activeTab === 'equipment'" :embedded="true" />
+      <EventsView v-else-if="activeTab === 'events'" :embedded="true" />
+      <TreatmentInfoView v-else-if="activeTab === 'treatment'" :embedded="true" />
+    </div>
   </div>
 </template>

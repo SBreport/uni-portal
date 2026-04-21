@@ -64,9 +64,9 @@ const pageInfo = computed(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3">
+  <div class="flex flex-col gap-3 h-full min-h-0">
     <!-- 검색 + 건수 -->
-    <div v-if="searchable" class="flex items-center gap-3">
+    <div v-if="searchable" class="flex items-center gap-3 shrink-0">
       <input
         v-model="globalFilter"
         :placeholder="searchPlaceholder"
@@ -74,14 +74,14 @@ const pageInfo = computed(() => {
       />
       <span class="text-xs text-slate-400 ml-auto">{{ pageInfo.total }}건</span>
     </div>
-    <div v-else class="flex justify-end">
+    <div v-else class="flex justify-end shrink-0">
       <span class="text-xs text-slate-400">{{ pageInfo.total }}건</span>
     </div>
 
     <!-- 테이블 -->
-    <div class="border border-slate-200 rounded-lg overflow-hidden" :style="{ maxHeight: height }">
-      <div class="overflow-auto" :style="{ maxHeight: height }">
-        <table class="w-full text-sm">
+    <div class="border border-slate-200 rounded-lg overflow-hidden flex-1 min-h-0 flex flex-col" :style="height !== '100%' ? { maxHeight: height } : {}">
+      <div class="overflow-auto flex-1 min-h-0">
+        <table class="w-full text-xs">
           <thead :class="stickyHeader ? 'sticky top-0 z-10' : ''">
             <tr v-for="headerGroup in table.getHeaderGroups()" :key="headerGroup.id">
               <th
@@ -111,7 +111,7 @@ const pageInfo = computed(() => {
               <td
                 v-for="cell in row.getVisibleCells()"
                 :key="cell.id"
-                class="px-3 py-2 text-slate-700"
+                class="px-2 py-1.5 text-slate-700"
               >
                 <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
               </td>
@@ -123,7 +123,7 @@ const pageInfo = computed(() => {
     </div>
 
     <!-- 페이지네이션 -->
-    <div v-if="pageInfo.total > pageSize" class="flex items-center justify-between text-xs text-slate-500">
+    <div v-if="pageInfo.total > pageSize" class="flex items-center justify-between text-xs text-slate-500 shrink-0">
       <span>{{ pageInfo.start }}-{{ pageInfo.end }} / {{ pageInfo.total }}</span>
       <div class="flex items-center gap-1">
         <button

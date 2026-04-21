@@ -268,30 +268,30 @@ onMounted(() => {
       <!-- 요약 카드 (클릭 가능) -->
       <div class="flex items-center justify-between">
         <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 flex-1">
-          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 cursor-pointer hover:border-slate-300 transition-colors flex items-baseline gap-2"
                @click="goToList()">
-            <p class="text-xs text-slate-500">전체 게시글</p>
-            <p class="text-xl font-bold text-blue-600 mt-1 tabular-nums">{{ dashboard.total?.toLocaleString() }}</p>
+            <p class="text-xs text-slate-500 shrink-0">전체 게시글</p>
+            <p class="text-lg font-bold text-blue-600 tabular-nums ml-auto">{{ dashboard.total?.toLocaleString() }}</p>
           </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 cursor-pointer hover:border-slate-300 transition-colors flex items-baseline gap-2"
                @click="goToList({ channel: 'br' })">
-            <p class="text-xs text-slate-500">브랜드</p>
-            <p class="text-xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.br || 0).toLocaleString() }}</p>
+            <p class="text-xs text-slate-500 shrink-0">브랜드</p>
+            <p class="text-lg font-bold text-slate-800 tabular-nums ml-auto">{{ (dashboard.by_channel?.br || 0).toLocaleString() }}</p>
           </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 cursor-pointer hover:border-slate-300 transition-colors flex items-baseline gap-2"
                @click="goToList({ channel: 'opt' })">
-            <p class="text-xs text-slate-500">최적</p>
-            <p class="text-xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.opt || 0).toLocaleString() }}</p>
+            <p class="text-xs text-slate-500 shrink-0">최적</p>
+            <p class="text-lg font-bold text-slate-800 tabular-nums ml-auto">{{ (dashboard.by_channel?.opt || 0).toLocaleString() }}</p>
           </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 cursor-pointer hover:border-slate-300 transition-colors flex items-baseline gap-2"
                @click="goToList({ channel: 'cafe' })">
-            <p class="text-xs text-slate-500">카페</p>
-            <p class="text-xl font-bold text-slate-800 mt-1 tabular-nums">{{ (dashboard.by_channel?.cafe || 0).toLocaleString() }}</p>
+            <p class="text-xs text-slate-500 shrink-0">카페</p>
+            <p class="text-lg font-bold text-slate-800 tabular-nums ml-auto">{{ (dashboard.by_channel?.cafe || 0).toLocaleString() }}</p>
           </div>
-          <div class="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:border-slate-300 transition-colors"
+          <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 cursor-pointer hover:border-slate-300 transition-colors flex items-baseline gap-2"
                @click="goToList({ needs_review: 1 })">
-            <p class="text-xs text-slate-500">검토 필요</p>
-            <p class="text-xl font-bold mt-1 tabular-nums" :class="(dashboard.review_count || 0) > 0 ? 'text-amber-600' : 'text-slate-800'">{{ (dashboard.review_count || 0).toLocaleString() }}</p>
+            <p class="text-xs text-slate-500 shrink-0">검토 필요</p>
+            <p class="text-lg font-bold tabular-nums ml-auto" :class="(dashboard.review_count || 0) > 0 ? 'text-amber-600' : 'text-slate-800'">{{ (dashboard.review_count || 0).toLocaleString() }}</p>
           </div>
         </div>
       </div>
@@ -301,28 +301,28 @@ onMounted(() => {
 
       <div class="space-y-3">
         <!-- Row 1: 월별 발행 추이 + 주간 발행 추이 (나란히, 컴팩트) -->
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-3 max-w-3xl">
           <div class="bg-white border border-slate-200 rounded-lg p-3">
             <h3 class="text-sm font-semibold text-slate-700 mb-3">월별 발행 추이</h3>
-            <div class="flex items-end gap-1 h-24">
+            <div class="flex items-end gap-1 h-20">
               <div v-for="m in sortedMonthly" :key="m.month"
                    class="flex-1 flex flex-col items-center justify-end cursor-pointer group"
                    @click="goToList({ project_month: m.month })">
-                <span class="text-[11px] text-slate-500 mb-1 group-hover:text-indigo-600 font-semibold">{{ m.cnt.toLocaleString() }}</span>
+                <span class="text-xs text-slate-500 mb-1 group-hover:text-indigo-600 font-semibold">{{ m.cnt.toLocaleString() }}</span>
                 <div class="w-4/5 bg-indigo-300 group-hover:bg-indigo-400 rounded-t transition-all min-h-[2px]"
-                     :style="{ height: (m.cnt / maxMonthlyCount * 80) + 'px' }"></div>
+                     :style="{ height: (m.cnt / maxMonthlyCount * 70) + 'px' }"></div>
                 <span class="text-[11px] text-slate-400 mt-1.5 whitespace-nowrap">{{ m.month.slice(2) }}</span>
               </div>
             </div>
           </div>
           <div class="bg-white border border-slate-200 rounded-lg p-3">
             <h3 class="text-sm font-semibold text-slate-700 mb-3">주간 발행 추이 <span class="text-[10px] text-slate-400 font-normal">최근 6주</span></h3>
-            <div class="flex items-end gap-1 h-24">
+            <div class="flex items-end gap-1 h-20">
               <div v-for="w in sortedWeekly" :key="w.week"
                    class="flex-1 flex flex-col items-center justify-end group">
-                <span class="text-[11px] text-slate-500 mb-1 group-hover:text-sky-600 font-semibold">{{ w.cnt }}</span>
+                <span class="text-xs text-slate-500 mb-1 group-hover:text-sky-600 font-semibold">{{ w.cnt }}</span>
                 <div class="w-4/5 bg-sky-300 group-hover:bg-sky-400 rounded-t transition-all min-h-[2px]"
-                     :style="{ height: (w.cnt / maxWeeklyCount * 80) + 'px' }"></div>
+                     :style="{ height: (w.cnt / maxWeeklyCount * 70) + 'px' }"></div>
                 <span class="text-[11px] text-slate-400 mt-1.5 whitespace-nowrap">{{ w.week_start?.slice(5) }}</span>
               </div>
             </div>
@@ -330,7 +330,7 @@ onMounted(() => {
         </div>
 
         <!-- Row 2: 원고 종류별 분포 (전체 폭) -->
-        <div class="bg-white border border-slate-200 rounded-lg p-3">
+        <div class="bg-white border border-slate-200 rounded-lg p-3 max-w-4xl">
           <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-slate-700">원고 종류별 분포</h3>
             <div class="flex items-center gap-1 ml-auto">

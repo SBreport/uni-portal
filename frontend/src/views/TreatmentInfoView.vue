@@ -214,11 +214,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="p-5">
-    <h2 class="text-xl font-bold text-slate-800 mb-4">시술정보</h2>
+  <div class="p-5 h-full flex flex-col overflow-hidden">
+    <h2 class="text-xl font-bold text-slate-800 mb-4 shrink-0">시술정보</h2>
 
     <!-- 서브 탭 -->
-    <TabBar :model-value="activeTab" :tabs="tabs" @update:model-value="(v) => { activeTab = v as any; viewMode = 'list' }" />
+    <TabBar class="shrink-0" :model-value="activeTab" :tabs="tabs" @update:model-value="(v) => { activeTab = v as any; viewMode = 'list' }" />
+
+    <!-- 탭 콘텐츠 공통 스크롤 영역 -->
+    <div class="flex-1 min-h-0 overflow-auto mt-4">
 
     <!-- ========== 시술백과 탭 ========== -->
     <EncyclopediaView v-if="activeTab === 'encyclopedia'" :external-equipment="externalEq" @equipment-handled="externalEq = undefined" />
@@ -389,5 +392,7 @@ onUnmounted(() => {
     <div v-if="activeTab === 'papers'">
       <PapersView />
     </div>
+
+    </div><!-- /flex-1 scroll wrapper -->
   </div>
 </template>

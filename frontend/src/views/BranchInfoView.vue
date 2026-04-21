@@ -79,12 +79,12 @@ onMounted(loadBranches)
 </script>
 
 <template>
-  <div :class="[branchData ? 'px-6 py-6' : 'max-w-3xl mx-auto py-6 px-4']">
-    <h2 v-if="!embedded" class="text-xl font-bold text-slate-800 mb-2">지점 정보</h2>
-    <p v-if="!branchData" class="text-sm text-slate-400 mb-6">지점을 선택하면 보유장비, 이벤트, 민원을 한눈에 확인합니다.</p>
+  <div class="h-full flex flex-col overflow-hidden px-6 py-6">
+    <h2 v-if="!embedded" class="text-xl font-bold text-slate-800 mb-2 shrink-0">지점 정보</h2>
+    <p v-if="!branchData" class="text-sm text-slate-400 mb-6 shrink-0">지점을 선택하면 보유장비, 이벤트, 민원을 한눈에 확인합니다.</p>
 
     <!-- Branch selector (when no branch selected) -->
-    <div v-if="!branchData">
+    <div v-if="!branchData" class="flex-1 min-h-0 overflow-auto">
       <!-- 검색 -->
       <div class="relative mb-5">
         <input
@@ -102,7 +102,7 @@ onMounted(loadBranches)
       </div>
 
       <!-- 카드 그리드 -->
-      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-2">
         <div
           v-for="b in filteredBranches" :key="b.branch_id"
           @click="selectBranch(b.branch_id)"
@@ -125,7 +125,7 @@ onMounted(loadBranches)
     </div>
 
     <!-- Branch detail -->
-    <div v-if="branchData && !loading">
+    <div v-if="branchData && !loading" class="flex-1 min-h-0 overflow-auto">
       <!-- Header -->
       <div class="flex items-center gap-3 mb-5">
         <button
@@ -136,72 +136,60 @@ onMounted(loadBranches)
         <h3 class="text-lg font-bold text-slate-800">{{ branchData.branch_name }}</h3>
       </div>
 
-      <!-- Summary cards -->
-      <div class="grid grid-cols-3 gap-3 mb-4">
-        <div class="bg-blue-50 rounded-lg p-3 text-center">
-          <div class="text-lg font-bold text-blue-700">{{ branchData.summary?.equipment_count || 0 }}</div>
-          <div class="text-xs text-blue-500">보유장비</div>
+      <!-- Summary bar -->
+      <div class="flex items-center gap-5 mb-5 px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-200 text-sm">
+        <div class="flex items-baseline gap-1.5">
+          <span class="text-slate-500">보유장비</span>
+          <span class="font-bold text-blue-600">{{ branchData.summary?.equipment_count || 0 }}</span>
         </div>
-        <div class="bg-purple-50 rounded-lg p-3 text-center">
-          <div class="text-lg font-bold text-purple-700">{{ branchData.summary?.event_count || 0 }}</div>
-          <div class="text-xs text-purple-500">이벤트</div>
+        <span class="text-slate-300">·</span>
+        <div class="flex items-baseline gap-1.5">
+          <span class="text-slate-500">이벤트</span>
+          <span class="font-bold text-purple-600">{{ branchData.summary?.event_count || 0 }}</span>
         </div>
-        <div class="bg-orange-50 rounded-lg p-3 text-center">
-          <div class="text-lg font-bold text-orange-700">{{ branchData.summary?.complaint_open || 0 }}</div>
-          <div class="text-xs text-orange-500">진행 민원</div>
+        <span class="text-slate-300">·</span>
+        <div class="flex items-baseline gap-1.5">
+          <span class="text-slate-500">진행 민원</span>
+          <span class="font-bold text-orange-600">{{ branchData.summary?.complaint_open || 0 }}</span>
         </div>
       </div>
 
-      <!-- 2열 레이아웃: 좌=장비, 우=이벤트 (내부 스크롤) -->
-      <div class="grid grid-cols-2 gap-4 mb-4" style="height: calc(100vh - 280px)">
+      <!-- 2열 레이아웃: 좌=장비, 우=이벤트 -->
+      <div class="grid grid-cols-2 gap-4 mb-4">
         <!-- 좌: 보유장비 -->
-        <div class="p-4 bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden">
-          <h4 class="text-sm font-semibold text-slate-700 mb-3 shrink-0">
+        <div class="p-4 bg-white rounded-xl border border-slate-200">
+          <h4 class="text-sm font-semibold text-slate-700 mb-3">
             보유장비 ({{ branchData.equipment?.length || 0 }}건)
           </h4>
-          <div class="overflow-y-auto flex-1 space-y-1.5">
+          <div class="space-y-1.5">
             <div
               v-for="eq in branchData.equipment" :key="eq.id"
-              class="flex items-center justify-between text-sm group"
+              class="flex items-center gap-2.5 text-sm group min-w-0"
             >
-              <div class="flex items-center gap-2">
-                <span
-                  @click="goToEquipment(eq.name)"
-                  class="text-slate-700 hover:text-blue-600 cursor-pointer hover:underline"
-                >{{ eq.name }}</span>
-                <span class="text-xs text-slate-400">{{ eq.category }}</span>
-              </div>
-              <div class="flex items-center gap-3 text-xs text-slate-400 shrink-0">
-                <span>{{ eq.quantity || 1 }}대</span>
-                <span :class="eq.photo_status === '있음' || eq.photo_status === 'O' || eq.photo_status === 1 ? 'text-green-500' : 'text-slate-300'">
-                  {{ eq.photo_status === '있음' || eq.photo_status === 'O' || eq.photo_status === 1 ? 'O' : 'X' }}
-                </span>
-              </div>
+              <span @click="goToEquipment(eq.name)" class="text-slate-700 hover:text-blue-600 cursor-pointer hover:underline truncate min-w-0 flex-shrink">{{ eq.name }}</span>
+              <span class="text-xs text-slate-400 shrink-0">{{ eq.category }}</span>
+              <span class="text-xs text-slate-400 shrink-0">{{ eq.quantity || 1 }}대</span>
+              <span class="text-xs shrink-0" :class="eq.photo_status === '있음' || eq.photo_status === 'O' || eq.photo_status === 1 ? 'text-green-500' : 'text-slate-300'">
+                {{ eq.photo_status === '있음' || eq.photo_status === 'O' || eq.photo_status === 1 ? 'O' : 'X' }}
+              </span>
             </div>
             <p v-if="!branchData.equipment?.length" class="text-xs text-slate-400">보유장비 정보 없음</p>
           </div>
         </div>
 
         <!-- 우: 이벤트 -->
-        <div class="p-4 bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden">
-          <h4 class="text-sm font-semibold text-slate-700 mb-3 shrink-0">
+        <div class="p-4 bg-white rounded-xl border border-slate-200">
+          <h4 class="text-sm font-semibold text-slate-700 mb-3">
             이벤트 ({{ branchData.events?.length || 0 }}건)
           </h4>
-          <div class="overflow-y-auto flex-1 space-y-1.5">
+          <div class="space-y-1.5">
             <div
               v-for="ev in branchData.events" :key="ev.id"
-              class="flex items-center justify-between text-sm"
+              class="flex items-center gap-2.5 text-sm min-w-0"
             >
-              <div class="flex items-center gap-2 min-w-0">
-                <span
-                  @click="goToEvent(ev.display_name || ev.raw_event_name)"
-                  class="text-slate-700 hover:text-blue-600 cursor-pointer hover:underline truncate"
-                >{{ ev.display_name || ev.raw_event_name }}</span>
-                <span class="text-xs text-slate-400 shrink-0">{{ ev.category }}</span>
-              </div>
-              <div class="text-right shrink-0 ml-2">
-                <span class="text-sm font-medium text-blue-600">{{ formatPrice(ev.event_price) }}</span>
-              </div>
+              <span @click="goToEvent(ev.display_name || ev.raw_event_name)" class="text-slate-700 hover:text-blue-600 cursor-pointer hover:underline truncate min-w-0">{{ ev.display_name || ev.raw_event_name }}</span>
+              <span class="text-xs text-slate-400 shrink-0">{{ ev.category }}</span>
+              <span class="text-sm font-medium text-blue-600 shrink-0 ml-auto">{{ formatPrice(ev.event_price) }}</span>
             </div>
             <p v-if="!branchData.events?.length" class="text-xs text-slate-400">등록된 이벤트 없음</p>
           </div>
@@ -216,15 +204,13 @@ onMounted(loadBranches)
         <div class="space-y-1.5">
           <div
             v-for="c in branchData.complaints" :key="c.id"
-            class="flex items-center justify-between text-sm"
+            class="flex items-center gap-2.5 text-sm min-w-0"
           >
-            <div class="flex items-center gap-2">
-              <span :class="['text-xs px-1.5 py-0.5 rounded-full', statusLabels[c.status]?.color]">
-                {{ statusLabels[c.status]?.label }}
-              </span>
-              <span class="text-slate-700">{{ c.title }}</span>
-            </div>
-            <span class="text-xs text-slate-400">{{ formatDate(c.created_at) }}</span>
+            <span :class="['text-xs px-1.5 py-0.5 rounded-full shrink-0', statusLabels[c.status]?.color]">
+              {{ statusLabels[c.status]?.label }}
+            </span>
+            <span class="text-slate-700 truncate min-w-0">{{ c.title }}</span>
+            <span class="text-xs text-slate-400 shrink-0 ml-auto">{{ formatDate(c.created_at) }}</span>
           </div>
         </div>
       </div>

@@ -44,7 +44,7 @@ const marketingChildren = computed<MenuItem[]>(() => [
     path: '/blog',
     label: '블로그',
     icon: 'B',
-    roles: ['admin', 'editor'],
+    roles: ['admin', 'editor', 'viewer-hq'],
   },
   ...(auth.role === 'admin'
     ? [{ path: '/blog-all', label: '블로그(all)', icon: 'B', adminOnly: true } as MenuItem]
@@ -83,7 +83,7 @@ const topItems: MenuItem[] = [
     path: '/info',
     label: '정보관리',
     icon: 'I',
-    roles: ['admin', 'editor'],
+    roles: ['admin', 'editor', 'viewer-hq'],
   },
 ]
 

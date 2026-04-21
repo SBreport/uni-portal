@@ -43,14 +43,15 @@ def _compute_place(conn, ws, we, ps, pe) -> dict:
         "SELECT name FROM evt_branches WHERE is_paused=1 AND is_active=1 ORDER BY name",
     ).fetchall()
     paused_names = [r[0] for r in paused_rows]
+    paused_set = set(paused_names)
 
-    # dropped: 직전 주 occupied → 이번 주 미노출 (branch 단위)
+    # dropped: 직전 주 occupied → 이번 주 미노출, 단 이번 주 paused 제외
     prev_exposed = conn.execute(
         "SELECT DISTINCT branch_name FROM place_daily WHERE date BETWEEN ? AND ? AND is_exposed=1",
         (ps, pe),
     ).fetchall()
     prev_occupied = {r[0] for r in prev_exposed}
-    dropped_names = sorted(prev_occupied - occupied_names)
+    dropped_names = sorted(prev_occupied - occupied_names - paused_set)
 
     return {
         "total_auto": str(total),

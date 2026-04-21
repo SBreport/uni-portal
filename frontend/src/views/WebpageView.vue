@@ -168,7 +168,7 @@ const agencyStats = computed<AgencyStat[]>(() => {
     const midal = branches.filter(b => b.status === '미달').length
     const fail = total - success - midal
     const sumNosul = branches.reduce((s, b) => s + b.nosul_count, 0)
-    const notUpdated = total > 0 && branches.every(b => !b.today_exposed)
+    const notUpdated = total > 0 && success === 0
     return { name, total, success, fail, midal, avgNosul: total > 0 ? Math.round(sumNosul / total) : 0, notUpdated }
   })
 })

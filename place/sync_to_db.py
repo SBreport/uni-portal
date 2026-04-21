@@ -68,6 +68,13 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
                 ).fetchone()
                 branch_id = row["id"] if row else 0
 
+                # is_paused 동기화 (evt_branches에 없는 지점은 no-op)
+                is_paused = 1 if b.get("is_paused") else 0
+                conn.execute(
+                    "UPDATE evt_branches SET is_paused = ? WHERE name = ?",
+                    (is_paused, branch_name),
+                )
+
                 for d in daily:
                     day = d.get("day")
                     if not day:

@@ -209,6 +209,10 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
         nosul_raw = success_row[nosul_idx] if len(success_row) > nosul_idx else "0"
         nosul_count = safe_int(nosul_raw, 0)
 
+        # [신규] 휴식 마커: rank_row의 nosul_idx 위치에 "휴식" 문자열
+        paused_raw = rank_row[nosul_idx] if rank_row and len(rank_row) > nosul_idx else ""
+        is_paused = str(paused_raw).strip() == "휴식"
+
         # 일별 데이터 파싱
         daily = []
         for d in range(num_day_cols):
@@ -240,6 +244,7 @@ def _parse_sheet(values: list[list[str]], sheet_name: str) -> dict:
             "month_count": month_success_count,    # 공통 필드
             "work_days": work_days,
             "daily": daily,
+            "is_paused": is_paused,
         })
 
     return {

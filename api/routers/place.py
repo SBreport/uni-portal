@@ -165,6 +165,12 @@ async def get_ranking_daily(
         """, (target_year, target_month)).fetchall()
         nosul_db = {r["branch_name"]: r["nosul_count"] for r in nosul_rows}
 
+        # paused 맵 로드 (evt_branches)
+        paused_rows = conn.execute(
+            "SELECT name, is_paused FROM evt_branches"
+        ).fetchall()
+        paused_map = {r["name"]: bool(r["is_paused"]) for r in paused_rows}
+
         # 마지막 성공 날짜 집계 (target 이전, rank 1~5)
         last_success_rows = conn.execute("""
             SELECT branch_id, keyword, MAX(date) AS last_success_date
@@ -303,6 +309,7 @@ async def get_ranking_daily(
                 "total_exposed": total_exposed_map.get(bname, 0),    # 총노출 (전체 이력)
                 "work_days": work_days_total.get(bname, month_days), # 총진행일
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
+                "is_paused": paused_map.get(bname, False),
                 "daily": recent,
                 "last_success_date": last_success_date,
                 "recovery_date": _recovery_date,
@@ -317,6 +324,7 @@ async def get_ranking_daily(
                 "success_today": sum(1 for b in result if b["today_success"]),
                 "fail_today": sum(1 for b in result if b["status"] == "fail"),
                 "midal": sum(1 for b in result if b["status"] == "미달"),
+                "paused": sum(1 for b in result if b.get("is_paused")),
             },
             "source": "db",
         }
@@ -548,6 +556,12 @@ async def get_ranking_from_db(
             ORDER BY branch_name, date
         """, (date_from, date_to)).fetchall()
 
+        # paused 맵 로드 (evt_branches)
+        paused_rows_m = conn.execute(
+            "SELECT name, is_paused FROM evt_branches"
+        ).fetchall()
+        paused_map_m = {r["name"]: bool(r["is_paused"]) for r in paused_rows_m}
+
         # 지점별 그룹핑
         branches: dict = {}
         for r in rows:
@@ -587,6 +601,7 @@ async def get_ranking_from_db(
             bdata["today_rank"] = daily[-1]["rank"] if daily else None
             bdata["today_success"] = bool(daily[-1]["success"]) if daily else False
             bdata["status"] = "active" if (daily and daily[-1]["success"]) else ("fail" if daily else "미달")
+            bdata["is_paused"] = paused_map_m.get(bname, False)
             result.append(bdata)
 
         days_in_month = calendar.monthrange(year, month)[1]
@@ -604,6 +619,7 @@ async def get_ranking_from_db(
                 "success_today": sum(1 for b in result if b["today_success"]),
                 "fail_today": sum(1 for b in result if b["status"] == "fail"),
                 "midal": sum(1 for b in result if b["status"] == "미달"),
+                "paused": sum(1 for b in result if b.get("is_paused")),
             },
             "source": "db",
         }

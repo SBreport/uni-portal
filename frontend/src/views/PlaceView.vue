@@ -31,12 +31,13 @@ interface BranchRanking {
   last_success_date?: string | null
   recovery_date?: string | null
   recovery_gap?: number | null
+  is_paused?: boolean
 }
 
 interface PlaceData {
   date: string
   branches: BranchRanking[]
-  summary: { total: number; success_today: number; fail_today: number; midal: number }
+  summary: { total: number; success_today: number; fail_today: number; midal: number; paused: number }
 }
 
 // ── 실행사 매핑 (API에서 로드) ──
@@ -173,6 +174,10 @@ const midalBranches = computed(() =>
   data.value?.branches.filter(b => b.status === '미달') ?? []
 )
 
+const pausedBranches = computed(() =>
+  data.value?.branches.filter(b => b.is_paused) ?? []
+)
+
 const allFailed = computed(() => {
   if (!data.value?.branches.length) return false
   // 성공(노출)이 단 한 건도 없을 때 (실패 + 미측정 전부 포함)
@@ -186,6 +191,7 @@ interface AgencyStat {
   success: number
   fail: number
   midal: number
+  paused: number
   avgNosul: number
   notUpdated: boolean
 }
@@ -196,13 +202,14 @@ const agencyStats = computed<AgencyStat[]>(() => {
   return names.map(name => {
     const branches = data.value!.branches.filter(b => getAgency(b.branch) === name)
     const total = branches.length
+    const paused = branches.filter(b => b.is_paused).length
     const success = branches.filter(b => b.status === 'active').length
     const midal = branches.filter(b => b.status === '미달').length
     const fail = total - success - midal
     const sumNosul = branches.reduce((s, b) => s + b.nosul_count, 0)
-    // 금일 미갱신: 모든 지점의 today_rank가 null이면 해당 실행사 미갱신
-    const notUpdated = total > 0 && branches.every(b => b.today_rank === null || b.today_rank === undefined)
-    return { name, total, success, fail, midal, avgNosul: total > 0 ? Math.round(sumNosul / total) : 0, notUpdated }
+    // 금일 미갱신: 휴식 제외 지점 중 성공이 없으면 미갱신
+    const notUpdated = (total - paused) > 0 && success === 0
+    return { name, total, success, fail, midal, paused, avgNosul: total > 0 ? Math.round(sumNosul / total) : 0, notUpdated }
   })
 })
 
@@ -261,7 +268,7 @@ function rankClass(rank: number | null): string {
 function statusBadge(status: string): { text: string; cls: string } {
   switch (status) {
     case 'active': return { text: '성공', cls: 'bg-blue-100 text-blue-700' }
-    case 'fail': return { text: '실패', cls: 'bg-red-100 text-red-600' }
+    case 'fail': return { text: '이탈', cls: 'bg-red-100 text-red-600' }
     case '미달': return { text: '미측정', cls: 'bg-slate-100 text-slate-400' }
     default: return { text: status, cls: 'bg-yellow-100 text-yellow-700' }
   }
@@ -437,7 +444,7 @@ onMounted(async () => {
           </div>
           <div class="flex items-baseline gap-1 px-2 py-1 bg-red-50 rounded-lg whitespace-nowrap">
             <span class="text-2xl font-bold text-red-500">{{ data.summary.fail_today }}</span>
-            <span class="text-xs text-red-400">실패 ({{ pct(data.summary.fail_today, data.summary.total) }}%)</span>
+            <span class="text-xs text-red-400">이탈 ({{ pct(data.summary.fail_today, data.summary.total) }}%)</span>
           </div>
           <div class="flex items-baseline gap-1 px-2 py-1 bg-slate-100 rounded-lg whitespace-nowrap">
             <span class="text-2xl font-bold text-slate-500">{{ data.summary.midal }}</span>
@@ -474,7 +481,7 @@ onMounted(async () => {
       <div class="px-5 pb-1.5 shrink-0">
         <div class="bg-white border border-slate-200 rounded-lg px-3 py-2">
           <div class="flex flex-wrap items-center gap-1">
-            <span class="text-[11px] text-slate-400 mr-1 shrink-0">실패</span>
+            <span class="text-[11px] text-slate-400 mr-1 shrink-0">이탈</span>
             <span v-for="b in failedBranches" :key="b.branch"
               class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-50 border border-red-100 rounded text-[11px] text-red-600">
               {{ shortName(b.branch) }}<span class="text-red-400 text-[10px]">{{ b.today_rank ? b.today_rank + '위' : '-' }}</span>
@@ -484,6 +491,14 @@ onMounted(async () => {
               <span class="text-[11px] text-slate-400 mr-1 shrink-0">미달</span>
               <span v-for="b in midalBranches" :key="b.branch"
                 class="px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-500">
+                {{ shortName(b.branch) }}
+              </span>
+            </template>
+            <template v-if="pausedBranches.length > 0">
+              <span class="text-slate-300 mx-1">|</span>
+              <span class="text-[11px] text-slate-400 mr-1 shrink-0">휴식</span>
+              <span v-for="b in pausedBranches" :key="b.branch"
+                class="px-1.5 py-0.5 bg-amber-50 border border-amber-100 rounded text-[11px] text-amber-700">
                 {{ shortName(b.branch) }}
               </span>
             </template>
@@ -521,8 +536,10 @@ onMounted(async () => {
           <!-- 한 줄 요약 -->
           <div class="flex items-center gap-1 text-[11px] whitespace-nowrap overflow-hidden">
             <span class="text-blue-600 font-medium shrink-0">성공 {{ a.success }}</span><span class="text-slate-300">·</span>
-            <span class="text-red-500 font-medium shrink-0">실패 {{ a.fail }}</span><span class="text-slate-300">·</span>
+            <span class="text-red-500 font-medium shrink-0">이탈 {{ a.fail }}</span><span class="text-slate-300">·</span>
             <span class="shrink-0" :class="a.midal > 0 ? 'text-red-400' : 'text-slate-400'">미달 {{ a.midal }}</span>
+            <span v-if="a.paused > 0" class="text-slate-300 mx-1">|</span>
+            <span v-if="a.paused > 0" class="text-amber-600 font-medium shrink-0">휴식 {{ a.paused }}</span>
             <span class="ml-auto text-slate-400 shrink-0">평균 {{ a.avgNosul }}일</span>
           </div>
         </div>
@@ -546,7 +563,7 @@ onMounted(async () => {
                     <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]" title="시트 AF열 기준 당월 노출일수">노출일수 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
                     <th @click="toggleSort('total_exposed')" class="th-cell text-center w-[36px]" title="전체 이력 중 노출 성공한 총 일수">총노출 <span class="sort-icon">{{ sortIcon('total_exposed') }}</span></th>
                     <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]" title="작업 시작일부터 현재까지 총 진행일수">총진행일 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
-                    <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 실패: 오늘 미노출 / 미달: 데이터 없음">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
+                    <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 이탈: 오늘 미노출 / 미달: 데이터 없음 / △: 휴식 중">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
                     <th v-if="canSeeAgency" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]" title="해당 지점 담당 실행사">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
                   </tr>
                 </thead>
@@ -565,6 +582,9 @@ onMounted(async () => {
                         <span v-if="isEditor" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>
                         {{ shortName(b.branch) }}
                         <span v-if="getRecoveryInfo(b).show" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" :title="getRecoveryInfo(b).label"></span>
+                        <span v-if="b.is_paused"
+                          class="ml-1 text-[10px] px-1 rounded bg-amber-50 text-amber-700 border border-amber-200"
+                          title="휴식 지점">△ 휴식</span>
                       </td>
                       <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
                       <td class="py-[5px] text-center whitespace-nowrap" :class="rankClass(b.today_rank)">
@@ -663,7 +683,7 @@ onMounted(async () => {
                               </span>
                               <!-- 최장 실패 -->
                               <span class="py-0.5"></span>
-                              <span class="text-xs text-slate-500 self-center py-0.5">최장 실패</span>
+                              <span class="text-xs text-slate-500 self-center py-0.5">최장 이탈</span>
                               <span class="text-xs font-medium text-slate-900 self-center py-0.5 tabular-nums">
                                 <template v-if="detailData.longest.fail.days > 0">{{ detailData.longest.fail.days }}일</template>
                                 <span v-else class="text-slate-300">-</span>

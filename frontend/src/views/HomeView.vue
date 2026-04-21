@@ -130,7 +130,7 @@ function formatDate(iso: string) {
             </div>
             <div>
               <p class="text-lg font-bold text-slate-400">{{ data.place.midal }}</p>
-              <p class="text-xs text-slate-400">미달</p>
+              <p class="text-xs text-slate-400">미점유</p>
             </div>
           </div>
           <div class="mt-2 w-full bg-slate-100 rounded-full h-1.5">
@@ -157,7 +157,7 @@ function formatDate(iso: string) {
             </div>
             <div>
               <p class="text-lg font-bold text-slate-400">{{ data.webpage.midal }}</p>
-              <p class="text-xs text-slate-400">미달</p>
+              <p class="text-xs text-slate-400">미점유</p>
             </div>
           </div>
         </router-link>

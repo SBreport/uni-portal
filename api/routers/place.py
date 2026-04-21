@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from pydantic import BaseModel
 
 from api.deps import get_current_user, require_role
+from shared.branch_resolver import resolve_evt_branch_id
 
 router = APIRouter(prefix="/place", tags=["Place"])
 
@@ -165,11 +166,19 @@ async def get_ranking_daily(
         """, (target_year, target_month)).fetchall()
         nosul_db = {r["branch_name"]: r["nosul_count"] for r in nosul_rows}
 
-        # paused 맵 로드 (evt_branches)
-        paused_rows = conn.execute(
-            "SELECT name, is_paused FROM evt_branches"
-        ).fetchall()
-        paused_map = {r["name"]: bool(r["is_paused"]) for r in paused_rows}
+        # paused 맵 로드 — resolver 기반 (가장 긴 short_name 우선 매칭)
+        paused_ids = {
+            r[0] for r in conn.execute(
+                "SELECT id FROM evt_branches WHERE is_paused=1"
+            ).fetchall()
+        }
+        _resolve_cache: dict[str, int | None] = {}
+        def _is_paused(bn: str) -> bool:
+            if not bn:
+                return False
+            if bn not in _resolve_cache:
+                _resolve_cache[bn] = resolve_evt_branch_id(conn, bn)
+            return _resolve_cache[bn] in paused_ids
 
         # 마지막 성공 날짜 집계 (target 이전, rank 1~5)
         last_success_rows = conn.execute("""
@@ -309,7 +318,7 @@ async def get_ranking_daily(
                 "total_exposed": total_exposed_map.get(bname, 0),    # 총노출 (전체 이력)
                 "work_days": work_days_total.get(bname, month_days), # 총진행일
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
-                "is_paused": paused_map.get(bname, False),
+                "is_paused": _is_paused(bname),
                 "daily": recent,
                 "last_success_date": last_success_date,
                 "recovery_date": _recovery_date,
@@ -556,11 +565,19 @@ async def get_ranking_from_db(
             ORDER BY branch_name, date
         """, (date_from, date_to)).fetchall()
 
-        # paused 맵 로드 (evt_branches)
-        paused_rows_m = conn.execute(
-            "SELECT name, is_paused FROM evt_branches"
-        ).fetchall()
-        paused_map_m = {r["name"]: bool(r["is_paused"]) for r in paused_rows_m}
+        # paused 맵 로드 — resolver 기반 (가장 긴 short_name 우선 매칭)
+        paused_ids_m = {
+            r[0] for r in conn.execute(
+                "SELECT id FROM evt_branches WHERE is_paused=1"
+            ).fetchall()
+        }
+        _resolve_cache_m: dict[str, int | None] = {}
+        def _is_paused_m(bn: str) -> bool:
+            if not bn:
+                return False
+            if bn not in _resolve_cache_m:
+                _resolve_cache_m[bn] = resolve_evt_branch_id(conn, bn)
+            return _resolve_cache_m[bn] in paused_ids_m
 
         # 지점별 그룹핑
         branches: dict = {}
@@ -601,7 +618,7 @@ async def get_ranking_from_db(
             bdata["today_rank"] = daily[-1]["rank"] if daily else None
             bdata["today_success"] = bool(daily[-1]["success"]) if daily else False
             bdata["status"] = "active" if (daily and daily[-1]["success"]) else ("fail" if daily else "미달")
-            bdata["is_paused"] = paused_map_m.get(bname, False)
+            bdata["is_paused"] = _is_paused_m(bname)
             result.append(bdata)
 
         days_in_month = calendar.monthrange(year, month)[1]

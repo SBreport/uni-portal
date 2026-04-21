@@ -58,6 +58,9 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
 
             branches = ranking.get("branches", [])
 
+            # 시트에 등장한 지점별 최신 is_paused 집계 (루프 끝난 후 일괄 처리)
+            paused_flags: dict[str, int] = {}
+
             for b in branches:
                 branch_name = b.get("branch", "")
                 keyword = b.get("keyword", "")
@@ -68,12 +71,8 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
                 ).fetchone()
                 branch_id = row["id"] if row else 0
 
-                # is_paused 동기화 (evt_branches에 없는 지점은 no-op)
-                is_paused = 1 if b.get("is_paused") else 0
-                conn.execute(
-                    "UPDATE evt_branches SET is_paused = ? WHERE name = ?",
-                    (is_paused, branch_name),
-                )
+                # is_paused: 시트 short_name 매칭으로 나중에 일괄 반영
+                paused_flags[branch_name] = 1 if b.get("is_paused") else 0
 
                 for d in daily:
                     day = d.get("day")
@@ -91,6 +90,24 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
                     total_inserted += 1
 
             sheets_processed += 1
+
+            # 휴식 플래그 일괄 반영 — 시트 branch_name에 포함된 short_name으로 매칭
+            # 예: 시트 '안양유앤아이' → evt_branches.short_name='안양' → is_paused 업데이트
+            for sheet_branch, is_paused in paused_flags.items():
+                if not sheet_branch:
+                    continue
+                row = conn.execute(
+                    """SELECT id FROM evt_branches
+                       WHERE short_name IS NOT NULL AND short_name != ''
+                         AND INSTR(?, short_name) > 0
+                       ORDER BY LENGTH(short_name) DESC LIMIT 1""",
+                    (sheet_branch,)
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        "UPDATE evt_branches SET is_paused = ? WHERE id = ?",
+                        (is_paused, row["id"])
+                    )
 
             # nosul_map 저장 (AF열 노출일수)
             nosul_map = result.get("nosul_map", {})

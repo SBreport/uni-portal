@@ -395,10 +395,14 @@ async def get_dashboard(
                 data = {}
             weekly_trend.append(_extract_trend_point(r["week_start"], data))
 
-        # ── 3) realtime: 전일 기준 place/webpage 집계 ──
-        # 화요일에 전주 월요일 데이터를 보는 운영 특성상 기준일은 '어제'.
+        # ── 3) realtime: 가장 최근 지나간 수요일 기준 집계 ──
+        # 주간보고는 매주 월요일 기점으로 화요일에 작성. 수요일이 되면
+        # 전주 데이터가 대부분 확정되므로, 가장 최근 수요일을 기준일로 사용.
+        # (월/화 조회 → 지난주 수, 수~일 조회 → 이번주 수)
         # 해당 일자 데이터가 없으면 헬퍼가 하루 더 이전으로 fallback.
-        ref_str = (date.today() - timedelta(days=1)).isoformat()
+        today_d = date.today()
+        days_back = (today_d.weekday() - 2) % 7  # weekday: Mon=0, Wed=2
+        ref_str = (today_d - timedelta(days=days_back)).isoformat()
         realtime = {
             "place": _get_realtime_place(conn, ref_str),
             "webpage": _get_realtime_webpage(conn, ref_str),

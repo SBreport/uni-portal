@@ -104,6 +104,7 @@ async function toggleBranch(b: BranchRanking) {
 
 // 검색 + 정렬
 const searchQuery = ref('')
+const hidePaused = ref(false)
 type SortKey = 'branch' | 'keyword' | 'today_rank' | 'streak' | 'nosul_count' | 'total_exposed' | 'work_days' | 'status' | 'agency'
 const sortKey = ref<SortKey>('nosul_count')
 const sortAsc = ref(false)
@@ -125,6 +126,10 @@ function sortIcon(key: SortKey): string {
 const filteredBranches = computed(() => {
   if (!data.value) return []
   let list = [...data.value.branches]
+
+  if (hidePaused.value) {
+    list = list.filter(b => !b.is_paused)
+  }
 
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.trim().toLowerCase()
@@ -180,7 +185,7 @@ const pausedBranches = computed(() =>
 
 const allFailed = computed(() => {
   if (!data.value?.branches.length) return false
-  // 성공(노출)이 단 한 건도 없을 때 (실패 + 미측정 전부 포함)
+  // 성공(노출)이 단 한 건도 없을 때 (이탈 + 미점유 전부 포함)
   return data.value.branches.every((b: BranchRanking) => !b.today_success)
 })
 
@@ -269,7 +274,7 @@ function statusBadge(status: string): { text: string; cls: string } {
   switch (status) {
     case 'active': return { text: '성공', cls: 'bg-blue-100 text-blue-700' }
     case 'fail': return { text: '이탈', cls: 'bg-red-100 text-red-600' }
-    case '미달': return { text: '미측정', cls: 'bg-slate-100 text-slate-400' }
+    case '미달': return { text: '미점유', cls: 'bg-slate-100 text-slate-400' }
     default: return { text: status, cls: 'bg-yellow-100 text-yellow-700' }
   }
 }
@@ -435,7 +440,7 @@ onMounted(async () => {
         </div>
       </Teleport>
       <span v-if="lastSync" class="text-[10px] text-slate-400 shrink-0">최종 동기화: {{ lastSync }}</span>
-      <!-- 성공/실패/미달 큰 숫자 -->
+      <!-- 성공/이탈/미점유 큰 숫자 -->
       <template v-if="data">
         <div class="flex items-center gap-2 shrink-0">
           <div class="flex items-baseline gap-1 px-2 py-1 bg-blue-50 rounded-lg whitespace-nowrap">
@@ -448,13 +453,25 @@ onMounted(async () => {
           </div>
           <div class="flex items-baseline gap-1 px-2 py-1 bg-slate-100 rounded-lg whitespace-nowrap">
             <span class="text-2xl font-bold text-slate-500">{{ data.summary.midal }}</span>
-            <span class="text-xs text-slate-400">미달 ({{ pct(data.summary.midal, data.summary.total) }}%)</span>
+            <span class="text-xs text-slate-400">미점유 ({{ pct(data.summary.midal, data.summary.total) }}%)</span>
+          </div>
+          <span class="text-slate-300 mx-1">|</span>
+          <div class="flex items-center gap-1 whitespace-nowrap">
+            <span class="inline-block w-2 h-2 rounded-full align-middle"
+                  :class="data.summary.paused > 0 ? 'bg-amber-500' : 'bg-slate-300'"></span>
+            <span class="text-2xl font-bold tabular-nums"
+                  :class="data.summary.paused > 0 ? 'text-amber-600' : 'text-slate-400'">{{ data.summary.paused }}</span>
+            <span class="text-xs" :class="data.summary.paused > 0 ? 'text-amber-500' : 'text-slate-400'">휴식</span>
           </div>
         </div>
-        <!-- 검색 -->
-        <div class="shrink-0">
+        <!-- 검색 + 휴식 제외 -->
+        <div class="shrink-0 flex items-center gap-2">
           <input v-model="searchQuery" type="text" placeholder="지점 · 키워드 검색"
             class="w-40 px-2.5 py-1 border border-slate-200 rounded-md text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-slate-400" />
+          <label class="flex items-center gap-1 text-[11px] text-slate-600 cursor-pointer select-none whitespace-nowrap">
+            <input type="checkbox" v-model="hidePaused" class="w-3 h-3" />
+            휴식 제외
+          </label>
         </div>
       </template>
     </div>
@@ -477,7 +494,7 @@ onMounted(async () => {
       </div>
 
       <template v-else>
-      <!-- ─── ROW 2: 실패 · 미달 태그 ─── -->
+      <!-- ─── ROW 2: 이탈 · 미점유 태그 ─── -->
       <div class="px-5 pb-1.5 shrink-0">
         <div class="bg-white border border-slate-200 rounded-lg px-3 py-2">
           <div class="flex flex-wrap items-center gap-1">
@@ -488,7 +505,7 @@ onMounted(async () => {
             </span>
             <template v-if="midalBranches.length > 0">
               <span class="text-slate-300 mx-1">|</span>
-              <span class="text-[11px] text-slate-400 mr-1 shrink-0">미달</span>
+              <span class="text-[11px] text-slate-400 mr-1 shrink-0">미점유</span>
               <span v-for="b in midalBranches" :key="b.branch"
                 class="px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-500">
                 {{ shortName(b.branch) }}
@@ -537,7 +554,7 @@ onMounted(async () => {
           <div class="flex items-center gap-1 text-[11px] whitespace-nowrap overflow-hidden">
             <span class="text-blue-600 font-medium shrink-0">성공 {{ a.success }}</span><span class="text-slate-300">·</span>
             <span class="text-red-500 font-medium shrink-0">이탈 {{ a.fail }}</span><span class="text-slate-300">·</span>
-            <span class="shrink-0" :class="a.midal > 0 ? 'text-red-400' : 'text-slate-400'">미달 {{ a.midal }}</span>
+            <span class="shrink-0" :class="a.midal > 0 ? 'text-red-400' : 'text-slate-400'">미점유 {{ a.midal }}</span>
             <span v-if="a.paused > 0" class="text-slate-300 mx-1">|</span>
             <span v-if="a.paused > 0" class="text-amber-600 font-medium shrink-0">휴식 {{ a.paused }}</span>
             <span class="ml-auto text-slate-400 shrink-0">평균 {{ a.avgNosul }}일</span>
@@ -563,7 +580,7 @@ onMounted(async () => {
                     <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]" title="시트 AF열 기준 당월 노출일수">노출일수 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
                     <th @click="toggleSort('total_exposed')" class="th-cell text-center w-[36px]" title="전체 이력 중 노출 성공한 총 일수">총노출 <span class="sort-icon">{{ sortIcon('total_exposed') }}</span></th>
                     <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]" title="작업 시작일부터 현재까지 총 진행일수">총진행일 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
-                    <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 이탈: 오늘 미노출 / 미달: 데이터 없음 / △: 휴식 중">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
+                    <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 이탈: 오늘 미노출 / 미점유: 데이터 없음 / ●: 휴식 중">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
                     <th v-if="canSeeAgency" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]" title="해당 지점 담당 실행사">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
                   </tr>
                 </thead>
@@ -582,9 +599,7 @@ onMounted(async () => {
                         <span v-if="isEditor" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>
                         {{ shortName(b.branch) }}
                         <span v-if="getRecoveryInfo(b).show" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" :title="getRecoveryInfo(b).label"></span>
-                        <span v-if="b.is_paused"
-                          class="ml-1 text-[10px] px-1 rounded bg-amber-50 text-amber-700 border border-amber-200"
-                          title="휴식 지점">△ 휴식</span>
+                        <span v-if="b.is_paused" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 ml-1 align-middle" title="휴식 중"></span>
                       </td>
                       <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
                       <td class="py-[5px] text-center whitespace-nowrap" :class="rankClass(b.today_rank)">
@@ -615,6 +630,10 @@ onMounted(async () => {
                     <!-- 상세 분석 패널 -->
                     <tr v-if="expandedBranch === b.branch && isEditor" class="bg-slate-50/80">
                       <td :colspan="canSeeAgency ? 10 : 9" class="px-6 py-3">
+                        <div v-if="b.is_paused" class="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700 flex items-center gap-1.5">
+                          <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                          <span>이 지점은 현재 휴식 중입니다.</span>
+                        </div>
                         <div v-if="detailLoading" class="text-xs text-slate-400">불러오는 중...</div>
                         <div v-else-if="detailError" class="text-xs text-red-500">{{ detailError }}</div>
                         <template v-else-if="detailData && detailData.success_rate.all.total > 0">
@@ -762,7 +781,7 @@ onMounted(async () => {
             </div>
             <div v-if="midalBranches.length > 0" class="mt-2 pt-2 border-t border-slate-100 shrink-0">
               <div class="flex items-center gap-1.5">
-                <span class="text-[11px] text-slate-400">미달:</span>
+                <span class="text-[11px] text-slate-400">미점유:</span>
                 <span v-for="b in midalBranches" :key="b.branch"
                   class="text-[11px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">{{ shortName(b.branch) }}</span>
               </div>

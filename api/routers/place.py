@@ -366,6 +366,12 @@ async def get_branch_detail(
 
     conn = get_conn(EQUIPMENT_DB)
     try:
+        # viewer-branch는 자기 지점만 조회 가능
+        if user.get("role") == "viewer" and user.get("branch_id") is not None:
+            requested_bid = resolve_evt_branch_id(conn, branch_name)
+            if requested_bid != user["branch_id"]:
+                raise HTTPException(status_code=403, detail="자신의 지점만 조회할 수 있습니다.")
+
         # 전체 이력 로드 (오름차순)
         rows = conn.execute("""
             SELECT date, rank
@@ -511,17 +517,19 @@ async def get_branch_detail(
             else:
                 break
 
-        # 실행사 변경 이력 (map_type='place')
-        agency_rows = conn.execute("""
-            SELECT from_agency, to_agency, changed_at
-            FROM agency_map_history
-            WHERE branch_name = ? AND map_type = 'place'
-            ORDER BY changed_at DESC
-        """, (branch_name,)).fetchall()
-        agency_history = [
-            {"from_agency": r["from_agency"], "to_agency": r["to_agency"], "changed_at": r["changed_at"]}
-            for r in agency_rows
-        ]
+        # 실행사 변경 이력 (map_type='place') — admin/editor만 노출
+        agency_history = []
+        if user.get("role") in {"admin", "editor"}:
+            agency_rows = conn.execute("""
+                SELECT from_agency, to_agency, changed_at
+                FROM agency_map_history
+                WHERE branch_name = ? AND map_type = 'place'
+                ORDER BY changed_at DESC
+            """, (branch_name,)).fetchall()
+            agency_history = [
+                {"from_agency": r["from_agency"], "to_agency": r["to_agency"], "changed_at": r["changed_at"]}
+                for r in agency_rows
+            ]
 
         return {
             "branch_name": branch_name,

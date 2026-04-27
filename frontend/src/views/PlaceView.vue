@@ -75,6 +75,12 @@ const displayDate = computed(() => {
 
 const isAdmin = computed(() => auth.role === 'admin')
 const isEditor = computed(() => ['admin', 'editor'].includes(auth.role))
+function canOpenDetailFor(b: BranchRanking): boolean {
+  if (isEditor.value) return true
+  if (auth.effectiveRole === 'viewer-hq') return true
+  if (auth.effectiveRole === 'viewer-branch' && auth.branchId === b.branch_id) return true
+  return false
+}
 
 // ── 확장 행 토글 ──
 const expandedBranch = ref<string | null>(null)
@@ -83,7 +89,7 @@ const detailLoading = ref(false)
 const detailError = ref('')
 
 async function toggleBranch(b: BranchRanking) {
-  if (!isEditor.value) return
+  if (!canOpenDetailFor(b)) return
   if (expandedBranch.value === b.branch) {
     expandedBranch.value = null
     detailData.value = null
@@ -588,14 +594,14 @@ onMounted(async () => {
                     <td :colspan="canSeeAgency ? 10 : 9" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
                   <template v-for="b in filteredBranches" :key="b.branch">
-                    <tr @click="isEditor && toggleBranch(b)"
+                    <tr @click="canOpenDetailFor(b) && toggleBranch(b)"
                       :class="['border-b border-slate-100 transition-colors',
-                        isEditor ? 'cursor-pointer' : '',
+                        canOpenDetailFor(b) ? 'cursor-pointer' : '',
                         getRecoveryInfo(b).show
                           ? (expandedBranch === b.branch ? 'bg-emerald-100/60' : 'bg-emerald-50/60 hover:bg-emerald-100/60')
                           : (expandedBranch === b.branch ? 'bg-blue-50/50' : 'hover:bg-blue-50/30')]">
                       <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap min-w-[120px]">
-                        <span v-if="isEditor" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>
+                        <span v-if="canOpenDetailFor(b)" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>
                         {{ shortName(b) }}
                         <span v-if="getRecoveryInfo(b).show" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" :title="getRecoveryInfo(b).label"></span>
                         <span v-if="b.is_paused" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 ml-1 align-middle" title="휴식 중"></span>
@@ -627,7 +633,7 @@ onMounted(async () => {
                       <td v-if="canSeeAgency" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
                     </tr>
                     <!-- 상세 분석 패널 -->
-                    <tr v-if="expandedBranch === b.branch && isEditor" class="bg-slate-50/80">
+                    <tr v-if="expandedBranch === b.branch && canOpenDetailFor(b)" class="bg-slate-50/80">
                       <td :colspan="canSeeAgency ? 10 : 9" class="px-6 py-3">
                         <div v-if="b.is_paused" class="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700 flex items-center gap-1.5">
                           <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>

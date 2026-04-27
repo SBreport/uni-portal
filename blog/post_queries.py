@@ -210,18 +210,21 @@ def get_filter_options(branch_filter: str | None = None) -> dict:
 
 # ── 대시보드 ──
 
-def get_dashboard(branch_filter: str | None = None, month: str | None = None) -> dict:
+def get_dashboard(branch_filter: str | None = None, month: str | None = None, period: str | None = None) -> dict:
     conn = _conn()
     try:
-        return _get_dashboard_impl(conn, branch_filter, month)
+        return _get_dashboard_impl(conn, branch_filter, month, period)
     finally:
         conn.close()
 
 
-def _get_dashboard_impl(conn, branch_filter, month):
+def _get_dashboard_impl(conn, branch_filter, month, period=None):
     bf = _bf_clause(branch_filter, prefix="WHERE")
     bf_and = _bf_clause(branch_filter, prefix="AND")
     bf_pb = _bf_clause(branch_filter, column="project_branch", prefix="AND")
+
+    # period='week'이면 month 무시하고 최근 7일 필터만 적용
+    use_week = period == 'week'
 
     total = conn.execute(f"SELECT COUNT(*) FROM blog_posts{bf}").fetchone()[0]
     by_channel = conn.execute(
@@ -270,7 +273,12 @@ def _get_dashboard_impl(conn, branch_filter, month):
         ).fetchall()
 
     by_type_monthly = None
-    if month:
+    if use_week:
+        # 주간(최근 7일) 원고 종류 분포
+        by_type_monthly = [dict(r) for r in conn.execute(
+            f"SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != '' AND published_at >= date('now', '-7 days'){bf_and} GROUP BY post_type_main ORDER BY cnt DESC"
+        ).fetchall()]
+    elif month:
         by_type_monthly = [dict(r) for r in conn.execute(
             f"SELECT post_type_main, COUNT(*) as cnt FROM blog_posts WHERE post_type_main != ''{bf_and} AND project_month = ? GROUP BY post_type_main ORDER BY cnt DESC",
             (month,)

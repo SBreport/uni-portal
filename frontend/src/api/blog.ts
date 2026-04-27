@@ -31,7 +31,7 @@ export const getBlogFilterOptions = (params?: { branch_filter?: string }) =>
 export const getBlogStats = () =>
   api.get('/blog/stats')
 
-export const getBlogDashboard = (params?: { branch_filter?: string; month?: string }) =>
+export const getBlogDashboard = (params?: { branch_filter?: string; month?: string; period?: string }) =>
   api.get('/blog/dashboard', { params })
 
 export const getBlogAccounts = (params?: { channel?: string; search?: string; branch_filter?: string }) =>

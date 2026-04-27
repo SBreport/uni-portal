@@ -76,8 +76,9 @@ def filter_options_api(branch_filter: Optional[str] = None):
 def blog_dashboard_api(
     branch_filter: Optional[str] = None,
     month: Optional[str] = None,
+    period: Optional[str] = None,
 ):
-    return get_dashboard(branch_filter, month)
+    return get_dashboard(branch_filter, month, period)
 
 
 # ── 통계 ──

@@ -24,21 +24,21 @@ const emit = defineEmits<{
 const dashboard = ref<any>(null)
 const loading = ref(false)
 const syncStatus = ref<any>(null)
-const branchShowAll = ref(false)
 const authorShowAll = ref(false)
-
 
 // 월간 토글: 지점
 const branchMonthMode = ref<'all' | 'monthly'>('monthly')
 const branchMonth = ref('')
 const branchMonthlyData = ref<any[]>([])
 const branchMonthlyLoading = ref(false)
+// 지점 정렬 모드
+const branchSortMode = ref<'name' | 'count'>('name')
 
 // 월간 토글: 담당자
 const authorMonthMode = ref<'all' | 'monthly'>('all')
 const authorMonth = ref('')
 // 월간 토글: 종류
-const typeMonthMode = ref<'all' | 'monthly'>('monthly')
+const typeMonthMode = ref<'all' | 'monthly' | 'weekly'>('monthly')
 const typeMonth = ref('')
 
 // 사용 가능한 월 목록 (대시보드 데이터에서 추출)
@@ -53,9 +53,10 @@ const availableMonths = computed(() => {
 const authorMonthlyData = ref<any[]>([])
 const authorMonthlyLoading = ref(false)
 
-// 종류 월간 데이터
+// 종류 월간/주간 데이터
 const typeMonthlyData = ref<any[]>([])
 const typeMonthlyLoading = ref(false)
+const typeWeeklyData = ref<any[]>([])
 
 function apiParams(extra?: Record<string, string>) {
   const p: any = {}
@@ -112,6 +113,18 @@ async function loadTypeMonthly() {
   try {
     const { data } = await blogApi.getBlogDashboard(apiParams({ month: typeMonth.value }))
     typeMonthlyData.value = data.by_type_monthly || data.by_type || []
+  } catch (e) {
+    console.error(e)
+  } finally {
+    typeMonthlyLoading.value = false
+  }
+}
+
+async function loadTypeWeekly() {
+  typeMonthlyLoading.value = true
+  try {
+    const { data } = await blogApi.getBlogDashboard(apiParams({ period: 'week' }))
+    typeWeeklyData.value = data.by_type_monthly || []
   } catch (e) {
     console.error(e)
   } finally {
@@ -176,6 +189,7 @@ const maxAuthorCount = computed(() => {
 // 표시할 종류 데이터
 const displayTypeData = computed(() => {
   if (typeMonthMode.value === 'monthly') return typeMonthlyData.value
+  if (typeMonthMode.value === 'weekly') return typeWeeklyData.value
   return dashboard.value?.by_type || []
 })
 const displayTypeTotal = computed(() => {
@@ -204,6 +218,7 @@ watch(authorMonthMode, (mode) => {
 })
 watch(typeMonthMode, (mode) => {
   if (mode === 'monthly') loadTypeMonthly()
+  else if (mode === 'weekly') loadTypeWeekly()
 })
 
 // 카드 클릭 → 목록 이동
@@ -215,13 +230,14 @@ const displayBranchData = computed(() => {
   if (branchMonthMode.value === 'monthly') return branchMonthlyData.value
   return dashboard.value?.by_branch || []
 })
-const maxBranchCount = computed(() => {
-  if (!displayBranchData.value.length) return 1
-  return Math.max(...displayBranchData.value.map((b: any) => b.cnt))
+const sortedBranchData = computed(() => {
+  const data = [...displayBranchData.value]
+  if (branchSortMode.value === 'name') {
+    return data.sort((a: any, b: any) => a.branch_name.localeCompare(b.branch_name, 'ko'))
+  }
+  return data.sort((a: any, b: any) => b.cnt - a.cnt)
 })
-const displayBranches = computed(() => {
-  return branchShowAll.value ? displayBranchData.value : displayBranchData.value.slice(0, 15)
-})
+const displayBranches = computed(() => sortedBranchData.value)
 const maxMonthlyCount = computed(() => {
   if (!dashboard.value?.monthly?.length) return 1
   return Math.max(...dashboard.value.monthly.map((m: any) => m.cnt))
@@ -297,7 +313,10 @@ const doughnutOptions = {
   cutout: '62%',
   plugins: {
     legend: { display: false },
-    tooltip: { enabled: true },
+    tooltip: {
+      enabled: true,
+      position: 'nearest' as const,
+    },
   },
 }
 
@@ -432,91 +451,12 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Row 3: 지점별 게시글 수 (풀폭) -->
-      <div class="bg-white border border-slate-200 rounded-lg p-3">
-        <div class="flex items-center gap-2 mb-3">
-          <h3 class="text-sm font-semibold text-slate-700">
-            지점별 게시글 수
-            <span class="text-[10px] text-slate-400 font-normal ml-1">{{ displayBranchData.length }}개 지점</span>
-          </h3>
-          <div class="flex items-center gap-1 ml-auto">
-            <button @click="branchMonthMode = 'all'"
-              class="text-[10px] px-2 py-0.5 rounded transition-colors"
-              :class="branchMonthMode === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
-            >전체</button>
-            <button @click="branchMonthMode = 'monthly'"
-              class="text-[10px] px-2 py-0.5 rounded transition-colors"
-              :class="branchMonthMode === 'monthly' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
-            >월간</button>
-            <template v-if="branchMonthMode === 'monthly'">
-              <button @click="prevBranchMonth" :disabled="!canPrevBranch"
-                      class="text-slate-400 hover:text-slate-600 disabled:opacity-30 px-0.5">&larr;</button>
-              <span class="text-[11px] text-slate-600 min-w-[52px] text-center">{{ branchMonth?.slice(2) }}</span>
-              <button @click="nextBranchMonth" :disabled="!canNextBranch"
-                      class="text-slate-400 hover:text-slate-600 disabled:opacity-30 px-0.5">&rarr;</button>
-            </template>
-          </div>
-        </div>
-        <div v-if="branchMonthlyLoading && branchMonthMode === 'monthly'" class="text-center py-4 text-slate-400 text-xs">로딩...</div>
-        <div v-else :class="branchShowAll ? 'max-h-[420px] overflow-y-auto overflow-x-hidden' : 'overflow-hidden'"
-             class="grid gap-x-6 gap-y-1" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
-          <div v-for="b in displayBranches" :key="b.branch_name"
-               class="flex items-center gap-2 cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5 transition-colors"
-               @click="goToList({ project_branch: b.branch_name })">
-            <span class="w-24 text-right text-slate-600 truncate shrink-0 text-xs">{{ b.branch_name }}</span>
-            <div class="flex-1 bg-slate-100 rounded-full h-4 min-w-0 overflow-hidden">
-              <div class="bg-blue-400 h-full rounded-full transition-all"
-                   :style="{ width: (b.cnt / maxBranchCount * 100) + '%' }"></div>
-            </div>
-            <span class="w-10 text-right text-slate-600 shrink-0 text-xs font-medium tabular-nums">{{ b.cnt }}</span>
-          </div>
-          <div v-if="displayBranchData.length === 0" class="text-xs text-slate-400 text-center py-3 col-span-full">데이터 없음</div>
-        </div>
-        <button v-if="displayBranchData.length > 15"
-                @click="branchShowAll = !branchShowAll"
-                class="mt-2 text-[11px] text-blue-500 hover:underline">
-          {{ branchShowAll ? '상위 15개만 보기' : `전체 ${displayBranchData.length}개 지점 보기` }}
-        </button>
-      </div>
+      <!-- Row 3: grid-cols-4 (도넛 col-span-1 | 지점별 col-span-3) -->
+      <div class="grid grid-cols-4 gap-3">
 
-      <!-- Row 4: 차트 3-column (월별 추이 | 주간 추이 | 원고 종류별 도넛) -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        <!-- 월별 발행 추이 -->
-        <div class="bg-white border border-slate-200 rounded-lg p-3">
-          <h4 class="text-sm font-semibold text-slate-700 mb-3">월별 발행 추이</h4>
-          <div class="flex items-end gap-1 h-20">
-            <div v-for="m in sortedMonthly" :key="m.month"
-                 class="flex-1 flex flex-col items-center justify-end cursor-pointer group"
-                 @click="goToList({ project_month: m.month })">
-              <span class="text-xs text-slate-500 mb-1 group-hover:text-indigo-600 font-semibold">{{ m.cnt.toLocaleString() }}</span>
-              <div class="w-4/5 bg-indigo-300 group-hover:bg-indigo-400 rounded-t transition-all min-h-[2px]"
-                   :style="{ height: (m.cnt / maxMonthlyCount * 70) + 'px' }"></div>
-              <span class="text-[11px] text-slate-400 mt-1.5 whitespace-nowrap">{{ m.month.slice(2) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 주간 발행 추이 -->
-        <div class="bg-white border border-slate-200 rounded-lg p-3">
-          <div class="flex items-center justify-between mb-3">
-            <h4 class="text-sm font-semibold text-slate-700">주간 발행 추이</h4>
-            <span class="text-xs text-slate-400">최근 6주</span>
-          </div>
-          <div class="flex items-end gap-1 h-20">
-            <div v-for="w in sortedWeekly" :key="w.week"
-                 class="flex-1 flex flex-col items-center justify-end group">
-              <span class="text-xs text-slate-500 mb-1 group-hover:text-sky-600 font-semibold">{{ w.cnt }}</span>
-              <div class="w-4/5 bg-sky-300 group-hover:bg-sky-400 rounded-t transition-all min-h-[2px]"
-                   :style="{ height: (w.cnt / maxWeeklyCount * 70) + 'px' }"></div>
-              <span class="text-[11px] text-slate-400 mt-1.5 whitespace-nowrap">{{ w.week_start?.slice(5) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 원고 종류별 분포 (도넛) -->
-        <div class="bg-white border border-slate-200 rounded-lg p-3">
-          <div class="flex items-center justify-between mb-3">
+        <!-- 도넛 + 범례 (col-span-1) -->
+        <div class="bg-white border border-slate-200 rounded-lg p-3 flex flex-col">
+          <div class="flex items-center justify-between mb-2">
             <h4 class="text-sm font-semibold text-slate-700">원고 종류별 분포</h4>
             <div class="flex items-center gap-1">
               <button @click="typeMonthMode = 'all'"
@@ -527,6 +467,10 @@ onMounted(() => {
                 class="text-[10px] px-2 py-0.5 rounded transition-colors"
                 :class="typeMonthMode === 'monthly' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
               >월간</button>
+              <button @click="typeMonthMode = 'weekly'"
+                class="text-[10px] px-2 py-0.5 rounded transition-colors"
+                :class="typeMonthMode === 'weekly' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
+              >주간</button>
               <template v-if="typeMonthMode === 'monthly'">
                 <button @click="prevTypeMonth" :disabled="!canPrevType"
                         class="text-slate-400 hover:text-slate-600 disabled:opacity-30 px-0.5">&larr;</button>
@@ -536,27 +480,81 @@ onMounted(() => {
               </template>
             </div>
           </div>
-          <div v-if="typeMonthlyLoading && typeMonthMode === 'monthly'" class="text-center py-4 text-slate-400 text-xs">로딩...</div>
+          <div v-if="typeMonthlyLoading && typeMonthMode === 'monthly'" class="text-center py-6 text-slate-400 text-xs">로딩...</div>
           <div v-else-if="displayTypeData.length === 0" class="text-xs text-slate-400 text-center py-6">데이터 없음</div>
-          <div v-else class="flex items-center gap-3">
+          <div v-else class="flex flex-col items-center gap-3">
             <!-- 도넛 + 중앙 텍스트 -->
-            <div class="relative shrink-0" style="width:90px;height:90px;">
+            <div class="relative shrink-0" style="width:120px;height:120px;">
               <Doughnut :data="doughnutChartData" :options="doughnutOptions" />
               <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <span class="text-base font-bold text-slate-800 tabular-nums leading-none">{{ doughnutTotal.toLocaleString() }}</span>
                 <span class="text-[10px] text-slate-400 leading-none mt-0.5">원고</span>
               </div>
             </div>
-            <!-- 범례 -->
-            <div class="flex flex-col gap-1 min-w-0 flex-1">
+            <!-- 범례: 세로 5항목 -->
+            <div class="flex flex-col gap-1 w-full">
               <div v-for="item in doughnutLegend" :key="item.label"
-                   class="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1 py-0.5 transition-colors"
+                   class="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5 transition-colors"
                    @click="goToList({ post_type_main: item.label })">
-                <span class="w-2 h-2 rounded-full shrink-0"
+                <span class="w-2.5 h-2.5 rounded-sm shrink-0"
                       :style="{ backgroundColor: item.color }"></span>
                 <span class="text-slate-600 truncate flex-1">{{ item.label }}</span>
                 <span class="text-slate-700 font-medium tabular-nums shrink-0">{{ item.cnt.toLocaleString() }}</span>
+                <span class="text-slate-400 tabular-nums shrink-0 w-8 text-right">({{ Math.round(item.cnt / doughnutTotal * 100) }}%)</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 지점별 게시글 수 (col-span-3) -->
+        <div class="col-span-3 bg-white border border-slate-200 rounded-lg p-3">
+          <div class="flex items-center gap-2 mb-3">
+            <h3 class="text-sm font-semibold text-slate-700">
+              지점별 게시글 수
+              <span class="text-[10px] text-slate-400 font-normal ml-1">{{ displayBranchData.length }}개 지점</span>
+            </h3>
+            <div class="flex items-center gap-1 ml-auto">
+              <!-- 정렬 토글 -->
+              <button @click="branchSortMode = 'name'"
+                class="text-[10px] px-2 py-0.5 rounded transition-colors"
+                :class="branchSortMode === 'name' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
+              >가나다</button>
+              <button @click="branchSortMode = 'count'"
+                class="text-[10px] px-2 py-0.5 rounded transition-colors"
+                :class="branchSortMode === 'count' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
+              >게시글</button>
+              <span class="text-slate-200 mx-0.5">|</span>
+              <!-- 월간/전체 토글 -->
+              <button @click="branchMonthMode = 'all'"
+                class="text-[10px] px-2 py-0.5 rounded transition-colors"
+                :class="branchMonthMode === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
+              >전체</button>
+              <button @click="branchMonthMode = 'monthly'"
+                class="text-[10px] px-2 py-0.5 rounded transition-colors"
+                :class="branchMonthMode === 'monthly' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
+              >월간</button>
+              <template v-if="branchMonthMode === 'monthly'">
+                <button @click="prevBranchMonth" :disabled="!canPrevBranch"
+                        class="text-slate-400 hover:text-slate-600 disabled:opacity-30 px-0.5">&larr;</button>
+                <span class="text-[11px] text-slate-600 min-w-[52px] text-center">{{ branchMonth?.slice(2) }}</span>
+                <button @click="nextBranchMonth" :disabled="!canNextBranch"
+                        class="text-slate-400 hover:text-slate-600 disabled:opacity-30 px-0.5">&rarr;</button>
+              </template>
+            </div>
+          </div>
+          <div v-if="branchMonthlyLoading && branchMonthMode === 'monthly'" class="text-center py-4 text-slate-400 text-xs">로딩...</div>
+          <div v-else-if="displayBranchData.length === 0" class="text-xs text-slate-400 text-center py-3">데이터 없음</div>
+          <div v-else
+               class="grid grid-cols-3 gap-x-4 gap-y-0"
+               :style="{
+                 gridAutoFlow: 'column',
+                 gridTemplateRows: 'repeat(' + Math.ceil(displayBranches.length / 3) + ', minmax(0, 1fr))'
+               }">
+            <div v-for="b in displayBranches" :key="b.branch_name"
+                 class="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-slate-50 px-2 rounded transition-colors"
+                 @click="goToList({ project_branch: b.branch_name })">
+              <span class="text-xs text-slate-700 truncate">{{ b.branch_name }}</span>
+              <span class="text-xs font-semibold text-slate-700 tabular-nums shrink-0">{{ b.cnt }}</span>
             </div>
           </div>
         </div>

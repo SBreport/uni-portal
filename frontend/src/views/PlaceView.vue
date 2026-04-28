@@ -308,6 +308,11 @@ async function handleSyncCurrentMonth() {
   error.value = ''
   try {
     const { data: res } = await syncPlaceToDB()
+    if (res.ok === false) {
+      alert(`동기화 실패: ${res.error || '알 수 없는 오류'}`)
+      error.value = res.error || '동기화 실패'
+      return
+    }
     let msg = `동기화 완료: ${res.sheets_processed}개 시트, ${res.records_saved?.toLocaleString()}건 저장`
     if (res.agency_changes?.length) {
       msg += `\n\n실행사 변경 ${res.agency_changes.length}건:`
@@ -334,6 +339,11 @@ async function handleSyncSpecificMonth() {
   error.value = ''
   try {
     const { data: res } = await syncPlaceToDB(ym)
+    if (res.ok === false) {
+      alert(`동기화 실패 (${ym}): ${res.error || '알 수 없는 오류'}`)
+      error.value = res.error || '동기화 실패'
+      return
+    }
     let msg = `동기화 완료 (${ym}): ${res.sheets_processed}개 시트, ${res.records_saved?.toLocaleString()}건 저장`
     if (res.agency_changes?.length) {
       msg += `\n\n실행사 변경 ${res.agency_changes.length}건:`

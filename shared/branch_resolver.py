@@ -20,6 +20,19 @@ import sqlite3
 from typing import Optional
 
 
+def _ensure_aliases_column(conn: sqlite3.Connection) -> None:
+    """evt_branches.aliases 컬럼 보장 (SQLite는 IF NOT EXISTS 미지원).
+
+    레거시 DB에는 aliases 컬럼이 없어 resolver 첫 호출 시 OperationalError가 발생할 수 있다.
+    호출 시점에 try-add 패턴으로 안전하게 컬럼 추가한다.
+    """
+    try:
+        conn.execute("ALTER TABLE evt_branches ADD COLUMN aliases TEXT DEFAULT ''")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # 이미 존재하면 무시
+
+
 def resolve_evt_branch_id(conn: sqlite3.Connection, branch_name: str) -> Optional[int]:
     """branch_name을 evt_branches.id로 해석.
 
@@ -28,6 +41,9 @@ def resolve_evt_branch_id(conn: sqlite3.Connection, branch_name: str) -> Optiona
     """
     if not branch_name:
         return None
+
+    # aliases 컬럼 자동 마이그레이션 (레거시 DB 호환)
+    _ensure_aliases_column(conn)
 
     # 1차: aliases 정확 매칭
     alias_rows = conn.execute(

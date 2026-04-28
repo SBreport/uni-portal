@@ -103,6 +103,7 @@ def init_db():
         region_id   INTEGER NOT NULL REFERENCES evt_regions(id),
         name        TEXT NOT NULL UNIQUE,
         short_name  TEXT,
+        aliases     TEXT DEFAULT '',
         is_active   INTEGER DEFAULT 1,
         created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )

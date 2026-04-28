@@ -297,9 +297,9 @@ async def get_ranking_daily(
             hist = bdata["history"]
             today_data = hist.get(date)
 
-            # 최근 5일 (target 포함 이전 5일)
+            # 최근 5일: 어제 → 4일 전 (왼쪽=어제, 오른쪽=가장 오래된)
             recent = []
-            for i in range(5, 0, -1):
+            for i in range(1, 6):
                 d = (target - timedelta(days=i)).isoformat()
                 h = hist.get(d)
                 recent.append({
@@ -408,6 +408,8 @@ async def get_branch_detail(
                 "current_success": {"days": 0, "from": None, "to": None},
                 "recovery_history": [],
                 "agency_history": [],
+                "work_start_date": None,
+                "pause_history": [],
             }
 
         def _is_success(rank) -> bool:
@@ -529,6 +531,27 @@ async def get_branch_detail(
             else:
                 break
 
+        # 작업 시작일 (place_daily 최초 기록일)
+        work_start_row = conn.execute("""
+            SELECT MIN(date) AS start_date FROM place_daily
+            WHERE branch_name = ? AND keyword = ?
+        """, (branch_name, keyword)).fetchone()
+        work_start_date = work_start_row["start_date"] if work_start_row else None
+
+        # 휴식 이력 (최근 10건)
+        branch_id = resolve_evt_branch_id(conn, branch_name)
+        pause_history = []
+        if branch_id:
+            pause_rows = conn.execute("""
+                SELECT paused_at, resumed_at FROM place_branch_pause_history
+                WHERE branch_id = ?
+                ORDER BY paused_at DESC LIMIT 10
+            """, (branch_id,)).fetchall()
+            pause_history = [
+                {"paused_at": r["paused_at"], "resumed_at": r["resumed_at"]}
+                for r in pause_rows
+            ]
+
         # 실행사 변경 이력 (map_type='place') — admin/editor만 노출
         agency_history = []
         if user.get("role") in {"admin", "editor"}:
@@ -562,6 +585,8 @@ async def get_branch_detail(
             },
             "recovery_history": recovery_history,
             "agency_history": agency_history,
+            "work_start_date": work_start_date,
+            "pause_history": pause_history,
         }
     finally:
         conn.close()

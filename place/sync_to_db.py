@@ -98,6 +98,17 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
 
             # 휴식 플래그 일괄 반영 — 시트 branch_name에 포함된 short_name으로 매칭
             # 예: 시트 '안양유앤아이' → evt_branches.short_name='안양' → is_paused 업데이트
+            from place.pause_history import ensure_pause_history_table, record_pause_change
+            ensure_pause_history_table(conn)
+
+            # 변경 전 is_paused 값 미리 조회
+            prev_paused_map = {
+                r["id"]: r["is_paused"]
+                for r in conn.execute("SELECT id, is_paused FROM evt_branches").fetchall()
+            }
+
+            today_str = date.today().isoformat()
+
             for sheet_branch, is_paused in paused_flags.items():
                 if not sheet_branch:
                     continue
@@ -109,9 +120,12 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
                     (sheet_branch,)
                 ).fetchone()
                 if row:
+                    bid = row["id"]
+                    old_paused = prev_paused_map.get(bid, 0) or 0
+                    record_pause_change(conn, bid, sheet_branch, old_paused, is_paused, today_str)
                     conn.execute(
                         "UPDATE evt_branches SET is_paused = ? WHERE id = ?",
-                        (is_paused, row["id"])
+                        (is_paused, bid)
                     )
 
             # nosul_map 저장 (AF열 노출일수)

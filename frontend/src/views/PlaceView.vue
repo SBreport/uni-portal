@@ -640,6 +640,12 @@ onMounted(async () => {
                             <!-- 왼쪽 열: 성공률 + 연속 -->
                             <div class="grid grid-cols-[auto_auto_auto_auto] gap-x-3 gap-y-0.5">
 
+                              <!-- ── 작업 시작일 ── -->
+                              <template v-if="detailData.work_start_date">
+                                <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">시작일</span>
+                                <span class="text-xs text-slate-700 self-center py-0.5 tabular-nums col-span-3">{{ fmtDate(detailData.work_start_date) }}</span>
+                              </template>
+
                               <!-- ── 성공률 섹션 ── -->
                               <!-- 전체 -->
                               <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">성공률</span>
@@ -722,12 +728,13 @@ onMounted(async () => {
                               <!-- ── 회복 섹션 (이력이 있을 때만) ── -->
                               <template v-if="detailData.recovery_history.length > 0">
                                 <template v-for="(ev, idx) in detailData.recovery_history.slice(0, 10)" :key="ev.recovery_date">
-                                  <span
-                                    class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px] inline-flex items-center gap-1"
-                                    :title="idx === 0 ? '결손 5일 초과(6일 이상 빠진 후) 회복한 이벤트만 표시됩니다.' : ''"
-                                  >
+                                  <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px] inline-flex items-center gap-1 relative group">
                                     {{ idx === 0 ? '회복' : '' }}
-                                    <span v-if="idx === 0" class="text-slate-400 cursor-help" aria-hidden="true">ⓘ</span>
+                                    <span v-if="idx === 0" class="text-slate-400 cursor-help">ⓘ</span>
+                                    <span v-if="idx === 0"
+                                      class="absolute left-0 top-full mt-1 w-64 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-150 z-50 normal-case font-normal tracking-normal">
+                                      결손 5일 초과(6일 이상 빠진 후) 회복한 이벤트만 표시됩니다.
+                                    </span>
                                   </span>
                                   <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">{{ fmtDate(ev.recovery_date) }}</span>
                                   <span class="text-xs font-medium text-slate-900 self-center py-0.5 col-span-2">
@@ -744,6 +751,17 @@ onMounted(async () => {
                                   <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">{{ idx === 0 ? '실행사' : '' }}</span>
                                   <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">{{ fmtDate(ag.changed_at) }}</span>
                                   <span class="text-xs font-medium text-slate-900 self-center py-0.5 col-span-2">{{ ag.from_agency || '(없음)' }} → {{ ag.to_agency }}</span>
+                                </template>
+                              </template>
+
+                              <!-- ── 휴식 이력 섹션 ── -->
+                              <template v-if="detailData.pause_history && detailData.pause_history.length > 0">
+                                <div class="col-span-4 border-t border-slate-100 my-0.5"></div>
+                                <template v-for="(p, idx) in detailData.pause_history" :key="p.paused_at">
+                                  <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">{{ idx === 0 ? '휴식' : '' }}</span>
+                                  <span class="text-xs text-slate-700 self-center py-0.5 tabular-nums col-span-3">
+                                    {{ fmtDate(p.paused_at) }} ~ {{ p.resumed_at ? fmtDate(p.resumed_at) : '진행 중' }}
+                                  </span>
                                 </template>
                               </template>
 

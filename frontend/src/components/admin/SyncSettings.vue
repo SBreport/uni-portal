@@ -4,6 +4,7 @@ import * as equipApi from '@/api/equipment'
 import * as eventsApi from '@/api/events'
 import * as cafeApi from '@/api/cafe'
 import * as blogApi from '@/api/blog'
+import * as placeApi from '@/api/place'
 import { useAsyncAction } from '@/composables/useAsyncAction'
 
 const props = defineProps<{ branches: { id: number; name: string }[] }>()
@@ -152,6 +153,32 @@ async function uploadCred(event: Event) {
   }
 }
 
+// 플레이스 오염 데이터 정리
+const cleanupLoading = ref(false)
+
+async function handleCleanupPollution() {
+  cleanupLoading.value = true
+  try {
+    const { data } = await placeApi.cleanupPollution(true)
+    if (data.total === 0) {
+      alert('정리할 데이터가 없습니다.')
+      return
+    }
+    const msg =
+      `place_daily: ${data.affected.place_daily}행, ` +
+      `place_branch_monthly: ${data.affected.place_branch_monthly}행, ` +
+      `agency_map_history: ${data.affected.agency_map_history}행\n` +
+      `총 ${data.total}행이 삭제됩니다. 계속하시겠습니까?`
+    if (!confirm(msg)) return
+    const { data: result } = await placeApi.cleanupPollution(false)
+    alert(`정리 완료: 총 ${result.total}행 삭제됨`)
+  } catch (e: any) {
+    alert('오류: ' + (e.response?.data?.detail || '정리 실패'))
+  } finally {
+    cleanupLoading.value = false
+  }
+}
+
 onMounted(() => {})
 </script>
 
@@ -283,6 +310,24 @@ onMounted(() => {})
       </div>
     </div>
 
+    </div>
+
+    <!-- ═══ 데이터 정리 ═══ -->
+    <div class="space-y-1.5">
+    <div class="text-xs font-bold text-slate-400 tracking-wide pl-1">데이터 정리</div>
+    <div class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 hover:border-slate-300 transition-colors">
+      <div class="flex items-center gap-3">
+        <span class="w-1 self-stretch rounded-full bg-amber-500 flex-shrink-0"></span>
+        <div>
+          <div class="text-sm font-semibold text-slate-700">플레이스 오염 데이터 정리</div>
+          <div class="text-xs text-slate-500">시트 입력 오류로 들어온 (휴식) 패턴 데이터를 제거합니다.</div>
+        </div>
+        <button @click="handleCleanupPollution" :disabled="cleanupLoading"
+          class="ml-auto px-4 py-1.5 bg-amber-600 text-white text-sm rounded hover:bg-amber-700 disabled:opacity-40 transition whitespace-nowrap">
+          {{ cleanupLoading ? '처리 중...' : '오염 데이터 검사' }}
+        </button>
+      </div>
+    </div>
     </div>
 
     <!-- ═══ 공통 설정 ═══ -->

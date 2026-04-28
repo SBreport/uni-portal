@@ -67,6 +67,10 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
 
             for b in branches:
                 branch_name = b.get("branch", "")
+                # 오염 패턴 차단 — "(휴식)" 같은 시트 입력 오류 자동 skip
+                if "(휴식)" in branch_name:
+                    logger.warning(f"[place_sync] 오염 패턴 감지, 건너뜀: {branch_name}")
+                    continue
                 keyword = b.get("keyword", "")
                 daily = b.get("daily", [])
 

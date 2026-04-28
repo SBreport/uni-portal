@@ -10,6 +10,10 @@ from shared.branch_resolver import resolve_evt_branch_id
 
 router = APIRouter(prefix="/place", tags=["Place"])
 
+# 회복 이벤트 분석에서 "유의미한 결손"으로 인정할 최소 실패 일수
+# (/branch-detail의 회복 이력 표시에서 사용. /ranking-daily 녹색 원과는 별개 기준)
+RECOVERY_MIN_FAILURE_DAYS = 3
+
 
 
 @router.get("/daily")

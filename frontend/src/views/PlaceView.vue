@@ -30,9 +30,7 @@ interface BranchRanking {
   status: 'active' | 'fail' | '미달' | 'stopped'
   work_days: number
   daily: DailyData[]
-  last_success_date?: string | null
-  recovery_date?: string | null
-  recovery_gap?: number | null
+  recovery_active: boolean
   is_paused?: boolean
 }
 
@@ -233,21 +231,6 @@ function pct(count: number, total: number): string {
 
 function recentRanks(b: BranchRanking): { day: number; rank: number | null }[] {
   return b.daily || []
-}
-
-function getRecoveryInfo(b: BranchRanking): { show: boolean; label: string } {
-  if (b.today_rank == null || b.today_rank < 1 || b.today_rank > 5) return { show: false, label: '' }
-  if (b.recovery_date == null) return { show: false, label: '' }
-
-  // 복귀 후 7일이 지나면 녹색 불 OFF
-  const recovery = new Date(b.recovery_date)
-  const ref = new Date(selectedDate.value)
-  const daysSinceRecovery = Math.floor((ref.getTime() - recovery.getTime()) / (1000 * 60 * 60 * 24))
-  if (daysSinceRecovery > 7) return { show: false, label: '' }
-
-  const recoveryPart = b.recovery_gap == null ? '첫 성공' : `${b.recovery_gap}일 만에 회복`
-  const holdPart = (b.streak && b.streak > 1) ? ` · ${b.streak}일째 유지` : ''
-  return { show: true, label: recoveryPart + holdPart }
 }
 
 // YY-MM-DD 형식으로 날짜 변환 (YYYY-MM-DD 또는 기타 형식 입력 허용)
@@ -607,13 +590,13 @@ onMounted(async () => {
                     <tr @click="canOpenDetailFor(b) && toggleBranch(b)"
                       :class="['border-b border-slate-100 transition-colors',
                         canOpenDetailFor(b) ? 'cursor-pointer' : '',
-                        getRecoveryInfo(b).show
+                        b.recovery_active
                           ? (expandedBranch === b.branch ? 'bg-emerald-100/60' : 'bg-emerald-50/60 hover:bg-emerald-100/60')
                           : (expandedBranch === b.branch ? 'bg-blue-50/50' : 'hover:bg-blue-50/30')]">
                       <td class="pl-3 pr-2 py-[5px] text-slate-800 font-medium whitespace-nowrap min-w-[120px]">
                         <span v-if="canOpenDetailFor(b)" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>
                         {{ shortName(b) }}
-                        <span v-if="getRecoveryInfo(b).show" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" :title="getRecoveryInfo(b).label"></span>
+                        <span v-if="b.recovery_active" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" title="최근 회복"></span>
                         <span v-if="b.is_paused" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 ml-1 align-middle" title="휴식 중"></span>
                       </td>
                       <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>

@@ -10,9 +10,6 @@ from shared.branch_resolver import resolve_evt_branch_id
 
 router = APIRouter(prefix="/place", tags=["Place"])
 
-# 회복 이벤트 집계 기준: 이 일수 이상 실패가 이어진 뒤 다시 성공해야 '회복'으로 본다.
-# (실패 일수 기준 — gap_days = 실패 일수 + 1 이므로 gap >= RECOVERY_MIN_FAILURE_DAYS + 1 일 때 회복)
-RECOVERY_MIN_FAILURE_DAYS = 3
 
 
 @router.get("/daily")
@@ -222,6 +219,30 @@ async def get_ranking_daily(
             ).fetchall()
         }
 
+        def _calc_recovery_active(hist: dict, target_date, streak: int) -> bool:
+            """녹색 원 표시 여부.
+
+            조건:
+            - 오늘 성공 (is_exposed)
+            - streak ≤ 5 (5일 초과 연속 성공은 '안정화'로 간주, 표시 안 함)
+            - streak 시작 직전 7일이 모두 실패 (데이터 없음 = 실패 취급)
+            """
+            from datetime import timedelta as _td
+
+            today_h = hist.get(target_date.isoformat())
+            if not today_h or not today_h.get("is_exposed"):
+                return False
+            if streak < 1 or streak > 5:
+                return False
+
+            streak_start = target_date - _td(days=streak - 1)
+            for i in range(1, 8):  # 직전 1일 ~ 7일
+                check_date = (streak_start - _td(days=i)).isoformat()
+                h = hist.get(check_date)
+                if h and h.get("is_exposed") == 1:
+                    return False  # 직전 7일 중 성공 발견 → 회복 아님
+            return True
+
         # paused 맵 로드 — resolver 기반 (가장 긴 short_name 우선 매칭)
         paused_ids = {
             r[0] for r in conn.execute(
@@ -236,78 +257,6 @@ async def get_ranking_daily(
                 _resolve_cache[bn] = resolve_evt_branch_id(conn, bn)
             return _resolve_cache[bn] in paused_ids
 
-        # 마지막 성공 날짜 집계 (target 이전, rank 1~5)
-        last_success_rows = conn.execute("""
-            SELECT branch_id, keyword, MAX(date) AS last_success_date
-            FROM place_daily
-            WHERE date < ? AND rank >= 1 AND rank <= 5
-            GROUP BY branch_id, keyword
-        """, (range_to,)).fetchall()
-        last_success_map = {
-            (r["branch_id"], r["keyword"]): r["last_success_date"]
-            for r in last_success_rows
-        }
-
-        # recovery 계산용: (branch_id, keyword)별 전체 이력 (target 이하) — 접근 B
-        # date 오름차순으로 로드 후 Python에서 streak 경계 탐색
-        recovery_history_rows = conn.execute("""
-            SELECT date, branch_id, keyword,
-                   CASE WHEN rank >= 1 AND rank <= 5 THEN 1 ELSE 0 END AS ok
-            FROM place_daily
-            WHERE date <= ?
-            ORDER BY branch_id, keyword, date
-        """, (range_to,)).fetchall()
-
-        # (branch_id, keyword) → sorted list of (date_str, ok)
-        from collections import defaultdict
-        _rh: dict = defaultdict(list)
-        for r in recovery_history_rows:
-            _rh[(r["branch_id"], r["keyword"])].append((r["date"], r["ok"]))
-
-        def _calc_recovery(history: list, target_str: str):
-            """
-            history: [(date_str, ok), ...] — 오름차순 정렬
-            반환: (recovery_date, recovery_gap)
-            """
-            if not history:
-                return None, None
-            # 마지막 항목이 target인지 확인, target에서 실패면 None
-            last_date, last_ok = history[-1]
-            if last_date != target_str or not last_ok:
-                return None, None
-            # 역방향으로 현재 streak 시작일 찾기
-            streak_start_idx = len(history) - 1
-            for i in range(len(history) - 2, -1, -1):
-                d, ok = history[i]
-                if ok:
-                    streak_start_idx = i
-                else:
-                    break
-            recovery_date = history[streak_start_idx][0]
-            # streak_start_idx 바로 직전이 실패인지 확인 (streak_start_idx == 0이면 역사상 첫 성공)
-            if streak_start_idx == 0:
-                # 역사상 첫 성공 (이전 기록 없음)
-                return recovery_date, None
-            # 직전 인덱스는 실패여야 함 (그래야 streak 시작)
-            # streak_start_idx - 1 은 실패; 그 이전에 마지막 성공일 찾기
-            prev_success_date = None
-            for i in range(streak_start_idx - 1, -1, -1):
-                d, ok = history[i]
-                if ok:
-                    prev_success_date = d
-                    break
-            if prev_success_date is None:
-                # 그 전에 성공 기록 없음 → 첫 성공 그룹
-                return recovery_date, None
-            from datetime import datetime as _dt
-            gap = (_dt.strptime(recovery_date, "%Y-%m-%d") - _dt.strptime(prev_success_date, "%Y-%m-%d")).days
-            if gap - 1 < RECOVERY_MIN_FAILURE_DAYS:
-                return None, None
-            return recovery_date, gap
-
-        recovery_map: dict = {}
-        for key, hist in _rh.items():
-            recovery_map[key] = _calc_recovery(hist, range_to)
 
         # 지점별 그룹핑
         branches: dict = {}
@@ -374,8 +323,6 @@ async def get_ranking_daily(
 
             bid = bdata["branch_id"]
             kw = bdata["keyword"]
-            last_success_date = last_success_map.get((bid, kw), None)
-            _recovery_date, _recovery_gap = recovery_map.get((bid, kw), (None, None))
 
             result.append({
                 "branch": bname,
@@ -391,9 +338,7 @@ async def get_ranking_daily(
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "is_paused": _is_paused(bname),
                 "daily": recent,
-                "last_success_date": last_success_date,
-                "recovery_date": _recovery_date,
-                "recovery_gap": _recovery_gap,
+                "recovery_active": _calc_recovery_active(hist, target, streak),
             })
 
         return {

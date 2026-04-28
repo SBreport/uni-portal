@@ -433,6 +433,12 @@ async def get_branch_detail(
                 if ok:
                     # streak 시작
                     streak_start_idx = i
+                    # streak 끝 인덱스 미리 계산 (유지 일수 산출용)
+                    streak_end_idx = i
+                    while streak_end_idx < n and history[streak_end_idx][1]:
+                        streak_end_idx += 1
+                    maintained_days = streak_end_idx - streak_start_idx
+                    is_ongoing = streak_end_idx == n  # 마지막까지 도달 = 아직 진행 중
                     # 이 streak의 직전이 실패이거나 첫 번째 항목이어야 회복 이벤트
                     if i == 0 or not history[i - 1][1]:
                         # 이전 성공일 탐색
@@ -447,23 +453,25 @@ async def get_branch_detail(
                                 "gap_days": None,
                                 "is_first_success": True,
                                 "prev_success_date": None,
+                                "maintained_days": maintained_days,
+                                "is_ongoing": is_ongoing,
                             })
                         else:
                             from datetime import datetime as _dt
                             gap = (_dt.strptime(d, "%Y-%m-%d") - _dt.strptime(prev_success_date, "%Y-%m-%d")).days
                             if gap - 1 < RECOVERY_MIN_FAILURE_DAYS:
-                                while i < n and history[i][1]:
-                                    i += 1
+                                i = streak_end_idx
                                 continue
                             events.append({
                                 "recovery_date": d,
                                 "gap_days": gap,
                                 "is_first_success": False,
                                 "prev_success_date": prev_success_date,
+                                "maintained_days": maintained_days,
+                                "is_ongoing": is_ongoing,
                             })
                     # streak 끝까지 건너뜀
-                    while i < n and history[i][1]:
-                        i += 1
+                    i = streak_end_idx
                 else:
                     i += 1
             return events

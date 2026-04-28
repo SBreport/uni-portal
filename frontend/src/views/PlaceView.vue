@@ -737,9 +737,12 @@ onMounted(async () => {
                                     </span>
                                   </span>
                                   <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">{{ fmtDate(ev.recovery_date) }}</span>
-                                  <span class="text-xs font-medium text-slate-900 self-center py-0.5 col-span-2">
+                                  <span class="text-xs font-medium text-slate-900 self-center py-0.5">
                                     <span v-if="ev.is_first_success" class="text-slate-400">첫 성공</span>
                                     <span v-else class="tabular-nums">{{ ev.gap_days }}일 만에</span>
+                                  </span>
+                                  <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">
+                                    {{ ev.maintained_days }}일간 유지{{ ev.is_ongoing ? ' 중' : '함' }}
                                   </span>
                                 </template>
                               </template>

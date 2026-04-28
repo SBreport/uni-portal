@@ -11,8 +11,8 @@ from shared.branch_resolver import resolve_evt_branch_id
 router = APIRouter(prefix="/place", tags=["Place"])
 
 # 회복 이벤트 분석에서 "유의미한 결손"으로 인정할 최소 실패 일수
-# (/branch-detail의 회복 이력 표시에서 사용. /ranking-daily 녹색 원과는 별개 기준)
-RECOVERY_MIN_FAILURE_DAYS = 3
+# 결손 5일 초과(gap > 5) 시에만 회복 이벤트로 인정. /branch-detail과 /ranking-daily 녹색 원 모두 사용.
+RECOVERY_MIN_FAILURE_DAYS = 5
 
 
 
@@ -226,10 +226,10 @@ async def get_ranking_daily(
         def _calc_recovery_active(hist: dict, target_date, streak: int) -> bool:
             """녹색 원 표시 여부.
 
-            조건:
+            조건 (모두 만족):
             - 오늘 성공 (is_exposed)
-            - streak ≤ 5 (5일 초과 연속 성공은 '안정화'로 간주, 표시 안 함)
-            - streak 시작 직전 7일이 모두 실패 (데이터 없음 = 실패 취급)
+            - streak ≤ 5 (5일 초과 연속 성공은 안정화로 간주)
+            - streak 시작 직전 5일이 모두 비성공 (결손 5일 초과)
             """
             from datetime import timedelta as _td
 
@@ -240,11 +240,11 @@ async def get_ranking_daily(
                 return False
 
             streak_start = target_date - _td(days=streak - 1)
-            for i in range(1, 8):  # 직전 1일 ~ 7일
+            for i in range(1, 6):  # 직전 1~5일
                 check_date = (streak_start - _td(days=i)).isoformat()
                 h = hist.get(check_date)
                 if h and h.get("is_exposed") == 1:
-                    return False  # 직전 7일 중 성공 발견 → 회복 아님
+                    return False  # 직전 5일 중 성공 발견 → 회복 아님
             return True
 
         # paused 맵 로드 — resolver 기반 (가장 긴 short_name 우선 매칭)

@@ -722,7 +722,13 @@ onMounted(async () => {
                               <!-- ── 회복 섹션 (이력이 있을 때만) ── -->
                               <template v-if="detailData.recovery_history.length > 0">
                                 <template v-for="(ev, idx) in detailData.recovery_history.slice(0, 10)" :key="ev.recovery_date">
-                                  <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]">{{ idx === 0 ? '회복' : '' }}</span>
+                                  <span
+                                    class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px] inline-flex items-center gap-1"
+                                    :title="idx === 0 ? '결손 5일 초과(6일 이상 빠진 후) 회복한 이벤트만 표시됩니다.' : ''"
+                                  >
+                                    {{ idx === 0 ? '회복' : '' }}
+                                    <span v-if="idx === 0" class="text-slate-400 cursor-help" aria-hidden="true">ⓘ</span>
+                                  </span>
                                   <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">{{ fmtDate(ev.recovery_date) }}</span>
                                   <span class="text-xs font-medium text-slate-900 self-center py-0.5 col-span-2">
                                     <span v-if="ev.is_first_success" class="text-slate-400">첫 성공</span>

@@ -107,55 +107,6 @@ async def sync_place_to_db(
     return sync_all_to_db(target_month=body.target_month)
 
 
-@router.post("/cleanup-pollution")
-async def cleanup_pollution(
-    dry_run: bool = True,
-    user: dict = Depends(require_role("admin")),
-):
-    """오염 데이터(휴식 패턴) 정리 (admin 전용). dry_run=True면 카운트만 반환."""
-    from shared.db import get_conn, EQUIPMENT_DB
-
-    pattern = "%(휴식)%"
-    conn = get_conn(EQUIPMENT_DB)
-    try:
-        daily_count = conn.execute(
-            "SELECT COUNT(*) FROM place_daily WHERE branch_name LIKE ?", (pattern,)
-        ).fetchone()[0]
-
-        monthly_count = conn.execute(
-            "SELECT COUNT(*) FROM place_branch_monthly WHERE branch_name LIKE ?", (pattern,)
-        ).fetchone()[0]
-
-        history_count = conn.execute(
-            "SELECT COUNT(*) FROM agency_map_history WHERE branch_name LIKE ? AND map_type = 'place'", (pattern,)
-        ).fetchone()[0]
-
-        affected = {
-            "place_daily": daily_count,
-            "place_branch_monthly": monthly_count,
-            "agency_map_history": history_count,
-        }
-        total = daily_count + monthly_count + history_count
-
-        if not dry_run:
-            conn.execute("DELETE FROM place_daily WHERE branch_name LIKE ?", (pattern,))
-            conn.execute("DELETE FROM place_branch_monthly WHERE branch_name LIKE ?", (pattern,))
-            conn.execute(
-                "DELETE FROM agency_map_history WHERE branch_name LIKE ? AND map_type = 'place'", (pattern,)
-            )
-            conn.commit()
-
-        return {
-            "dry_run": dry_run,
-            "pattern": pattern,
-            "affected": affected,
-            "total": total,
-            "executed": not dry_run,
-        }
-    finally:
-        conn.close()
-
-
 @router.get("/last-sync")
 async def get_last_sync(user: dict = Depends(get_current_user)):
     """플레이스 마지막 동기화 시각."""

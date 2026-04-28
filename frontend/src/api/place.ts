@@ -22,6 +22,3 @@ export const getPlaceLastSync = () => api.get('/place/last-sync')
 
 export const getPlaceBranchDetail = (branch_name: string, keyword: string, reference_date: string) =>
   api.get('/place/branch-detail', { params: { branch_name, keyword, reference_date } })
-
-export const cleanupPollution = (dryRun: boolean = true) =>
-  api.post('/place/cleanup-pollution', null, { params: { dry_run: dryRun } })

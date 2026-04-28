@@ -14,9 +14,19 @@ _AGENCY_VISIBLE_ROLES = {"admin", "editor"}
 
 
 def _require_agency_access(user: dict):
-    """실행사 정보 접근 권한 확인. 지점/본사는 차단."""
-    if user.get("role") not in _AGENCY_VISIBLE_ROLES:
-        raise HTTPException(status_code=403, detail="실행사 정보 접근 권한 없음")
+    """실행사 정보 접근 권한 확인.
+    - admin/editor: 항상 허용
+    - viewer + branch_id=None (본사 viewer): 허용
+    - viewer + branch_id=숫자 (지점 viewer): 차단
+    """
+    role = user.get("role")
+    branch_id = user.get("branch_id")
+
+    if role in _AGENCY_VISIBLE_ROLES:
+        return
+    if role == "viewer" and branch_id is None:
+        return
+    raise HTTPException(status_code=403, detail="실행사 정보 접근 권한 없음")
 
 
 @router.get("/agency-map")

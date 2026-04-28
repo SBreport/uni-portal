@@ -276,6 +276,20 @@ async def get_ranking_daily(
                 "rank": r["rank"],
             }
 
+        if not branches:
+            return {
+                "date": date,
+                "branches": [],
+                "summary": {
+                    "total": 0,
+                    "success_today": 0,
+                    "fail_today": 0,
+                    "midal": 0,
+                    "paused": 0,
+                },
+                "source": "db",
+            }
+
         result = []
         for bname, bdata in branches.items():
             hist = bdata["history"]

@@ -104,7 +104,7 @@ async def sync_place_to_db(
 ):
     """구글시트 → DB 동기화 (admin 전용). target_month 없으면 이번 달만."""
     from place.sync_to_db import sync_all_to_db
-    return sync_all_to_db(target_month=body.target_month)
+    return sync_all_to_db(target_month=body.target_month, triggered_by="manual")
 
 
 @router.get("/last-sync")

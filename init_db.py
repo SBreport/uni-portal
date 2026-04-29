@@ -67,13 +67,14 @@ def init_db():
     # 동기화 로그 테이블
     c.execute("""
     CREATE TABLE IF NOT EXISTS sync_log (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        sync_type   TEXT NOT NULL,
-        added       INTEGER DEFAULT 0,
-        skipped     INTEGER DEFAULT 0,
-        conflicts   INTEGER DEFAULT 0,
-        detail      TEXT,
-        synced_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_type    TEXT NOT NULL,
+        added        INTEGER DEFAULT 0,
+        skipped      INTEGER DEFAULT 0,
+        conflicts    INTEGER DEFAULT 0,
+        detail       TEXT,
+        synced_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        triggered_by TEXT DEFAULT 'manual'
     )
     """)
 

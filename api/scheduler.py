@@ -1,6 +1,7 @@
 """백그라운드 스케줄러 — APScheduler 기반.
 
 - 블로그 노션 동기화: 매일 06:00 KST
+- 플레이스 오늘 동기화: 매일 15:00 KST
 - 플레이스/웹페이지 일별 스냅샷: 매일 23:00 KST
 """
 
@@ -32,6 +33,19 @@ async def _run_blog_sync():
         logger.error(f"[scheduler] 블로그 동기화 실패: {e}", exc_info=True)
 
 
+async def _run_place_today_sync():
+    """플레이스 오늘 동기화 (매일 15:00 KST)."""
+    logger.info("[scheduler] 플레이스 오늘 동기화 시작 (auto)")
+    try:
+        import asyncio
+        from place.sync_to_db import sync_all_to_db
+        # AsyncIO loop 블로킹 방지
+        result = await asyncio.to_thread(sync_all_to_db, None, "auto")
+        logger.info(f"[scheduler] 플레이스 오늘 동기화 완료: {result}")
+    except Exception as e:
+        logger.error(f"[scheduler] 플레이스 오늘 동기화 실패: {e}", exc_info=True)
+
+
 async def _run_daily_snapshot():
     """플레이스/웹페이지 일별 스냅샷 (매일 23:00)."""
     logger.info("[scheduler] 일별 스냅샷 시작")
@@ -59,13 +73,19 @@ def setup_scheduler():
         replace_existing=True,
     )
     scheduler.add_job(
+        _run_place_today_sync,
+        CronTrigger(hour=15, minute=0),
+        id="place_today_auto_sync",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         _run_daily_snapshot,
         CronTrigger(hour=23, minute=0),
         id="place_daily_snapshot",
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("[scheduler] 스케줄러 시작 — 2개 잡 등록 완료")
+    logger.info("[scheduler] 스케줄러 시작 — 3개 잡 등록 완료")
 
 
 def get_scheduler_status():

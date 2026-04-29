@@ -55,6 +55,10 @@ async def lifespan(app: FastAPI):
                 _c.execute(f"ALTER TABLE {_t} ADD COLUMN {_col} {_ct}")
             except _sql.OperationalError:
                 pass
+        try:
+            _c.execute("ALTER TABLE sync_log ADD COLUMN triggered_by TEXT DEFAULT 'manual'")
+        except _sql.OperationalError:
+            pass
         _c.commit()
         _c.close()
     except Exception as e:

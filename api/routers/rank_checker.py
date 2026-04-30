@@ -155,6 +155,82 @@ async def get_comparison(
     return get_comparison(branch_id, date)
 
 
+# ── 진단용 (admin 전용 read-only) ──
+
+@router.get("/diagnostics")
+async def get_diagnostics(user: Annotated[dict, Depends(require_role("admin"))]):
+    """SB체커 운영 상태 진단 — 자동 연동/측정이 왜 안 되는지 즉시 파악."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        # rank_check_keywords origin/is_active 분포
+        kw_rows = conn.execute("""
+            SELECT origin, is_active, COUNT(*) AS c
+              FROM rank_check_keywords
+             GROUP BY origin, is_active
+        """).fetchall()
+        kw_breakdown = [dict(r) for r in kw_rows]
+        kw_total = sum(r["c"] for r in kw_breakdown)
+
+        # evt_branches default_place_id 등록 상태
+        branch_active = conn.execute(
+            "SELECT COUNT(*) FROM evt_branches WHERE is_active = 1"
+        ).fetchone()[0]
+        branch_missing_pid = conn.execute("""
+            SELECT COUNT(*) FROM evt_branches
+             WHERE is_active = 1
+               AND (default_place_id IS NULL OR default_place_id = '')
+        """).fetchone()[0]
+
+        # place_daily distinct 키워드 (자동 연동의 source)
+        pd_distinct = conn.execute("""
+            SELECT COUNT(DISTINCT branch_id || '|' || keyword)
+              FROM place_daily
+             WHERE keyword != '' AND branch_id > 0
+        """).fetchone()[0]
+        pd_today = conn.execute("""
+            SELECT COUNT(*) FROM place_daily WHERE date = date('now','localtime')
+        """).fetchone()[0]
+
+        # rank_checks 최근 7일
+        rc_recent = conn.execute("""
+            SELECT COUNT(*) FROM rank_checks
+             WHERE date >= date('now','-7 days','localtime')
+        """).fetchone()[0]
+        rc_today = conn.execute("""
+            SELECT COUNT(*) FROM rank_checks WHERE date = date('now','localtime')
+        """).fetchone()[0]
+
+        # 자동 연동 hook이 발동했는지 sync_log에서 확인
+        last_place_sync = conn.execute("""
+            SELECT synced_at, triggered_by, detail FROM sync_log
+             WHERE sync_type = 'place_sheets_to_db'
+             ORDER BY synced_at DESC LIMIT 1
+        """).fetchone()
+
+        return {
+            "rank_check_keywords": {
+                "total": kw_total,
+                "breakdown": kw_breakdown,
+            },
+            "evt_branches": {
+                "active": branch_active,
+                "default_place_id_missing": branch_missing_pid,
+            },
+            "place_daily": {
+                "distinct_keywords": pd_distinct,
+                "rows_today": pd_today,
+            },
+            "rank_checks": {
+                "rows_today": rc_today,
+                "rows_last_7_days": rc_recent,
+            },
+            "last_place_sync": dict(last_place_sync) if last_place_sync else None,
+        }
+    finally:
+        conn.close()
+
+
 # ── SB_CHECKER DB 임포트 ──
 
 @router.post("/import-sb-db")

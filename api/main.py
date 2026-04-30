@@ -122,6 +122,17 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/admin/scheduler-status")
+async def scheduler_status(user: dict = Depends(get_current_user)):
+    """등록된 스케줄러 잡과 다음 실행 시각 (admin 전용 read-only)."""
+    from api.deps import ROLE_HIERARCHY
+    if ROLE_HIERARCHY.get(user["role"], 0) < ROLE_HIERARCHY.get("admin", 3):
+        from fastapi import HTTPException, status as st
+        raise HTTPException(st.HTTP_403_FORBIDDEN, "관리자 권한 필요")
+    from api.scheduler import get_scheduler_status
+    return get_scheduler_status()
+
+
 @app.get("/dashboard")
 async def dashboard():
     """HOME 대시보드 — 전체 현황 요약."""

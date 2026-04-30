@@ -12,6 +12,13 @@ from fastapi.staticfiles import StaticFiles
 from api.deps import get_current_user
 from fastapi.middleware.cors import CORSMiddleware
 
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s %(message)s",
+    force=True,  # uvicorn이 미리 깔아둔 root 핸들러를 덮어씀
+)
+
 # 허용 도메인: 환경변수 ALLOWED_ORIGINS (콤마 구분) 또는 기본값
 _DEFAULT_ORIGINS = [
     "http://localhost:5173",   # Vite 개발 서버

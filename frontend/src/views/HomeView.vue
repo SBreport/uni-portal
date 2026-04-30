@@ -19,7 +19,7 @@ interface DashboardData {
   events: { label: string; count: number }
   cafe: { label: string; total: number; published: number; pending: number }
   dictionary: { total: number; verified: number }
-  recent_syncs: { sync_type: string; added: number; skipped: number; conflicts: number; synced_at: string; triggered_by?: string | null }[]
+  recent_syncs: { sync_type: string; added: number; skipped: number; conflicts: number; synced_at: string; triggered_by?: string | null; detail?: string | null }[]
   blog: BlogData
   place: PlaceSummary
   webpage: PlaceSummary
@@ -70,6 +70,10 @@ function formatDate(iso: string) {
   if (!iso) return '-'
   const d = new Date(iso)
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+}
+
+function isFailedSync(detail?: string | null): boolean {
+  return !!detail && detail.startsWith('실패')
 }
 </script>
 
@@ -248,35 +252,48 @@ function formatDate(iso: string) {
       <div v-if="auth.role === 'admin' && data.recent_syncs.length" class="mb-6">
         <h3 class="text-sm font-bold text-slate-500 mb-3 tracking-wide">
           최근 동기화
-          <span class="text-xs font-normal text-slate-400 ml-2">매일 15:00 자동 실행</span>
+          <span class="text-xs font-normal text-slate-400 ml-2">매일 18:30 자동 실행</span>
         </h3>
         <div class="bg-white border border-slate-200 rounded-lg p-4">
           <div class="space-y-2">
             <div v-for="(s, i) in data.recent_syncs" :key="i"
-              class="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-medium px-2 py-0.5 rounded"
-                  :class="{
-                    'bg-blue-50 text-blue-600': s.sync_type === 'equipment',
-                    'bg-amber-50 text-amber-600': s.sync_type === 'events',
-                    'bg-emerald-50 text-emerald-600': s.sync_type === 'cafe',
-                    'bg-rose-50 text-rose-600': s.sync_type === 'place_sheets_to_db',
-                  }">
-                  {{
-                    s.sync_type === 'equipment' ? '장비' :
-                    s.sync_type === 'events' ? '이벤트' :
-                    s.sync_type === 'cafe' ? '카페' :
-                    s.sync_type === 'place_sheets_to_db' ? '플레이스' :
-                    s.sync_type
-                  }}
-                </span>
-                <span class="text-xs px-1.5 py-0.5 rounded"
-                  :class="s.triggered_by === 'auto' ? 'bg-sky-50 text-sky-500' : 'bg-slate-100 text-slate-400'">
-                  {{ s.triggered_by === 'auto' ? '자동' : '수동' }}
-                </span>
-                <span class="text-xs text-slate-400">+{{ s.added }} / ={{ s.skipped }}</span>
+              class="border-b border-slate-50 last:border-0"
+              :class="isFailedSync(s.detail) ? 'bg-red-50 border-l-2 border-red-300 pl-2' : ''">
+              <div class="flex flex-col gap-0.5 py-1.5">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-medium px-2 py-0.5 rounded"
+                      :class="{
+                        'bg-blue-50 text-blue-600': s.sync_type === 'equipment',
+                        'bg-amber-50 text-amber-600': s.sync_type === 'events',
+                        'bg-emerald-50 text-emerald-600': s.sync_type === 'cafe',
+                        'bg-rose-50 text-rose-600': s.sync_type === 'place_sheets_to_db',
+                        'bg-violet-50 text-violet-600': s.sync_type === 'webpage_sheets_to_db',
+                      }">
+                      {{
+                        s.sync_type === 'equipment' ? '장비' :
+                        s.sync_type === 'events' ? '이벤트' :
+                        s.sync_type === 'cafe' ? '카페' :
+                        s.sync_type === 'place_sheets_to_db' ? '플레이스' :
+                        s.sync_type === 'webpage_sheets_to_db' ? '웹페이지' :
+                        s.sync_type
+                      }}
+                    </span>
+                    <span v-if="isFailedSync(s.detail)"
+                      class="text-xs font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                      실패
+                    </span>
+                    <span class="text-xs px-1.5 py-0.5 rounded"
+                      :class="s.triggered_by === 'auto' ? 'bg-sky-50 text-sky-500' : 'bg-slate-100 text-slate-400'">
+                      {{ s.triggered_by === 'auto' ? '자동' : '수동' }}
+                    </span>
+                    <span class="text-xs text-slate-400">+{{ s.added }} / ={{ s.skipped }}</span>
+                  </div>
+                  <span class="text-xs text-slate-400">{{ formatDate(s.synced_at) }}</span>
+                </div>
+                <p v-if="isFailedSync(s.detail)"
+                  class="text-xs text-red-500 line-clamp-1">{{ s.detail }}</p>
               </div>
-              <span class="text-xs text-slate-400">{{ formatDate(s.synced_at) }}</span>
             </div>
           </div>
         </div>

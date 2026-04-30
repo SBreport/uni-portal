@@ -502,7 +502,7 @@ def _get_home_dashboard_impl(conn):
     dict_verified = conn.execute("SELECT COUNT(*) FROM device_info WHERE is_verified = 1").fetchone()[0]
 
     recent_syncs = [dict(r) for r in conn.execute(
-        "SELECT sync_type, added, skipped, conflicts, synced_at, triggered_by FROM sync_log ORDER BY synced_at DESC LIMIT 5"
+        "SELECT sync_type, added, skipped, conflicts, synced_at, triggered_by, detail FROM sync_log ORDER BY synced_at DESC LIMIT 5"
     ).fetchall()]
 
     # ── 블로그 요약 ──

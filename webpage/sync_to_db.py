@@ -1,6 +1,7 @@
 """웹페이지 구글시트 → DB 전체 동기화."""
 
 import logging
+import threading
 from datetime import date
 
 from shared.db import get_conn, EQUIPMENT_DB
@@ -11,13 +12,26 @@ from shared.branch_resolver import resolve_evt_branch_id
 
 logger = logging.getLogger(__name__)
 
+_sync_lock = threading.Lock()
 
-def sync_all_to_db(target_month: str | None = None) -> dict:
+
+def sync_all_to_db(target_month: str | None = None, triggered_by: str = "manual") -> dict:
     """실행사별 시트에서 webpage_daily + agency_map 동기화.
 
     Args:
         target_month: "YYYY-MM" 형식. None이면 이번 달만.
+        triggered_by: 'manual' 또는 'auto'.
     """
+    if not _sync_lock.acquire(blocking=False):
+        return {"ok": False, "skipped": True, "reason": "이미 동기화가 진행 중입니다"}
+
+    try:
+        return _sync_all_to_db_inner(target_month, triggered_by)
+    finally:
+        _sync_lock.release()
+
+
+def _sync_all_to_db_inner(target_month: str | None, triggered_by: str) -> dict:
     from webpage.sheets import list_months_from_agency, get_ranking_by_agency, _parse_sheet_name
     import json
 
@@ -133,16 +147,26 @@ def sync_all_to_db(target_month: str | None = None) -> dict:
         if agency_changes:
             detail += f", 실행사 변경 {len(agency_changes)}건"
         conn.execute("""
-            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at)
-            VALUES (?, ?, 0, 0, ?, ?)
+            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
+            VALUES (?, ?, 0, 0, ?, ?, ?)
         """, ("webpage_sheets_to_db", total_inserted, detail,
-              datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+              datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
         conn.commit()
 
         logger.info(f"[webpage_sync] 완료: {result}")
         return result
     except Exception as e:
         logger.error(f"[webpage_sync] 실패: {e}", exc_info=True)
+        try:
+            from datetime import datetime
+            conn.execute("""
+                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
+                VALUES (?, 0, 0, 0, ?, ?, ?)
+            """, ("webpage_sheets_to_db", f"실패: {e}",
+                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
+            conn.commit()
+        except Exception:
+            pass
         return {"ok": False, "error": str(e)}
     finally:
         conn.close()

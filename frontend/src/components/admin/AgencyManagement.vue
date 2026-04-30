@@ -2,13 +2,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { fetchAgencyMap, saveAgencyMap, fetchAgencySheets, saveAgencySheets } from '@/api/branches'
 import { stripBrand } from '@/utils/branchName'
-import RankChecker from '@/components/admin/RankChecker.vue'
 import api from '@/api/client'
 
 const props = defineProps<{ branches: { id: number; name: string }[] }>()
 
 // Sub-tabs
-type SubTab = 'dashboard' | 'mapping' | 'place-stats' | 'webpage-stats' | 'rank-checker'
+type SubTab = 'dashboard' | 'mapping' | 'place-stats' | 'webpage-stats'
 const subTab = ref<SubTab>('dashboard')
 
 // ════════════════════════════════════════════
@@ -398,7 +397,6 @@ onUnmounted(() => {
         { key: 'dashboard', label: '대시보드' },
         { key: 'place-stats', label: '플레이스 성과' },
         { key: 'webpage-stats', label: '웹페이지 성과' },
-        { key: 'rank-checker', label: 'SB체커' },
       ]" :key="t.key"
         @click="subTab = t.key as SubTab; if (t.key === 'dashboard') loadDashboard(); if (t.key === 'place-stats') loadStats('place'); if (t.key === 'webpage-stats') loadStats('webpage')"
         :class="['px-3 py-2 text-sm font-medium transition border-b-2 -mb-px',
@@ -849,9 +847,5 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- ═══ SB체커 ═══ -->
-    <div v-if="subTab === 'rank-checker'">
-      <RankChecker :branches="branches" />
-    </div>
   </div>
 </template>

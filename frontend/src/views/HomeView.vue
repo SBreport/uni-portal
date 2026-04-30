@@ -287,7 +287,7 @@ function formatDate(iso: string) {
             <p class="text-sm font-bold text-red-700">운영 이슈 {{ totalIssueCount }}건</p>
           </div>
           <div class="flex flex-col gap-1">
-            <router-link v-for="issue in data.issues" :key="issue.type" :to="issue.link"
+            <router-link v-for="issue in data.issues" :key="issue.type" :to="{ path: '/admin', query: { tab: 'sb-checker' } }"
               class="flex items-center justify-between py-1 px-2 bg-white rounded border border-red-100 hover:bg-red-50 transition-colors">
               <span class="text-xs text-slate-700">{{ issue.label }}</span>
               <span class="text-xs font-bold text-red-600 tabular-nums">{{ issue.count }}건</span>

@@ -105,6 +105,7 @@ def init_db():
         name        TEXT NOT NULL UNIQUE,
         short_name  TEXT,
         aliases     TEXT DEFAULT '',
+        default_place_id TEXT DEFAULT '',
         is_active   INTEGER DEFAULT 1,
         created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -697,6 +698,7 @@ def init_db():
         guaranteed_rank INTEGER DEFAULT 5,
         is_active INTEGER DEFAULT 1,
         memo TEXT DEFAULT '',
+        origin TEXT DEFAULT 'manual',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(branch_id, keyword)
     )

@@ -5,6 +5,7 @@
 - 플레이스 오늘 동기화: 매일 10:30, 18:30 KST (2회)
 - 웹페이지 오늘 동기화: 매일 11:00, 19:00 KST (2회)
 - 플레이스/웹페이지 일별 스냅샷: 매일 23:00 KST
+- SB체커 자동 측정: 매일 20:00 KST
 """
 
 import logging
@@ -71,6 +72,19 @@ async def _run_webpage_today_sync():
         logger.error(f"[scheduler] 웹페이지 오늘 동기화 실패: {e}", exc_info=True)
 
 
+async def _run_rank_check_sync():
+    """SB체커 자동 측정 (매일 20:00 KST)."""
+    logger.info("[scheduler] SB체커 자동 측정 시작 (auto)")
+    try:
+        import asyncio
+        from checker.place_rank import run_check_all
+        # AsyncIO loop 블로킹 방지
+        result = await asyncio.to_thread(run_check_all, "auto")
+        logger.info(f"[scheduler] SB체커 자동 측정 완료: {result}")
+    except Exception as e:
+        logger.error(f"[scheduler] SB체커 자동 측정 실패: {e}", exc_info=True)
+
+
 async def _run_daily_snapshot():
     """플레이스/웹페이지 일별 스냅샷 (매일 23:00)."""
     logger.info("[scheduler] 일별 스냅샷 시작")
@@ -122,13 +136,31 @@ def setup_scheduler():
         replace_existing=True,
     )
     scheduler.add_job(
+        _run_rank_check_sync,
+        CronTrigger(hour=20, minute=0),
+        id="rank_check_auto_sync",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         _run_daily_snapshot,
         CronTrigger(hour=23, minute=0),
         id="place_daily_snapshot",
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("[scheduler] 스케줄러 시작 — 6개 잡 등록 완료")
+    logger.info("[scheduler] 스케줄러 시작 — 7개 잡 등록 완료")
+
+
+# 잡 ID → 사람이 읽는 라벨. 백엔드가 단일 source — 프론트는 그대로 표시만.
+_JOB_LABELS = {
+    "blog_daily_sync": "블로그 노션",
+    "place_morning_auto_sync": "플레이스 (오전)",
+    "place_today_auto_sync": "플레이스 (오후)",
+    "webpage_morning_auto_sync": "웹페이지 (오전)",
+    "webpage_today_auto_sync": "웹페이지 (오후)",
+    "rank_check_auto_sync": "SB체커",
+    "place_daily_snapshot": "일별 스냅샷",
+}
 
 
 def get_scheduler_status():
@@ -137,6 +169,7 @@ def get_scheduler_status():
     for job in scheduler.get_jobs():
         jobs.append({
             "id": job.id,
+            "label": _JOB_LABELS.get(job.id, job.id),
             "next_run": str(job.next_run_time) if job.next_run_time else None,
         })
     return {"running": scheduler.running, "jobs": jobs}

@@ -70,6 +70,14 @@ async def lifespan(app: FastAPI):
             _c.execute("ALTER TABLE notion_sync_log ADD COLUMN triggered_by TEXT DEFAULT 'manual'")
         except _sql.OperationalError:
             pass
+        try:
+            _c.execute("ALTER TABLE evt_branches ADD COLUMN default_place_id TEXT DEFAULT ''")
+        except _sql.OperationalError:
+            pass
+        try:
+            _c.execute("ALTER TABLE rank_check_keywords ADD COLUMN origin TEXT DEFAULT 'manual'")
+        except _sql.OperationalError:
+            pass
         _c.commit()
         _c.close()
     except Exception as e:

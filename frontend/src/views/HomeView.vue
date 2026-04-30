@@ -19,15 +19,16 @@ interface DashboardData {
   events: { label: string; count: number }
   cafe: { label: string; total: number; published: number; pending: number }
   dictionary: { total: number; verified: number }
-  recent_syncs: { sync_type: string; added: number; skipped: number; conflicts: number; synced_at: string; triggered_by?: string | null; detail?: string | null }[]
+  recent_syncs: { sync_type: string; added: number; skipped: number; conflicts: number; synced_at: string; triggered_by?: string | null; detail?: string | null; is_failed?: number }[]
   blog: BlogData
   place: PlaceSummary
   webpage: PlaceSummary
+  issues: { type: string; label: string; count: number; link: string }[]
 }
 
 const data = ref<DashboardData | null>(null)
 const loading = ref(true)
-const nextJobs = ref<{ id: string; next_run: string | null }[]>([])
+const nextJobs = ref<{ id: string; label: string; next_run: string | null }[]>([])
 
 onMounted(async () => {
   try {
@@ -75,15 +76,6 @@ const weeklyBars = computed(() => {
   }))
 })
 
-const JOB_LABELS: Record<string, string> = {
-  blog_daily_sync: '블로그 노션',
-  place_morning_auto_sync: '플레이스 (오전)',
-  place_today_auto_sync: '플레이스 (오후)',
-  webpage_morning_auto_sync: '웹페이지 (오전)',
-  webpage_today_auto_sync: '웹페이지 (오후)',
-  place_daily_snapshot: '일별 스냅샷',
-}
-
 function formatJobNextRun(iso: string | null): string {
   if (!iso) return '-'
   const d = new Date(iso)
@@ -104,15 +96,17 @@ const sortedNextJobs = computed(() => {
     .sort((a, b) => new Date(a.next_run!).getTime() - new Date(b.next_run!).getTime())
 })
 
+const totalIssueCount = computed(() => {
+  if (!data.value?.issues) return 0
+  return data.value.issues.reduce((sum, i) => sum + i.count, 0)
+})
+
 function formatDate(iso: string) {
   if (!iso) return '-'
   const d = new Date(iso)
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 
-function isFailedSync(detail?: string | null): boolean {
-  return !!detail && detail.startsWith('실패')
-}
 </script>
 
 <template>
@@ -286,6 +280,22 @@ function isFailedSync(detail?: string | null): boolean {
         </router-link>
       </div>
 
+      <!-- ━━ 운영 이슈 배너 (admin만, 이슈 있을 때만) ━━ -->
+      <div v-if="auth.role === 'admin' && data.issues && data.issues.length" class="mb-6">
+        <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-sm font-bold text-red-700">운영 이슈 {{ totalIssueCount }}건</p>
+          </div>
+          <div class="flex flex-col gap-1">
+            <router-link v-for="issue in data.issues" :key="issue.type" :to="issue.link"
+              class="flex items-center justify-between py-1 px-2 bg-white rounded border border-red-100 hover:bg-red-50 transition-colors">
+              <span class="text-xs text-slate-700">{{ issue.label }}</span>
+              <span class="text-xs font-bold text-red-600 tabular-nums">{{ issue.count }}건</span>
+            </router-link>
+          </div>
+        </div>
+      </div>
+
       <!-- ━━ 섹션 4: 동기화 이력 (admin만 표시) ━━ -->
       <div v-if="auth.role === 'admin' && data.recent_syncs.length" class="mb-6">
         <h3 class="text-sm font-bold text-slate-500 mb-3 tracking-wide">최근 동기화</h3>
@@ -295,7 +305,7 @@ function isFailedSync(detail?: string | null): boolean {
           <p class="text-xs font-medium text-slate-500 mb-2">다음 자동 실행</p>
           <div class="grid grid-cols-2 gap-2">
             <div v-for="job in sortedNextJobs" :key="job.id" class="flex items-center justify-between">
-              <span class="text-xs text-slate-600">{{ JOB_LABELS[job.id] || job.id }}</span>
+              <span class="text-xs text-slate-600">{{ job.label || job.id }}</span>
               <span class="text-xs font-medium text-slate-700 tabular-nums">{{ formatJobNextRun(job.next_run) }}</span>
             </div>
           </div>
@@ -305,7 +315,7 @@ function isFailedSync(detail?: string | null): boolean {
           <div class="space-y-2">
             <div v-for="(s, i) in data.recent_syncs" :key="i"
               class="border-b border-slate-50 last:border-0"
-              :class="isFailedSync(s.detail) ? 'bg-red-50 border-l-2 border-red-300 pl-2' : ''">
+              :class="s.is_failed ? 'bg-red-50 border-l-2 border-red-300 pl-2' : ''">
               <div class="flex flex-col gap-0.5 py-1.5">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
@@ -328,7 +338,7 @@ function isFailedSync(detail?: string | null): boolean {
                         s.sync_type
                       }}
                     </span>
-                    <span v-if="isFailedSync(s.detail)"
+                    <span v-if="s.is_failed"
                       class="text-xs font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700">
                       실패
                     </span>
@@ -340,9 +350,9 @@ function isFailedSync(detail?: string | null): boolean {
                   </div>
                   <span class="text-xs text-slate-400">{{ formatDate(s.synced_at) }}</span>
                 </div>
-                <p v-if="s.detail && !isFailedSync(s.detail)"
+                <p v-if="s.detail && !s.is_failed"
                   class="text-xs text-slate-400 line-clamp-1">{{ s.detail }}</p>
-                <p v-if="isFailedSync(s.detail)"
+                <p v-if="s.is_failed"
                   class="text-xs text-red-500 line-clamp-1">{{ s.detail }}</p>
               </div>
             </div>

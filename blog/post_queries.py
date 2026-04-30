@@ -501,9 +501,11 @@ def _get_home_dashboard_impl(conn):
     dict_total = conn.execute("SELECT COUNT(*) FROM device_info").fetchone()[0]
     dict_verified = conn.execute("SELECT COUNT(*) FROM device_info WHERE is_verified = 1").fetchone()[0]
 
-    # sync_log + notion_sync_log 통합 뷰 (시각 내림차순 7건)
+    # sync_log + notion_sync_log 통합 뷰 (시각 내림차순 7건). is_failed는 백엔드가 단일 판정.
     recent_syncs = [dict(r) for r in conn.execute("""
-        SELECT sync_type, added, skipped, conflicts, synced_at, triggered_by, detail FROM (
+        SELECT sync_type, added, skipped, conflicts, synced_at, triggered_by, detail,
+               CASE WHEN detail LIKE '실패%' THEN 1 ELSE 0 END AS is_failed
+          FROM (
             SELECT sync_type, added, skipped, conflicts, synced_at, triggered_by, detail
               FROM sync_log
             UNION ALL
@@ -515,7 +517,7 @@ def _get_home_dashboard_impl(conn):
                    COALESCE(triggered_by, 'manual') AS triggered_by,
                    '신규 ' || new_posts || '건, 업데이트 ' || updated || '건' AS detail
               FROM notion_sync_log
-        )
+          )
         ORDER BY synced_at DESC LIMIT 7
     """).fetchall()]
 
@@ -539,6 +541,34 @@ def _get_home_dashboard_impl(conn):
     place_summary = _fetch_place_summary()
     webpage_summary = _fetch_webpage_summary()
 
+    # ── 운영 이슈 카운트 (admin 전용 표시) ──
+    issues = []
+    # (1) place_id 미등록 지점
+    unregistered_branches = conn.execute("""
+        SELECT COUNT(*) FROM evt_branches
+        WHERE is_active = 1 AND (default_place_id IS NULL OR default_place_id = '')
+    """).fetchone()[0]
+    if unregistered_branches > 0:
+        issues.append({
+            "type": "place_id_missing",
+            "label": "place_id 미등록 지점",
+            "count": unregistered_branches,
+            "link": "/admin/sb-checker",
+        })
+
+    # (2) 추적 미설정 키워드 (자동 연동됐지만 is_active=0)
+    untracked_keywords = conn.execute("""
+        SELECT COUNT(*) FROM rank_check_keywords
+        WHERE is_active = 0 AND origin = 'auto_synced'
+    """).fetchone()[0]
+    if untracked_keywords > 0:
+        issues.append({
+            "type": "untracked_keywords",
+            "label": "추적 미설정 키워드",
+            "count": untracked_keywords,
+            "link": "/admin/sb-checker",
+        })
+
     return {
         "branches": branch_count,
         "equipment": {"total": equip_total, "photo_done": equip_photo},
@@ -554,6 +584,7 @@ def _get_home_dashboard_impl(conn):
         },
         "place": place_summary,
         "webpage": webpage_summary,
+        "issues": issues,
     }
 
 

@@ -116,7 +116,7 @@ async def check_branch(branch_id: int, user: Annotated[dict, Depends(_editor)]):
 async def check_all(user: Annotated[dict, Depends(_editor)]):
     """전 지점 순위 체크 실행."""
     from checker.place_rank import run_check_all
-    return run_check_all()
+    return run_check_all(triggered_by="manual")
 
 
 @router.get("/check-all-stream")

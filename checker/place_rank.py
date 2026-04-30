@@ -5,6 +5,7 @@
 
 import json
 import time
+import threading
 import urllib.parse
 import logging
 from datetime import datetime, date
@@ -15,6 +16,8 @@ import requests
 from shared.db import get_conn, EQUIPMENT_DB
 
 logger = logging.getLogger(__name__)
+
+_rank_check_lock = threading.Lock()
 
 GRAPHQL_URL = "https://api.place.naver.com/graphql"
 GRAPHQL_QUERY = (
@@ -137,25 +140,72 @@ def run_check_for_branch(branch_id: int) -> dict:
         conn.close()
 
 
-def run_check_all() -> dict:
-    """전 지점 순위 체크."""
+def run_check_all(triggered_by: str = "manual") -> dict:
+    """전 지점 순위 체크 (락 가드 + sync_log 기록)."""
+    if not _rank_check_lock.acquire(blocking=False):
+        return {"ok": False, "skipped": True, "reason": "이미 측정이 진행 중입니다"}
+    try:
+        return _run_check_all_inner(triggered_by)
+    finally:
+        _rank_check_lock.release()
+
+
+def _run_check_all_inner(triggered_by: str) -> dict:
+    """run_check_all 실제 실행 로직."""
     conn = get_conn(EQUIPMENT_DB)
     try:
         branches = conn.execute(
             "SELECT DISTINCT branch_id, branch_name FROM rank_check_keywords WHERE is_active = 1"
         ).fetchall()
+        branches = list(branches)
     finally:
         conn.close()
 
-    total_checked = 0
+    success_count = 0
+    failed_count = 0
     all_results = []
 
     for b in branches:
         result = run_check_for_branch(b["branch_id"])
-        total_checked += result.get("checked", 0)
+        branch_success = result.get("checked", 0)
+        success_count += branch_success
         all_results.extend(result.get("results", []))
+        if not result.get("ok", True):
+            failed_count += 1
 
-    return {"ok": True, "branches": len(branches), "total_checked": total_checked, "results": all_results}
+    # is_active=0인 키워드 수 (=place_id 미등록 등으로 추적 미설정)
+    conn2 = get_conn(EQUIPMENT_DB)
+    try:
+        skipped_count = conn2.execute(
+            "SELECT COUNT(*) FROM rank_check_keywords WHERE is_active = 0"
+        ).fetchone()[0]
+        inactive_count = skipped_count
+
+        # 측정 결과 기록
+        detail_parts = [f"측정 {success_count}건"]
+        if failed_count > 0:
+            detail_parts.append(f"실패 {failed_count}건")
+        if skipped_count > 0:
+            detail_parts.append(f"미측정 {skipped_count}건 (place_id 미등록 등)")
+        detail = ", ".join(detail_parts)
+
+        if inactive_count > 0:
+            detail = f"실패: 추적 미설정 키워드 {inactive_count}건. " + detail
+
+        conn2.execute("""
+            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
+            VALUES ('rank_check_auto', ?, ?, 0, ?, ?, ?)
+        """, (success_count, skipped_count, detail, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
+        conn2.commit()
+    finally:
+        conn2.close()
+
+    return {
+        "ok": True,
+        "branches": len(branches),
+        "total_checked": success_count,
+        "results": all_results,
+    }
 
 
 def run_check_all_stream():
@@ -297,53 +347,80 @@ def get_branch_rank_history(branch_id: int, days: int = 30) -> list[dict]:
 
 
 def get_comparison(branch_id: int, check_date: str = None) -> dict:
-    """실행사 데이터 vs SB체커 데이터 비교."""
+    """외주사 보고 vs SB체커 실측 비교.
+
+    상태:
+    - match:           둘 다 보고, 노출 일치
+    - mismatch:        둘 다 보고, 노출 다름 (외주사 잘못 보고)
+    - agency_missing:  SB는 측정, 외주사 보고 누락 (외주사 직무 태만)
+    - checker_missing: 외주사는 보고, SB 미측정 (자동 측정 실패 또는 키워드 미등록)
+
+    데이터 베이스는 place_daily — 단독 추적(origin='manual'이고 place_daily에 없는 것)은 비교 제외.
+    """
     if not check_date:
         check_date = date.today().isoformat()
 
     conn = get_conn(EQUIPMENT_DB)
     try:
-        # 실행사 데이터 (place_daily)
+        # 외주사 보고 (place_daily) — 베이스
         agency = conn.execute("""
             SELECT keyword, is_exposed, rank FROM place_daily
             WHERE branch_id = ? AND date = ?
         """, (branch_id, check_date)).fetchall()
         agency_map = {r["keyword"]: dict(r) for r in agency}
 
-        # SB체커 데이터 (rank_checks)
+        # SB체커 측정 (rank_checks JOIN rank_check_keywords)
         checker = conn.execute("""
             SELECT rc.keyword, rc.rank, rc.is_exposed, rck.guaranteed_rank
-            FROM rank_checks rc
-            JOIN rank_check_keywords rck ON rc.keyword_id = rck.id
-            WHERE rc.branch_id = ? AND rc.date = ?
+              FROM rank_checks rc
+              JOIN rank_check_keywords rck ON rc.keyword_id = rck.id
+             WHERE rc.branch_id = ? AND rc.date = ?
         """, (branch_id, check_date)).fetchall()
         checker_map = {r["keyword"]: dict(r) for r in checker}
 
-        # 비교
-        all_keywords = set(agency_map.keys()) | set(checker_map.keys())
+        # 합집합 키워드 — 단, 단독 추적(origin='manual'+place_daily에 없는 것)은 제외
+        all_keywords = set(agency_map.keys())
+        # SB만 측정된 경우 (agency_missing)도 origin이 auto_synced인 것만 포함
+        for kw, c in checker_map.items():
+            if kw not in agency_map:
+                # origin 검사
+                row = conn.execute(
+                    "SELECT origin FROM rank_check_keywords WHERE branch_id=? AND keyword=? LIMIT 1",
+                    (branch_id, kw)
+                ).fetchone()
+                if row and row["origin"] == "auto_synced":
+                    all_keywords.add(kw)
+
         comparisons = []
+        counts = {"match": 0, "mismatch": 0, "agency_missing": 0, "checker_missing": 0}
         for kw in sorted(all_keywords):
             a = agency_map.get(kw)
             c = checker_map.get(kw)
 
-            mismatch = False
             if a and c:
-                # 둘 다 있을 때: 노출 여부가 다르면 불일치
-                if a["is_exposed"] != c["is_exposed"]:
-                    mismatch = True
+                state = "match" if a["is_exposed"] == c["is_exposed"] else "mismatch"
+            elif c and not a:
+                state = "agency_missing"
+            elif a and not c:
+                state = "checker_missing"
+            else:
+                continue
+            counts[state] += 1
 
             comparisons.append({
                 "keyword": kw,
                 "agency": {"is_exposed": a["is_exposed"], "rank": a.get("rank")} if a else None,
                 "checker": {"rank": c["rank"], "is_exposed": c["is_exposed"], "guaranteed_rank": c.get("guaranteed_rank")} if c else None,
-                "mismatch": mismatch,
+                "state": state,
             })
 
         return {
             "date": check_date,
             "branch_id": branch_id,
             "comparisons": comparisons,
-            "mismatch_count": sum(1 for c in comparisons if c["mismatch"]),
+            "counts": counts,
+            # 호환성: 기존 mismatch_count 유지
+            "mismatch_count": counts["mismatch"],
         }
     finally:
         conn.close()

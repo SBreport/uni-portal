@@ -188,6 +188,12 @@ def _sync_all_to_db_inner(target_month: str | None, triggered_by: str) -> dict:
 
         conn.commit()
 
+        # ── SB체커 키워드 자동 연동 (Phase 1) ──
+        try:
+            _auto_sync_rank_keywords(conn)
+        except Exception as e:
+            logger.warning(f"[place_sync] 키워드 자동 연동 실패: {e}")
+
         result = {
             "ok": True,
             "sheets_processed": sheets_processed,
@@ -224,3 +230,51 @@ def _sync_all_to_db_inner(target_month: str | None, triggered_by: str) -> dict:
         return {"ok": False, "error": str(e)}
     finally:
         conn.close()
+
+
+def _auto_sync_rank_keywords(conn) -> dict:
+    """place_daily의 (branch_id, keyword) 중 rank_check_keywords 미등록 항목을 자동 등록.
+
+    - place_id는 evt_branches.default_place_id에서 자동 채움. 없으면 빈 문자열 + is_active=0.
+    - 이미 origin='manual'로 단독 추가된 키워드를 외주사가 추적 시작하면 'auto_synced'로 승격.
+    """
+    # 외주사 키워드 distinct
+    rows = conn.execute("""
+        SELECT DISTINCT pd.branch_id, pd.branch_name, pd.keyword,
+               COALESCE(eb.default_place_id, '') AS default_place_id
+        FROM place_daily pd
+        LEFT JOIN evt_branches eb ON eb.id = pd.branch_id
+        WHERE pd.keyword != '' AND pd.branch_id > 0
+    """).fetchall()
+
+    inserted = 0
+    promoted = 0
+    for r in rows:
+        bid = r["branch_id"]
+        kw = r["keyword"]
+        default_pid = r["default_place_id"] or ""
+
+        existing = conn.execute(
+            "SELECT id, origin, place_id FROM rank_check_keywords WHERE branch_id=? AND keyword=?",
+            (bid, kw)
+        ).fetchone()
+
+        if existing is None:
+            # 신규 자동 연동 — place_id 있으면 즉시 활성화, 없으면 대기
+            is_active = 1 if default_pid else 0
+            conn.execute("""
+                INSERT INTO rank_check_keywords
+                  (branch_id, branch_name, keyword, search_keyword, place_id, guaranteed_rank, is_active, memo, origin)
+                VALUES (?, ?, ?, '', ?, 5, ?, '', 'auto_synced')
+            """, (bid, r["branch_name"], kw, default_pid, is_active))
+            inserted += 1
+        elif existing["origin"] == "manual":
+            # 단독 추적이었는데 외주사가 추적 시작 → 승격
+            conn.execute(
+                "UPDATE rank_check_keywords SET origin='auto_synced' WHERE id=?",
+                (existing["id"],)
+            )
+            promoted += 1
+
+    conn.commit()
+    return {"inserted": inserted, "promoted": promoted}

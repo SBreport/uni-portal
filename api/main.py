@@ -66,6 +66,10 @@ async def lifespan(app: FastAPI):
             _c.execute("ALTER TABLE sync_log ADD COLUMN triggered_by TEXT DEFAULT 'manual'")
         except _sql.OperationalError:
             pass
+        try:
+            _c.execute("ALTER TABLE notion_sync_log ADD COLUMN triggered_by TEXT DEFAULT 'manual'")
+        except _sql.OperationalError:
+            pass
         _c.commit()
         _c.close()
     except Exception as e:
@@ -164,7 +168,7 @@ async def daily_sync_all(user: dict = Depends(get_current_user)):
         token = get_notion_token()
         db_id = NOTION_BLOG_DB_ID
         if token and db_id:
-            r = incremental_sync(token, db_id)
+            r = incremental_sync(token, db_id, triggered_by="manual")
             results["blog_sync"] = {"ok": True, **r}
         else:
             results["blog_sync"] = {"ok": False, "message": "노션 토큰/DB ID 미설정"}

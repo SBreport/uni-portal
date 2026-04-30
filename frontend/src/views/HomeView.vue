@@ -27,11 +27,20 @@ interface DashboardData {
 
 const data = ref<DashboardData | null>(null)
 const loading = ref(true)
+const nextJobs = ref<{ id: string; next_run: string | null }[]>([])
 
 onMounted(async () => {
   try {
     const res = await api.get('/dashboard')
     data.value = res.data
+    if (auth.role === 'admin') {
+      try {
+        const s = await api.get('/admin/scheduler-status')
+        nextJobs.value = s.data.jobs || []
+      } catch (e) {
+        console.warn('scheduler-status 호출 실패:', e)
+      }
+    }
   } catch (e) {
     console.error('Dashboard load failed:', e)
   } finally {
@@ -64,6 +73,35 @@ const weeklyBars = computed(() => {
     cnt: w.cnt,
     pct: Math.round((w.cnt / max) * 100),
   }))
+})
+
+const JOB_LABELS: Record<string, string> = {
+  blog_daily_sync: '블로그 노션',
+  place_morning_auto_sync: '플레이스 (오전)',
+  place_today_auto_sync: '플레이스 (오후)',
+  webpage_morning_auto_sync: '웹페이지 (오전)',
+  webpage_today_auto_sync: '웹페이지 (오후)',
+  place_daily_snapshot: '일별 스냅샷',
+}
+
+function formatJobNextRun(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  const now = new Date()
+  const isToday = d.toDateString() === now.toDateString()
+  const tomorrow = new Date(now)
+  tomorrow.setDate(now.getDate() + 1)
+  const isTomorrow = d.toDateString() === tomorrow.toDateString()
+  const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+  if (isToday) return `오늘 ${time}`
+  if (isTomorrow) return `내일 ${time}`
+  return `${d.getMonth() + 1}/${d.getDate()} ${time}`
+}
+
+const sortedNextJobs = computed(() => {
+  return [...nextJobs.value]
+    .filter(j => j.next_run)
+    .sort((a, b) => new Date(a.next_run!).getTime() - new Date(b.next_run!).getTime())
 })
 
 function formatDate(iso: string) {
@@ -250,10 +288,19 @@ function isFailedSync(detail?: string | null): boolean {
 
       <!-- ━━ 섹션 4: 동기화 이력 (admin만 표시) ━━ -->
       <div v-if="auth.role === 'admin' && data.recent_syncs.length" class="mb-6">
-        <h3 class="text-sm font-bold text-slate-500 mb-3 tracking-wide">
-          최근 동기화
-          <span class="text-xs font-normal text-slate-400 ml-2">매일 18:30 자동 실행</span>
-        </h3>
+        <h3 class="text-sm font-bold text-slate-500 mb-3 tracking-wide">최근 동기화</h3>
+
+        <!-- 다음 자동 실행 패널 -->
+        <div v-if="sortedNextJobs.length" class="bg-white border border-slate-200 rounded-lg p-3 mb-3">
+          <p class="text-xs font-medium text-slate-500 mb-2">다음 자동 실행</p>
+          <div class="grid grid-cols-2 gap-2">
+            <div v-for="job in sortedNextJobs" :key="job.id" class="flex items-center justify-between">
+              <span class="text-xs text-slate-600">{{ JOB_LABELS[job.id] || job.id }}</span>
+              <span class="text-xs font-medium text-slate-700 tabular-nums">{{ formatJobNextRun(job.next_run) }}</span>
+            </div>
+          </div>
+        </div>
+
         <div class="bg-white border border-slate-200 rounded-lg p-4">
           <div class="space-y-2">
             <div v-for="(s, i) in data.recent_syncs" :key="i"
@@ -269,6 +316,7 @@ function isFailedSync(detail?: string | null): boolean {
                         'bg-emerald-50 text-emerald-600': s.sync_type === 'cafe',
                         'bg-rose-50 text-rose-600': s.sync_type === 'place_sheets_to_db',
                         'bg-violet-50 text-violet-600': s.sync_type === 'webpage_sheets_to_db',
+                        'bg-indigo-50 text-indigo-600': s.sync_type === 'blog_notion_sync',
                       }">
                       {{
                         s.sync_type === 'equipment' ? '장비' :
@@ -276,6 +324,7 @@ function isFailedSync(detail?: string | null): boolean {
                         s.sync_type === 'cafe' ? '카페' :
                         s.sync_type === 'place_sheets_to_db' ? '플레이스' :
                         s.sync_type === 'webpage_sheets_to_db' ? '웹페이지' :
+                        s.sync_type === 'blog_notion_sync' ? '블로그 노션' :
                         s.sync_type
                       }}
                     </span>
@@ -284,13 +333,15 @@ function isFailedSync(detail?: string | null): boolean {
                       실패
                     </span>
                     <span class="text-xs px-1.5 py-0.5 rounded"
-                      :class="s.triggered_by === 'auto' ? 'bg-sky-50 text-sky-500' : 'bg-slate-100 text-slate-400'">
+                      :class="s.triggered_by === 'auto' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'">
                       {{ s.triggered_by === 'auto' ? '자동' : '수동' }}
                     </span>
                     <span class="text-xs text-slate-400">+{{ s.added }} / ={{ s.skipped }}</span>
                   </div>
                   <span class="text-xs text-slate-400">{{ formatDate(s.synced_at) }}</span>
                 </div>
+                <p v-if="s.detail && !isFailedSync(s.detail)"
+                  class="text-xs text-slate-400 line-clamp-1">{{ s.detail }}</p>
                 <p v-if="isFailedSync(s.detail)"
                   class="text-xs text-red-500 line-clamp-1">{{ s.detail }}</p>
               </div>

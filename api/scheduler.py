@@ -1,8 +1,9 @@
 """백그라운드 스케줄러 — APScheduler 기반.
 
 - 블로그 노션 동기화: 매일 06:00 KST
-- 플레이스 오늘 동기화: 매일 18:30 KST
-- 웹페이지 오늘 동기화: 매일 19:00 KST
+- 블로그 제목 스크래핑 (06:00 직후)
+- 플레이스 오늘 동기화: 매일 10:30, 18:30 KST (2회)
+- 웹페이지 오늘 동기화: 매일 11:00, 19:00 KST (2회)
 - 플레이스/웹페이지 일별 스냅샷: 매일 23:00 KST
 """
 
@@ -16,7 +17,7 @@ scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
 
 
 async def _run_blog_sync():
-    """노션 → DB 블로그 동기화 (매일 06:00)."""
+    """노션 → DB 블로그 동기화 + 제목 스크래핑 (매일 06:00)."""
     logger.info("[scheduler] 블로그 동기화 시작")
     try:
         from blog.sync_notion import incremental_sync, NOTION_BLOG_DB_ID
@@ -28,10 +29,20 @@ async def _run_blog_sync():
             logger.warning("[scheduler] 노션 토큰/DB ID 미설정 — 동기화 건너뜀")
             return
 
-        result = incremental_sync(token, db_id)
+        result = incremental_sync(token, db_id, triggered_by="auto")
         logger.info(f"[scheduler] 블로그 동기화 완료: {result}")
     except Exception as e:
         logger.error(f"[scheduler] 블로그 동기화 실패: {e}", exc_info=True)
+        return  # 노션 동기화 실패 시 제목 스크래핑도 의미 없음
+
+    # 노션 동기화 직후 — 새 글의 빈 제목을 스크래핑으로 보충
+    try:
+        import asyncio
+        from blog.scrape_titles import scrape_missing_titles
+        scrape_result = await asyncio.to_thread(scrape_missing_titles, 50, 0.2)
+        logger.info(f"[scheduler] 블로그 제목 스크래핑: {scrape_result}")
+    except Exception as e:
+        logger.error(f"[scheduler] 블로그 제목 스크래핑 실패: {e}", exc_info=True)
 
 
 async def _run_place_today_sync():
@@ -88,8 +99,20 @@ def setup_scheduler():
     )
     scheduler.add_job(
         _run_place_today_sync,
+        CronTrigger(hour=10, minute=30),
+        id="place_morning_auto_sync",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_place_today_sync,
         CronTrigger(hour=18, minute=30),
         id="place_today_auto_sync",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_webpage_today_sync,
+        CronTrigger(hour=11, minute=0),
+        id="webpage_morning_auto_sync",
         replace_existing=True,
     )
     scheduler.add_job(
@@ -105,7 +128,7 @@ def setup_scheduler():
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("[scheduler] 스케줄러 시작 — 4개 잡 등록 완료")
+    logger.info("[scheduler] 스케줄러 시작 — 6개 잡 등록 완료")
 
 
 def get_scheduler_status():

@@ -194,7 +194,7 @@ def get_last_sync_time(conn) -> str:
     return row[0] if row and row[0] else ""
 
 
-def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: bool = False) -> dict:
+def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: bool = False, triggered_by: str = "manual") -> dict:
     """증분 동기화: 마지막 동기화 이후 수정된 페이지만 처리. force_full=True면 전체."""
     print(f"[sync_notion] incremental_sync start force_full={force_full}", flush=True)
     conn = sqlite3.connect(os.path.abspath(DB_PATH), timeout=30)
@@ -328,9 +328,9 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
     print("[sync_notion] writing to db", flush=True)
     if not dry_run:
         conn.execute("""
-            INSERT INTO notion_sync_log (sync_type, notion_pages, matched, updated, new_posts, last_edited_cutoff)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (sync_type, len(pages), matched, updated, new_posts, latest_edited))
+            INSERT INTO notion_sync_log (sync_type, notion_pages, matched, updated, new_posts, last_edited_cutoff, triggered_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (sync_type, len(pages), matched, updated, new_posts, latest_edited, triggered_by))
         conn.commit()
 
     conn.close()

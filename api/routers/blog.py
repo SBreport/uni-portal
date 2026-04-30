@@ -156,7 +156,7 @@ def sync_notion(body: NotionSyncRequest, user: dict = Depends(require_role("admi
     if not token:
         raise HTTPException(400, "Notion 토큰이 없습니다. 토큰을 입력하거나 먼저 저장해주세요.")
     try:
-        return incremental_sync(token, NOTION_BLOG_DB_ID, dry_run=False)
+        return incremental_sync(token, NOTION_BLOG_DB_ID, dry_run=False, triggered_by="manual")
     except Exception as e:
         print(traceback.format_exc(), flush=True)
         raise HTTPException(status_code=500, detail=f"동기화 실패: {type(e).__name__}: {e}")

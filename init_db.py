@@ -521,7 +521,8 @@ def init_db():
         updated         INTEGER DEFAULT 0,
         new_posts       INTEGER DEFAULT 0,
         last_edited_cutoff TEXT DEFAULT '',
-        synced_at       TEXT DEFAULT (datetime('now','localtime'))
+        synced_at       TEXT DEFAULT (datetime('now','localtime')),
+        triggered_by    TEXT DEFAULT 'manual'
     )
     """)
 

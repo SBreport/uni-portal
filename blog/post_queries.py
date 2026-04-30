@@ -501,9 +501,23 @@ def _get_home_dashboard_impl(conn):
     dict_total = conn.execute("SELECT COUNT(*) FROM device_info").fetchone()[0]
     dict_verified = conn.execute("SELECT COUNT(*) FROM device_info WHERE is_verified = 1").fetchone()[0]
 
-    recent_syncs = [dict(r) for r in conn.execute(
-        "SELECT sync_type, added, skipped, conflicts, synced_at, triggered_by, detail FROM sync_log ORDER BY synced_at DESC LIMIT 5"
-    ).fetchall()]
+    # sync_log + notion_sync_log 통합 뷰 (시각 내림차순 7건)
+    recent_syncs = [dict(r) for r in conn.execute("""
+        SELECT sync_type, added, skipped, conflicts, synced_at, triggered_by, detail FROM (
+            SELECT sync_type, added, skipped, conflicts, synced_at, triggered_by, detail
+              FROM sync_log
+            UNION ALL
+            SELECT 'blog_notion_sync' AS sync_type,
+                   new_posts AS added,
+                   CASE WHEN matched - new_posts - updated > 0 THEN matched - new_posts - updated ELSE 0 END AS skipped,
+                   0 AS conflicts,
+                   synced_at,
+                   COALESCE(triggered_by, 'manual') AS triggered_by,
+                   '신규 ' || new_posts || '건, 업데이트 ' || updated || '건' AS detail
+              FROM notion_sync_log
+        )
+        ORDER BY synced_at DESC LIMIT 7
+    """).fetchall()]
 
     # ── 블로그 요약 ──
     blog_total = conn.execute("SELECT COUNT(*) FROM blog_posts").fetchone()[0]

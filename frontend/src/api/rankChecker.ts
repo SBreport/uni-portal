@@ -34,6 +34,9 @@ export const getHistory = (branchId: number, days?: number) =>
 export const getComparison = (branchId: number, date?: string) =>
   api.get(`/rank-checker/comparison/${branchId}`, { params: date ? { date } : {} })
 
+export const getLatestSnapshot = () =>
+  api.get('/rank-checker/latest-snapshot')
+
 // 지점 place_id 자동 매칭 (brand_prefix 옵션 — '유앤아이의원' 같은 회사명 prefix)
 export const autoMatchBranches = (brandPrefix?: string) =>
   api.post(

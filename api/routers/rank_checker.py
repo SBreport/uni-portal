@@ -240,6 +240,49 @@ class AutoMatchRequest(BaseModel):
     brand_prefix: Optional[str] = None  # 검색 시 prefix로 결합 (예: '유앤아이의원')
 
 
+@router.get("/latest-snapshot")
+async def get_latest_snapshot(user: Annotated[dict, Depends(_editor)]):
+    """가장 최근 측정 회차의 모든 등록 키워드 결과.
+
+    측정 안 된 키워드도 LEFT JOIN으로 포함 (rank가 None) — 운영자가 누락 인지.
+    응답: {snapshot_date, items: [{keyword_id, branch_id, branch_name, keyword,
+           search_keyword, guaranteed_rank, rank, is_exposed, checked_at}]}
+    """
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        latest = conn.execute("SELECT MAX(date) AS d FROM rank_checks").fetchone()
+        snapshot_date = latest["d"] if latest else None
+        if not snapshot_date:
+            return {"snapshot_date": None, "items": []}
+
+        rows = conn.execute("""
+            SELECT
+                rck.id AS keyword_id,
+                rck.branch_id,
+                rck.branch_name,
+                rck.keyword,
+                rck.search_keyword,
+                rck.guaranteed_rank,
+                rc.rank,
+                rc.is_exposed,
+                rc.checked_at
+              FROM rank_check_keywords rck
+              LEFT JOIN rank_checks rc
+                ON rc.keyword_id = rck.id
+               AND rc.date = ?
+             WHERE rck.is_active = 1
+             ORDER BY rck.keyword, rck.branch_name
+        """, (snapshot_date,)).fetchall()
+
+        return {
+            "snapshot_date": snapshot_date,
+            "items": [dict(r) for r in rows],
+        }
+    finally:
+        conn.close()
+
+
 @router.post("/auto-match-branches")
 async def auto_match_branches(
     user: Annotated[dict, Depends(require_role("admin"))],

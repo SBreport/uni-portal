@@ -284,21 +284,91 @@ const snapshotItems = ref<Array<{
   rank: number | null
   is_exposed: number | null
   checked_at: string | null
+  prev_rank: number | null
+  trend: number | null
 }>>([])
 const snapshotLoading = ref(false)
 
-// Level 2 (인라인 확장) — 펼친 지점 ID
+// Level 2 (우측 슬라이드 패널) — 펼친 지점 ID
 const expandedBranchId = ref<number | null>(null)
 
-// 키워드별 그룹화 (이미 받은 데이터 가공 — 룰 예외 영역)
-const snapshotByKeyword = computed(() => {
-  const groups: Record<string, typeof snapshotItems.value> = {}
-  for (const item of snapshotItems.value) {
-    if (!groups[item.keyword]) groups[item.keyword] = []
-    groups[item.keyword]!.push(item)
+// 체크 이력 — 검색/필터/정렬
+const searchQuery = ref('')
+const filterExposedOnly = ref(false)
+const filterMissedOnly = ref(false)
+const sortKey = ref<'keyword' | 'branch' | 'rank' | 'trend'>('keyword')
+const sortDir = ref<'asc' | 'desc'>('asc')
+
+// 필터+정렬 적용된 평면 리스트 (이미 받은 데이터 가공 — 룰 예외 영역)
+const filteredItems = computed(() => {
+  let items = snapshotItems.value
+
+  // 검색 (지점명 또는 키워드 부분 매칭)
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    items = items.filter(i =>
+      i.keyword.toLowerCase().includes(q) ||
+      i.branch_name.toLowerCase().includes(q)
+    )
   }
-  return Object.entries(groups).map(([keyword, items]) => ({ keyword, items }))
+
+  // 노출만
+  if (filterExposedOnly.value) {
+    items = items.filter(i => i.is_exposed === 1)
+  }
+
+  // 보장 미달만 (rank > guaranteed_rank, 또는 미노출)
+  if (filterMissedOnly.value) {
+    items = items.filter(i =>
+      i.rank == null || i.rank > i.guaranteed_rank
+    )
+  }
+
+  // 정렬
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  items = [...items].sort((a, b) => {
+    let av: any, bv: any
+    switch (sortKey.value) {
+      case 'keyword': av = a.keyword; bv = b.keyword; break
+      case 'branch': av = a.branch_name; bv = b.branch_name; break
+      case 'rank': av = a.rank ?? 9999; bv = b.rank ?? 9999; break
+      case 'trend': av = a.trend ?? -9999; bv = b.trend ?? -9999; break
+    }
+    if (typeof av === 'string') return av.localeCompare(bv) * dir
+    return (av - bv) * dir
+  })
+
+  return items
 })
+
+// 요약 카운트
+const snapshotSummary = computed(() => {
+  const total = snapshotItems.value.length
+  const exposed = snapshotItems.value.filter(i => i.is_exposed === 1).length
+  const missed_exposed = snapshotItems.value.filter(i =>
+    i.rank != null && i.is_exposed === 0
+  ).length
+  const missed_guaranteed = snapshotItems.value.filter(i =>
+    i.rank == null || i.rank > i.guaranteed_rank
+  ).length
+  return { total, exposed, missed_exposed, missed_guaranteed }
+})
+
+function toggleSort(key: typeof sortKey.value) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'asc'
+  }
+}
+
+function trendLabel(trend: number | null | undefined): { text: string; color: string } {
+  if (trend === null || trend === undefined) return { text: '─', color: 'text-slate-300' }
+  if (trend > 0) return { text: `↑${trend}`, color: 'text-emerald-600' }
+  if (trend < 0) return { text: `↓${Math.abs(trend)}`, color: 'text-rose-600' }
+  return { text: '→', color: 'text-slate-400' }
+}
 
 // 매트릭스 변환 (history → 날짜 × 키워드 셀)
 const historyMatrix = computed(() => {
@@ -319,6 +389,9 @@ async function loadSnapshot() {
     const res = await rcApi.getLatestSnapshot()
     snapshotDate.value = res.data.snapshot_date
     snapshotItems.value = res.data.items
+    // 패널이 열려 있으면 닫기
+    expandedBranchId.value = null
+    history.value = []
   } catch (e: any) {
     error.value = e.response?.data?.detail || '최근 측정 결과 로드 실패'
   } finally {
@@ -708,18 +781,36 @@ onMounted(loadKeywords)
 
     <!-- ═══ 체크 이력 탭 ═══ -->
     <template v-if="activeTab === 'history'">
-      <!-- 스냅샷 헤더 -->
-      <div class="mb-4 flex items-center justify-between">
+      <!-- 헤더 + 요약 -->
+      <div class="mb-3 flex items-center justify-between">
         <div>
-          <h3 class="text-sm font-bold text-slate-700">최근 측정 결과</h3>
-          <p class="text-xs text-slate-400 mt-0.5">
+          <p class="text-xs text-slate-400">
             측정일: {{ snapshotDate || '아직 측정 데이터 없음' }}
+          </p>
+          <p v-if="snapshotItems.length" class="text-sm font-medium text-slate-700 mt-0.5">
+            {{ snapshotSummary.total }}건 ·
+            <span class="text-blue-600">노출 {{ snapshotSummary.exposed }}</span> ·
+            <span class="text-slate-500">미노출 {{ snapshotSummary.missed_exposed }}</span> ·
+            <span class="text-rose-600">보장 미달 {{ snapshotSummary.missed_guaranteed }}</span>
           </p>
         </div>
         <button @click="loadSnapshot" :disabled="snapshotLoading"
                 class="px-3 py-1.5 text-xs font-medium border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50">
-          {{ snapshotLoading ? '로딩 중...' : '새로고침' }}
+          {{ snapshotLoading ? '로딩...' : '새로고침' }}
         </button>
+      </div>
+
+      <!-- 검색/필터 -->
+      <div v-if="snapshotItems.length" class="mb-3 flex items-center gap-2 flex-wrap">
+        <input type="text" v-model="searchQuery" placeholder="지점명·키워드 검색..."
+               class="flex-1 min-w-48 px-3 py-1.5 text-xs border border-slate-300 rounded" />
+        <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+          <input type="checkbox" v-model="filterExposedOnly" /> 노출만
+        </label>
+        <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+          <input type="checkbox" v-model="filterMissedOnly" /> 보장 미달만
+        </label>
+        <span class="text-xs text-slate-400 ml-auto">{{ filteredItems.length }}건 표시</span>
       </div>
 
       <!-- 측정 데이터 없음 -->
@@ -737,90 +828,114 @@ onMounted(loadKeywords)
         로딩 중...
       </div>
 
-      <!-- 키워드별 섹션 -->
-      <div v-else class="flex flex-col gap-4">
-        <div v-for="group in snapshotByKeyword" :key="group.keyword"
-             class="bg-white border border-slate-200 rounded-lg">
-          <!-- 키워드 헤더 -->
-          <div class="px-4 py-2 border-b border-slate-100 flex items-center gap-2">
-            <span class="text-sm font-bold text-slate-700">{{ group.keyword }}</span>
-            <span class="text-xs text-slate-400">{{ group.items.length }}개 지점</span>
-          </div>
-          <!-- 지점 row 리스트 -->
-          <table class="w-full text-xs">
-            <thead>
-              <tr class="text-slate-400 border-b border-slate-100">
-                <th class="text-left px-4 py-1.5 font-medium">지점</th>
-                <th class="text-center px-2 py-1.5 font-medium w-20">순위</th>
-                <th class="text-center px-2 py-1.5 font-medium w-20">노출</th>
-                <th class="text-center px-2 py-1.5 font-medium w-20">보장순위</th>
-                <th class="w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="item in group.items" :key="item.keyword_id">
-                <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50 cursor-pointer"
-                    @click="onToggleExpand(item.branch_id)">
-                  <td class="px-4 py-2">{{ item.branch_name }}</td>
-                  <td class="text-center tabular-nums">
-                    <span v-if="item.rank" class="font-medium">{{ item.rank }}위</span>
-                    <span v-else class="text-slate-300">—</span>
-                  </td>
-                  <td class="text-center">
-                    <span v-if="item.is_exposed === 1" class="text-blue-600">노출</span>
-                    <span v-else-if="item.is_exposed === 0" class="text-slate-400">미노출</span>
-                    <span v-else class="text-slate-300">—</span>
-                  </td>
-                  <td class="text-center text-slate-500 tabular-nums">{{ item.guaranteed_rank }}위</td>
-                  <td class="text-center text-slate-400 text-[11px]">
-                    {{ expandedBranchId === item.branch_id ? '▾' : '▸' }}
-                  </td>
-                </tr>
-                <!-- 인라인 확장: 그 지점의 모든 키워드 × 시간 매트릭스 -->
-                <tr v-if="expandedBranchId === item.branch_id">
-                  <td colspan="5" class="bg-slate-50 px-4 py-3">
-                    <p v-if="historyLoading" class="text-xs text-slate-400">로딩 중...</p>
-                    <div v-else-if="historyMatrix.dates.length" class="overflow-x-auto">
-                      <p class="text-xs font-medium text-slate-600 mb-2">
-                        {{ item.branch_name }} — 최근 30일 측정 이력
-                      </p>
-                      <table class="text-xs border border-slate-200 rounded">
-                        <thead class="bg-white">
-                          <tr class="text-slate-500 border-b border-slate-200">
-                            <th class="text-left px-3 py-1.5 font-medium">날짜</th>
-                            <th v-for="kw in historyMatrix.keywords" :key="kw"
-                                class="text-center px-3 py-1.5 font-medium">
-                              {{ kw }}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr v-for="d in historyMatrix.dates" :key="d"
-                              class="border-b border-slate-100 last:border-0">
-                            <td class="px-3 py-1.5 text-slate-600 tabular-nums">{{ d }}</td>
-                            <td v-for="kw in historyMatrix.keywords" :key="kw"
-                                class="text-center px-3 py-1.5 tabular-nums">
-                              <template v-if="historyMatrix.cells[`${d}|${kw}`]">
-                                <span v-if="historyMatrix.cells[`${d}|${kw}`].rank"
-                                      :class="historyMatrix.cells[`${d}|${kw}`].is_exposed ? 'text-blue-600' : 'text-slate-400'">
-                                  {{ historyMatrix.cells[`${d}|${kw}`].rank }}위
-                                </span>
-                                <span v-else class="text-slate-300">미노출</span>
-                              </template>
-                              <span v-else class="text-slate-300">—</span>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                    <p v-else class="text-xs text-slate-400">측정 이력 없음</p>
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
+      <!-- 평면 테이블 -->
+      <div v-else class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <table class="w-full text-xs">
+          <thead class="bg-slate-50 border-b border-slate-200">
+            <tr class="text-slate-500">
+              <th class="text-left px-3 py-2 font-medium cursor-pointer hover:text-slate-700"
+                  @click="toggleSort('keyword')">
+                키워드 <span v-if="sortKey === 'keyword'">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+              </th>
+              <th class="text-left px-3 py-2 font-medium cursor-pointer hover:text-slate-700"
+                  @click="toggleSort('branch')">
+                지점 <span v-if="sortKey === 'branch'">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+              </th>
+              <th class="text-center px-3 py-2 font-medium w-16 cursor-pointer hover:text-slate-700"
+                  @click="toggleSort('rank')">
+                순위 <span v-if="sortKey === 'rank'">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+              </th>
+              <th class="text-center px-3 py-2 font-medium w-16">노출</th>
+              <th class="text-center px-3 py-2 font-medium w-16">보장</th>
+              <th class="text-center px-3 py-2 font-medium w-16 cursor-pointer hover:text-slate-700"
+                  @click="toggleSort('trend')">
+                변동 <span v-if="sortKey === 'trend'">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in filteredItems" :key="item.keyword_id"
+                class="border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer"
+                :class="expandedBranchId === item.branch_id ? 'bg-blue-50' : ''"
+                @click="onToggleExpand(item.branch_id)">
+              <td class="px-3 py-1.5">{{ item.keyword }}</td>
+              <td class="px-3 py-1.5">{{ item.branch_name }}</td>
+              <td class="text-center px-3 py-1.5 tabular-nums font-medium">
+                <span v-if="item.rank">{{ item.rank }}위</span>
+                <span v-else class="text-slate-300">—</span>
+              </td>
+              <td class="text-center px-3 py-1.5">
+                <span v-if="item.is_exposed === 1" class="text-blue-600">노출</span>
+                <span v-else-if="item.is_exposed === 0" class="text-slate-400">미노출</span>
+                <span v-else class="text-slate-300">—</span>
+              </td>
+              <td class="text-center px-3 py-1.5 text-slate-500 tabular-nums">{{ item.guaranteed_rank }}위</td>
+              <td class="text-center px-3 py-1.5 tabular-nums">
+                <span :class="trendLabel(item.trend).color">{{ trendLabel(item.trend).text }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
+
+      <!-- 우측 슬라이드 패널 (지점 30일 매트릭스) -->
+      <Teleport to="body">
+        <div v-if="expandedBranchId !== null"
+             class="fixed inset-0 z-40"
+             @click.self="onToggleExpand(expandedBranchId!)">
+          <!-- 오버레이 -->
+          <div class="absolute inset-0 bg-slate-900/30" @click="onToggleExpand(expandedBranchId!)"></div>
+          <!-- 패널 -->
+          <div class="absolute right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-2xl border-l border-slate-200 overflow-y-auto"
+               @click.stop>
+            <div class="sticky top-0 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
+              <div>
+                <p class="text-xs text-slate-400">지점 측정 이력</p>
+                <p class="text-sm font-bold text-slate-700">
+                  {{ snapshotItems.find(i => i.branch_id === expandedBranchId)?.branch_name || '' }}
+                  <span class="text-xs font-normal text-slate-400 ml-2">최근 30일</span>
+                </p>
+              </div>
+              <button @click="onToggleExpand(expandedBranchId!)"
+                      class="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
+            </div>
+            <div class="p-5">
+              <p v-if="historyLoading" class="text-xs text-slate-400">로딩 중...</p>
+              <div v-else-if="historyMatrix.dates.length" class="overflow-x-auto">
+                <table class="text-xs border border-slate-200 rounded">
+                  <thead class="bg-slate-50">
+                    <tr class="text-slate-500 border-b border-slate-200">
+                      <th class="text-left px-3 py-1.5 font-medium sticky left-0 bg-slate-50">날짜</th>
+                      <th v-for="kw in historyMatrix.keywords" :key="kw"
+                          class="text-center px-3 py-1.5 font-medium whitespace-nowrap">
+                        {{ kw }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="d in historyMatrix.dates" :key="d"
+                        class="border-b border-slate-100 last:border-0">
+                      <td class="px-3 py-1.5 text-slate-600 tabular-nums sticky left-0 bg-white">{{ d }}</td>
+                      <td v-for="kw in historyMatrix.keywords" :key="kw"
+                          class="text-center px-3 py-1.5 tabular-nums whitespace-nowrap">
+                        <template v-if="historyMatrix.cells[`${d}|${kw}`]">
+                          <span v-if="historyMatrix.cells[`${d}|${kw}`].rank"
+                                :class="historyMatrix.cells[`${d}|${kw}`].is_exposed ? 'text-blue-600' : 'text-slate-400'">
+                            {{ historyMatrix.cells[`${d}|${kw}`].rank }}위
+                          </span>
+                          <span v-else class="text-slate-300">미노출</span>
+                        </template>
+                        <span v-else class="text-slate-300">—</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-else class="text-xs text-slate-400">측정 이력 없음</p>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </template>
   </div>
 </template>

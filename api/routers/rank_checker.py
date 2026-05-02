@@ -242,11 +242,12 @@ class AutoMatchRequest(BaseModel):
 
 @router.get("/latest-snapshot")
 async def get_latest_snapshot(user: Annotated[dict, Depends(_editor)]):
-    """가장 최근 측정 회차의 모든 등록 키워드 결과.
+    """가장 최근 측정 회차 + 전일 대비 변동(trend) 포함.
 
     측정 안 된 키워드도 LEFT JOIN으로 포함 (rank가 None) — 운영자가 누락 인지.
-    응답: {snapshot_date, items: [{keyword_id, branch_id, branch_name, keyword,
-           search_keyword, guaranteed_rank, rank, is_exposed, checked_at}]}
+    응답: {snapshot_date, prev_date, items: [{keyword_id, branch_id, branch_name, keyword,
+           search_keyword, guaranteed_rank, rank, is_exposed, checked_at, prev_rank, trend}]}
+    trend: 양수N=N단계 상승, 음수-N=N단계 하락, 0=변동 없음, None=데이터 부족
     """
     from shared.db import get_conn, EQUIPMENT_DB
     conn = get_conn(EQUIPMENT_DB)
@@ -254,7 +255,14 @@ async def get_latest_snapshot(user: Annotated[dict, Depends(_editor)]):
         latest = conn.execute("SELECT MAX(date) AS d FROM rank_checks").fetchone()
         snapshot_date = latest["d"] if latest else None
         if not snapshot_date:
-            return {"snapshot_date": None, "items": []}
+            return {"snapshot_date": None, "prev_date": None, "items": []}
+
+        # 직전 측정일 (snapshot_date 이전 가장 최근)
+        prev = conn.execute(
+            "SELECT MAX(date) AS d FROM rank_checks WHERE date < ?",
+            (snapshot_date,)
+        ).fetchone()
+        prev_date = prev["d"] if prev else None
 
         rows = conn.execute("""
             SELECT
@@ -266,18 +274,36 @@ async def get_latest_snapshot(user: Annotated[dict, Depends(_editor)]):
                 rck.guaranteed_rank,
                 rc.rank,
                 rc.is_exposed,
-                rc.checked_at
+                rc.checked_at,
+                prev_rc.rank AS prev_rank
               FROM rank_check_keywords rck
               LEFT JOIN rank_checks rc
                 ON rc.keyword_id = rck.id
                AND rc.date = ?
+              LEFT JOIN rank_checks prev_rc
+                ON prev_rc.keyword_id = rck.id
+               AND prev_rc.date = ?
              WHERE rck.is_active = 1
              ORDER BY rck.keyword, rck.branch_name
-        """, (snapshot_date,)).fetchall()
+        """, (snapshot_date, prev_date)).fetchall()
+
+        items = []
+        for r in rows:
+            d = dict(r)
+            # trend 계산 (백엔드 단일 판정)
+            # 순위는 작을수록 상위 → diff 양수면 상승
+            rank = d["rank"]
+            prev_rank = d["prev_rank"]
+            if rank is not None and prev_rank is not None:
+                d["trend"] = prev_rank - rank
+            else:
+                d["trend"] = None
+            items.append(d)
 
         return {
             "snapshot_date": snapshot_date,
-            "items": [dict(r) for r in rows],
+            "prev_date": prev_date,
+            "items": items,
         }
     finally:
         conn.close()

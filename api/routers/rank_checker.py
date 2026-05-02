@@ -231,6 +231,48 @@ async def get_diagnostics(user: Annotated[dict, Depends(require_role("admin"))])
         conn.close()
 
 
+class PlaceIdEntry(BaseModel):
+    branch_id: int
+    place_id: str
+
+
+@router.post("/auto-match-branches")
+async def auto_match_branches(
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    """default_place_id 미등록 지점 전체에 네이버 검색 자동 매칭.
+
+    score >= 0.95: 자동 저장. 0.7~0.95: 검토 대기. <0.7: 수동 필요.
+    응답: {matched, pending_review, manual_required, stats}
+    """
+    from shared.db import get_conn, EQUIPMENT_DB
+    from checker.place_id_finder import auto_match_unregistered_branches
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        return auto_match_unregistered_branches(conn, dry_run=False)
+    finally:
+        conn.close()
+
+
+@router.post("/save-place-ids")
+async def save_place_ids(
+    items: list[PlaceIdEntry],
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    """admin이 검토/입력 화면에서 확정한 [{branch_id, place_id}] 일괄 저장.
+
+    각 지점 default_place_id 저장 + 해당 지점의 추적 미설정 키워드 자동 활성화.
+    응답: {saved, activated_keywords}
+    """
+    from shared.db import get_conn, EQUIPMENT_DB
+    from checker.place_id_finder import save_place_ids_bulk
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        return save_place_ids_bulk(conn, [it.model_dump() for it in items])
+    finally:
+        conn.close()
+
+
 # ── SB_CHECKER DB 임포트 ──
 
 @router.post("/import-sb-db")

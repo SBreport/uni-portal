@@ -43,6 +43,13 @@ const importResult = ref<any>(null)
 const editingId = ref<number | null>(null)
 const editForm = ref<Record<string, any>>({})
 
+// place_id 자동 매칭
+const needsPlaceIdMatching = ref(true)
+const matching = ref(false)
+const matchResult = ref<any>(null)
+const reviewSelection = ref<Record<number, string>>({})
+const manualInput = ref<Record<number, string>>({})
+
 // ── 탭 ──
 type Tab = 'keywords' | 'history'
 const activeTab = ref<Tab>('keywords')
@@ -299,6 +306,59 @@ async function handleImportSbDb(e: Event) {
   }
 }
 
+// ── place_id 자동 매칭 ──
+async function onAutoMatch() {
+  matching.value = true
+  try {
+    const res = await rcApi.autoMatchBranches()
+    matchResult.value = res.data
+    // 검토 대기 항목의 기본 선택: 1순위 후보
+    for (const item of res.data.pending_review) {
+      if (item.candidates && item.candidates.length) {
+        reviewSelection.value[item.branch_id] = item.candidates[0].place_id
+      }
+    }
+    // 자동 매칭 성공이 있으면 키워드 목록 갱신
+    if (res.data.stats.auto_matched > 0) {
+      await loadKeywords()
+    }
+    // 미등록 지점이 0건이면 배너 숨기기
+    if (res.data.stats.total === 0) {
+      needsPlaceIdMatching.value = false
+    }
+  } catch (e: any) {
+    error.value = '자동 매칭 실패: ' + (e?.response?.data?.detail || e.message)
+  } finally {
+    matching.value = false
+  }
+}
+
+async function onSaveSelections() {
+  const items: { branch_id: number; place_id: string }[] = []
+  for (const item of matchResult.value.pending_review) {
+    const pid = reviewSelection.value[item.branch_id]
+    if (pid) items.push({ branch_id: item.branch_id, place_id: pid })
+  }
+  for (const item of matchResult.value.manual_required) {
+    const pid = (manualInput.value[item.branch_id] || '').trim()
+    if (pid) items.push({ branch_id: item.branch_id, place_id: pid })
+  }
+  if (!items.length) {
+    error.value = '저장할 항목이 없습니다'
+    return
+  }
+  try {
+    const res = await rcApi.savePlaceIds(items)
+    flashSuccess(`저장 완료: ${res.data.saved}개 지점, ${res.data.activated_keywords}개 키워드 활성화`)
+    matchResult.value = null
+    reviewSelection.value = {}
+    manualInput.value = {}
+    await loadKeywords()
+  } catch (e: any) {
+    error.value = '저장 실패: ' + (e?.response?.data?.detail || e.message)
+  }
+}
+
 // ── 유틸 ──
 function flashSuccess(msg: string) {
   successMsg.value = msg
@@ -326,6 +386,93 @@ onMounted(loadKeywords)
 
     <!-- ═══ 키워드 관리 탭 ═══ -->
     <template v-if="activeTab === 'keywords'">
+
+      <!-- 지점 place_id 자동 매칭 배너 -->
+      <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg" v-if="needsPlaceIdMatching && !matchResult">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-sm font-bold text-amber-800">지점 place_id 미등록 — 측정 불가</p>
+          <button class="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 transition"
+                  :disabled="matching"
+                  @click="onAutoMatch">
+            {{ matching ? '매칭 중...' : '자동 매칭 시작' }}
+          </button>
+        </div>
+        <p class="text-xs text-amber-700">네이버 검색으로 각 지점의 place_id를 자동으로 찾습니다. 약 30~60초 소요.</p>
+      </div>
+
+      <!-- 매칭 결과 -->
+      <div v-if="matchResult" class="mb-4 bg-white border border-slate-200 rounded-lg p-4">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="text-sm font-bold">매칭 결과</span>
+          <span class="text-xs text-emerald-600">자동 {{ matchResult.stats.auto_matched }}건</span>
+          <span class="text-xs text-amber-600">검토 {{ matchResult.stats.pending_review }}건</span>
+          <span class="text-xs text-rose-600">수동 {{ matchResult.stats.manual_required }}건</span>
+          <button class="ml-auto text-xs text-slate-400 hover:text-slate-600" @click="matchResult = null">닫기</button>
+        </div>
+
+        <!-- 자동 매칭 완료 목록 -->
+        <div v-if="matchResult.matched.length" class="mb-3">
+          <p class="text-xs font-bold text-slate-600 mb-2">자동 저장 완료 ({{ matchResult.matched.length }}건)</p>
+          <div class="flex flex-col gap-1">
+            <div v-for="item in matchResult.matched" :key="item.branch_id"
+                 class="flex items-center gap-2 text-xs p-2 bg-emerald-50 border border-emerald-100 rounded">
+              <span class="font-medium text-slate-700 w-40 shrink-0">{{ item.branch_name }}</span>
+              <span class="text-emerald-700">{{ item.matched_name }}</span>
+              <span class="text-slate-400 font-mono">({{ item.place_id }})</span>
+              <span class="text-slate-400">유사도 {{ Math.round(item.score * 100) }}%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 검토 대기: 후보 중 선택 -->
+        <div v-if="matchResult.pending_review.length" class="mb-3">
+          <p class="text-xs font-bold text-slate-600 mb-2">검토 필요 ({{ matchResult.pending_review.length }}건) — 후보 선택</p>
+          <div class="flex flex-col gap-2">
+            <div v-for="item in matchResult.pending_review" :key="item.branch_id"
+                 class="border border-slate-200 rounded p-2">
+              <p class="text-sm font-medium mb-1">{{ item.branch_name }}</p>
+              <div class="flex flex-col gap-1">
+                <label v-for="c in item.candidates" :key="c.place_id"
+                       class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input type="radio" :name="'review_' + item.branch_id"
+                         :value="c.place_id" v-model="reviewSelection[item.branch_id]" />
+                  <span class="font-medium">{{ c.name }}</span>
+                  <span class="text-slate-400 font-mono">({{ c.place_id }})</span>
+                  <span class="text-slate-500">유사도 {{ Math.round(c.score * 100) }}%</span>
+                </label>
+                <label class="flex items-center gap-2 text-xs cursor-pointer">
+                  <input type="radio" :name="'review_' + item.branch_id" value=""
+                         v-model="reviewSelection[item.branch_id]" />
+                  <span class="text-slate-500">건너뜀 (수동 입력으로)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 수동 입력 필요 -->
+        <div v-if="matchResult.manual_required.length" class="mb-3">
+          <p class="text-xs font-bold text-slate-600 mb-2">수동 입력 필요 ({{ matchResult.manual_required.length }}건)</p>
+          <div class="flex flex-col gap-1">
+            <div v-for="item in matchResult.manual_required" :key="item.branch_id"
+                 class="flex items-center gap-2 text-xs border border-slate-200 rounded p-2">
+              <span class="font-medium flex-1">{{ item.branch_name }}</span>
+              <a :href="`https://map.naver.com/v5/search/${encodeURIComponent(item.branch_name)}`"
+                 target="_blank" class="text-blue-500 underline shrink-0">네이버 지도 열기</a>
+              <input type="text" placeholder="place_id 입력"
+                     class="px-2 py-1 border border-slate-300 rounded w-32 tabular-nums text-xs"
+                     v-model="manualInput[item.branch_id]" />
+            </div>
+          </div>
+        </div>
+
+        <button v-if="matchResult.pending_review.length || matchResult.manual_required.length"
+                class="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                @click="onSaveSelections">
+          선택/입력 항목 저장
+        </button>
+      </div>
+
       <!-- 상단: 버튼 -->
       <div class="flex items-center gap-2 mb-4">
         <button @click="showForm = !showForm"

@@ -34,6 +34,13 @@ export const getHistory = (branchId: number, days?: number) =>
 export const getComparison = (branchId: number, date?: string) =>
   api.get(`/rank-checker/comparison/${branchId}`, { params: date ? { date } : {} })
 
+// 지점 place_id 자동 매칭
+export const autoMatchBranches = () =>
+  api.post('/rank-checker/auto-match-branches', {}, { timeout: 600000 })  // 10분 — N개 지점 × 0.5초 + 네이버 응답 시간
+
+export const savePlaceIds = (items: { branch_id: number; place_id: string }[]) =>
+  api.post('/rank-checker/save-place-ids', items)
+
 // SB_CHECKER DB 임포트
 export const importSbDb = (file: File) => {
   const form = new FormData()

@@ -34,9 +34,13 @@ export const getHistory = (branchId: number, days?: number) =>
 export const getComparison = (branchId: number, date?: string) =>
   api.get(`/rank-checker/comparison/${branchId}`, { params: date ? { date } : {} })
 
-// 지점 place_id 자동 매칭
-export const autoMatchBranches = () =>
-  api.post('/rank-checker/auto-match-branches', {}, { timeout: 600000 })  // 10분 — N개 지점 × 0.5초 + 네이버 응답 시간
+// 지점 place_id 자동 매칭 (brand_prefix 옵션 — '유앤아이의원' 같은 회사명 prefix)
+export const autoMatchBranches = (brandPrefix?: string) =>
+  api.post(
+    '/rank-checker/auto-match-branches',
+    { brand_prefix: brandPrefix || null },
+    { timeout: 600000 },  // 10분 — N개 지점 × 0.5초 + 네이버 응답 시간
+  )
 
 export const savePlaceIds = (items: { branch_id: number; place_id: string }[]) =>
   api.post('/rank-checker/save-place-ids', items)

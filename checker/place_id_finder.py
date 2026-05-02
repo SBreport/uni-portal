@@ -20,12 +20,17 @@ def _similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a.strip(), b.strip()).ratio()
 
 
-def find_place_id_for_branch(branch_name: str, alt_names: list[str] | None = None) -> dict:
+def find_place_id_for_branch(
+    branch_name: str,
+    brand_prefix: str | None = None,
+    alt_names: list[str] | None = None,
+) -> dict:
     """지점명을 네이버 플레이스에 검색해 후보 place_id 추출.
 
     Args:
-        branch_name: evt_branches.name (예: '유앤아이의원 강남점')
-        alt_names: 대안 이름 (short_name, aliases 등). 첫 검색 결과 약하면 사용
+        branch_name: evt_branches.name (예: '강남점' 또는 '유앤아이의원 강남점')
+        brand_prefix: 브랜드명 prefix (예: '유앤아이의원'). 있으면 검색어 앞에 자동 결합
+        alt_names: 대안 이름 (short_name, aliases 등)
 
     Returns:
         {
@@ -35,8 +40,23 @@ def find_place_id_for_branch(branch_name: str, alt_names: list[str] | None = Non
             "search_keyword": 실제 사용된 검색어,
         }
     """
-    keywords_to_try = [branch_name] + (alt_names or [])
-    keywords_to_try = [k for k in keywords_to_try if k and k.strip()]
+    bp = (brand_prefix or "").strip()
+    base_keywords = [branch_name] + (alt_names or [])
+    base_keywords = [k for k in base_keywords if k and k.strip()]
+
+    # brand_prefix가 있으면 prefix 결합형을 우선 시도, 그 다음 단독
+    keywords_to_try: list[str] = []
+    if bp:
+        for k in base_keywords:
+            # 이미 prefix 포함된 이름이면 중복 방지
+            if bp in k:
+                keywords_to_try.append(k)
+            else:
+                keywords_to_try.append(f"{bp} {k}")
+    keywords_to_try.extend(base_keywords)
+
+    # 매칭 점수 계산 시 비교 대상도 prefix 결합형 우선
+    branch_full = f"{bp} {branch_name}".strip() if bp else branch_name
 
     best_result = None
     used_keyword = branch_name
@@ -59,7 +79,11 @@ def find_place_id_for_branch(branch_name: str, alt_names: list[str] | None = Non
             name = item.get("name", "")
             if not pid or not name:
                 continue
-            score = max(_similarity(branch_name, name), _similarity(kw, name))
+            score = max(
+                _similarity(branch_full, name),
+                _similarity(branch_name, name),
+                _similarity(kw, name),
+            )
             candidates.append({"place_id": pid, "name": name, "score": round(score, 3)})
 
         if candidates:
@@ -108,11 +132,16 @@ def find_place_id_for_branch(branch_name: str, alt_names: list[str] | None = Non
     }
 
 
-def auto_match_unregistered_branches(conn, dry_run: bool = False) -> dict:
+def auto_match_unregistered_branches(
+    conn,
+    brand_prefix: str | None = None,
+    dry_run: bool = False,
+) -> dict:
     """default_place_id가 비어있는 지점 전체에 자동 매칭 시도.
 
     Args:
         conn: sqlite3 connection
+        brand_prefix: 브랜드명 prefix (예: '유앤아이의원'). 모든 지점 검색에 공통 적용
         dry_run: True면 DB에 저장 안 하고 결과만 반환
 
     Returns:
@@ -149,7 +178,7 @@ def auto_match_unregistered_branches(conn, dry_run: bool = False) -> dict:
         except Exception:
             pass
 
-        result = find_place_id_for_branch(bname, alt_names=alts)
+        result = find_place_id_for_branch(bname, brand_prefix=brand_prefix, alt_names=alts)
 
         if result["status"] == "matched":
             best = result["best"]

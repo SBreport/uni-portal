@@ -236,20 +236,27 @@ class PlaceIdEntry(BaseModel):
     place_id: str
 
 
+class AutoMatchRequest(BaseModel):
+    brand_prefix: Optional[str] = None  # 검색 시 prefix로 결합 (예: '유앤아이의원')
+
+
 @router.post("/auto-match-branches")
 async def auto_match_branches(
     user: Annotated[dict, Depends(require_role("admin"))],
+    body: AutoMatchRequest = None,
 ):
     """default_place_id 미등록 지점 전체에 네이버 검색 자동 매칭.
 
+    body.brand_prefix가 있으면 모든 검색어에 prefix 결합 (예: '유앤아이의원 강남점').
     score >= 0.95: 자동 저장. 0.7~0.95: 검토 대기. <0.7: 수동 필요.
     응답: {matched, pending_review, manual_required, stats}
     """
     from shared.db import get_conn, EQUIPMENT_DB
     from checker.place_id_finder import auto_match_unregistered_branches
+    bp = (body.brand_prefix if body else None)
     conn = get_conn(EQUIPMENT_DB)
     try:
-        return auto_match_unregistered_branches(conn, dry_run=False)
+        return auto_match_unregistered_branches(conn, brand_prefix=bp, dry_run=False)
     finally:
         conn.close()
 

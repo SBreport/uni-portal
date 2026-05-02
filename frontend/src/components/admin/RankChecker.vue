@@ -49,6 +49,7 @@ const matching = ref(false)
 const matchResult = ref<any>(null)
 const reviewSelection = ref<Record<number, string>>({})
 const manualInput = ref<Record<number, string>>({})
+const brandPrefix = ref('')  // 검색 시 prefix로 결합 (예: '유앤아이의원')
 
 // ── 탭 ──
 type Tab = 'keywords' | 'history'
@@ -310,7 +311,7 @@ async function handleImportSbDb(e: Event) {
 async function onAutoMatch() {
   matching.value = true
   try {
-    const res = await rcApi.autoMatchBranches()
+    const res = await rcApi.autoMatchBranches(brandPrefix.value.trim() || undefined)
     matchResult.value = res.data
     // 검토 대기 항목의 기본 선택: 1순위 후보
     for (const item of res.data.pending_review) {
@@ -397,7 +398,13 @@ onMounted(loadKeywords)
             {{ matching ? '매칭 중...' : '자동 매칭 시작' }}
           </button>
         </div>
-        <p class="text-xs text-amber-700">네이버 검색으로 각 지점의 place_id를 자동으로 찾습니다. 약 30~60초 소요.</p>
+        <p class="text-xs text-amber-700 mb-2">네이버 검색으로 각 지점의 place_id를 자동으로 찾습니다. 약 30~60초 소요.</p>
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-amber-800 whitespace-nowrap">브랜드명 prefix</label>
+          <input type="text" v-model="brandPrefix" placeholder="예: 유앤아이의원"
+                 class="flex-1 px-2 py-1 text-xs border border-amber-300 rounded bg-white" />
+          <span class="text-[11px] text-amber-700 whitespace-nowrap">→ "강남점" 검색 시 "유앤아이의원 강남점"으로 보냄</span>
+        </div>
       </div>
 
       <!-- 매칭 결과 -->

@@ -105,7 +105,7 @@ async function submitKeyword() {
     showForm.value = false
     form.value = { branch_id: 0, branch_name: '', keyword: '', search_keyword: '', place_id: '', guaranteed_rank: 5, memo: '' }
     await loadKeywords()
-    flashSuccess('키���드 등록 완료')
+    flashSuccess('키워드 등록 완료')
   } catch (e: any) {
     error.value = e.response?.data?.detail || '등록 실패'
   }
@@ -139,7 +139,7 @@ function cancelEdit() {
   editingId.value = null
 }
 
-// ���제
+// 삭제
 async function removeKeyword(kw: any) {
   if (!confirm(`"${kw.keyword}" 키워드를 비활성화합니까?`)) return
   try {
@@ -253,13 +253,13 @@ async function runCheckBranch(branchId: number) {
     checkResult.value = data
     flashSuccess(`체크 완료: ${data.checked}건`)
   } catch (e: any) {
-    error.value = e.response?.data?.detail || '체�� 실행 실패'
+    error.value = e.response?.data?.detail || '체크 실행 실패'
   } finally {
     checking.value = false
   }
 }
 
-// ── 이력 조��� ──
+// ── 이력 조회 ──
 async function loadHistory() {
   if (!historyBranchId.value) return
   historyLoading.value = true
@@ -272,7 +272,7 @@ async function loadHistory() {
   }
 }
 
-// 이력 날짜별 그��핑
+// 이력 날짜별 그룹핑
 const groupedHistory = computed(() => {
   const groups: Record<string, any[]> = {}
   for (const h of history.value) {
@@ -488,7 +488,7 @@ onMounted(loadKeywords)
         </button>
         <button @click="runCheckAll" :disabled="checking"
           class="px-3 py-1.5 text-xs font-medium bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50 transition">
-          {{ checking ? '체크 ��...' : '전체 순위 체크 실행' }}
+          {{ checking ? '체크 중...' : '전체 순위 체크 실행' }}
         </button>
         <label class="px-3 py-1.5 text-xs font-medium bg-slate-600 text-white rounded hover:bg-slate-700 transition cursor-pointer"
           :class="{ 'opacity-50 pointer-events-none': importing }">
@@ -606,7 +606,7 @@ onMounted(loadKeywords)
           <table class="w-full text-xs">
             <thead>
               <tr class="border-b border-slate-100 text-slate-400">
-                <th class="text-left px-3 py-1.5 font-medium">키���드</th>
+                <th class="text-left px-3 py-1.5 font-medium">키워드</th>
                 <th class="text-left px-2 py-1.5 font-medium">검색어</th>
                 <th class="text-left px-2 py-1.5 font-medium">Place ID</th>
                 <th class="text-center px-2 py-1.5 font-medium w-16">보장순위</th>
@@ -645,7 +645,7 @@ onMounted(loadKeywords)
       </div>
     </template>
 
-    <!-- ═══ 체크 이력 ��� ═══ -->
+    <!-- ═══ 체크 이력 탭 ═══ -->
     <template v-if="activeTab === 'history'">
       <div class="flex items-center gap-3 mb-4">
         <select v-model="historyBranchId" @change="loadHistory"

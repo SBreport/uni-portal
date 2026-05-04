@@ -241,14 +241,14 @@ function formatDate(iso: string) {
                    :class="s.is_failed ? 'bg-red-50 border-l-2 border-red-300 pl-2 py-1' : 'py-1'">
                 <span class="text-xs font-medium px-2 py-0.5 rounded text-center truncate"
                   :class="{
-                    'bg-blue-50 text-blue-600': s.sync_type === 'equipment',
-                    'bg-amber-50 text-amber-600': s.sync_type === 'events',
-                    'bg-emerald-50 text-emerald-600': s.sync_type === 'cafe',
+                    'bg-blue-50 text-blue-600': s.sync_type === 'equipment_sync' || s.sync_type === 'equipment',
+                    'bg-amber-50 text-amber-600': s.sync_type === 'event_sync' || s.sync_type === 'events',
+                    'bg-emerald-50 text-emerald-600': s.sync_type === 'cafe_sync' || s.sync_type === 'cafe',
                     'bg-rose-50 text-rose-600': s.sync_type === 'place_sheets_to_db' || s.sync_type === 'place_daily_snapshot',
                     'bg-violet-50 text-violet-600': s.sync_type === 'webpage_sheets_to_db' || s.sync_type === 'webpage_daily_snapshot',
                     'bg-indigo-50 text-indigo-600': s.sync_type === 'blog_notion_sync',
                     'bg-amber-50 text-amber-700': s.sync_type === 'rank_check_auto',
-                    'bg-slate-100 text-slate-500': !['equipment','events','cafe','place_sheets_to_db','place_daily_snapshot','webpage_sheets_to_db','webpage_daily_snapshot','blog_notion_sync','rank_check_auto'].includes(s.sync_type),
+                    'bg-slate-100 text-slate-500': !['equipment_sync','equipment','event_sync','events','cafe_sync','cafe','place_sheets_to_db','place_daily_snapshot','webpage_sheets_to_db','webpage_daily_snapshot','blog_notion_sync','rank_check_auto'].includes(s.sync_type),
                   }">
                   {{
                     s.sync_type === 'place_sheets_to_db' ? '플레이스' :
@@ -257,9 +257,9 @@ function formatDate(iso: string) {
                     s.sync_type === 'webpage_daily_snapshot' ? '웹페이지(스냅)' :
                     s.sync_type === 'blog_notion_sync' ? '블로그' :
                     s.sync_type === 'rank_check_auto' ? 'SB체커' :
-                    s.sync_type === 'equipment' ? '장비' :
-                    s.sync_type === 'events' ? '이벤트' :
-                    s.sync_type === 'cafe' ? '카페' :
+                    (s.sync_type === 'equipment_sync' || s.sync_type === 'equipment') ? '보유장비' :
+                    (s.sync_type === 'event_sync' || s.sync_type === 'events') ? '이벤트' :
+                    (s.sync_type === 'cafe_sync' || s.sync_type === 'cafe') ? '카페' :
                     s.sync_type
                   }}
                 </span>

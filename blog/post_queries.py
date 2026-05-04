@@ -483,21 +483,6 @@ def _get_home_dashboard_impl(conn):
     evt_label = evt_row["label"] if evt_row else "-"
     evt_count = evt_row["cnt"] if evt_row else 0
 
-    cafe_row = conn.execute("""
-        SELECT p.label,
-               COUNT(a.id) as total,
-               SUM(CASE WHEN a.status = '발행완료' THEN 1 ELSE 0 END) as published,
-               SUM(CASE WHEN a.status = '작성대기' THEN 1 ELSE 0 END) as pending
-        FROM cafe_periods p
-        JOIN cafe_branch_periods bp ON bp.cafe_period_id = p.id
-        JOIN cafe_articles a ON a.branch_period_id = bp.id
-        WHERE p.is_current = 1 GROUP BY p.id
-    """).fetchone()
-    cafe_label = cafe_row["label"] if cafe_row else "-"
-    cafe_total = cafe_row["total"] if cafe_row else 0
-    cafe_published = cafe_row["published"] if cafe_row else 0
-    cafe_pending = cafe_row["pending"] if cafe_row else 0
-
     dict_total = conn.execute("SELECT COUNT(*) FROM device_info").fetchone()[0]
     dict_verified = conn.execute("SELECT COUNT(*) FROM device_info WHERE is_verified = 1").fetchone()[0]
 
@@ -526,20 +511,19 @@ def _get_home_dashboard_impl(conn):
     blog_review = conn.execute(
         "SELECT COUNT(*) FROM blog_posts WHERE needs_review = 1"
     ).fetchone()[0]
-    blog_weekly = [dict(r) for r in conn.execute("""
-        SELECT strftime('%Y-W%W', published_at) as week,
-               MIN(published_at) as week_start, COUNT(*) as cnt
-        FROM blog_posts
-        WHERE published_at != '' AND published_at >= date('now', '-42 days')
-        GROUP BY week ORDER BY week DESC
-    """).fetchall()]
-    blog_this_week = conn.execute(
-        "SELECT COUNT(*) FROM blog_posts WHERE published_at >= date('now', '-7 days')"
-    ).fetchone()[0]
+    blog_this_week = conn.execute("""
+        SELECT COUNT(*) FROM blog_posts
+         WHERE published_at >= date('now','-7 days','localtime')
+    """).fetchone()[0]
+    blog_last_week = conn.execute("""
+        SELECT COUNT(*) FROM blog_posts
+         WHERE published_at >= date('now','-14 days','localtime')
+           AND published_at < date('now','-7 days','localtime')
+    """).fetchone()[0]
 
-    # ── 플레이스 / 웹페이지 요약 (Google Sheets, 캐시 활용) ──
-    place_summary = _fetch_place_summary()
-    webpage_summary = _fetch_webpage_summary()
+    # ── 플레이스 / 웹페이지 요약 (D-2 기준, place_daily / webpage_daily) ──
+    place_summary = _fetch_place_summary_d2()
+    webpage_summary = _fetch_webpage_summary_d2()
 
     # ── 운영 이슈 카운트 (admin 전용 표시) ──
     issues = []
@@ -573,19 +557,111 @@ def _get_home_dashboard_impl(conn):
         "branches": branch_count,
         "equipment": {"total": equip_total, "photo_done": equip_photo},
         "events": {"label": evt_label, "count": evt_count},
-        "cafe": {"label": cafe_label, "total": cafe_total, "published": cafe_published, "pending": cafe_pending},
         "dictionary": {"total": dict_total, "verified": dict_verified},
         "recent_syncs": recent_syncs,
         "blog": {
             "total": blog_total,
             "review_count": blog_review,
             "this_week": blog_this_week,
-            "weekly": blog_weekly,
+            "last_week": blog_last_week,
         },
         "place": place_summary,
         "webpage": webpage_summary,
         "issues": issues,
     }
+
+
+def _fetch_place_summary_d2() -> dict:
+    """플레이스 D-2 (이틀 전) 기준 성공/이탈/미점유.
+
+    - 성공 (success): D-2에 is_exposed=1로 보고됨
+    - 이탈 (leak): D-2에 is_exposed=0으로 보고됨
+    - 미점유 (midal): 최근 7일간 추적된 키워드 중 D-2에 보고 없음
+    """
+    from shared.db import get_conn, EQUIPMENT_DB
+    from datetime import date, timedelta
+    target = (date.today() - timedelta(days=2)).isoformat()
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        row = conn.execute("""
+            WITH tracked AS (
+                SELECT DISTINCT branch_id, keyword
+                  FROM place_daily
+                 WHERE date >= date('now','-7 days','localtime')
+                   AND keyword != '' AND branch_id > 0
+            ),
+            d2 AS (
+                SELECT branch_id, keyword, is_exposed
+                  FROM place_daily
+                 WHERE date = ?
+            )
+            SELECT
+                COALESCE(SUM(CASE WHEN d2.is_exposed = 1 THEN 1 ELSE 0 END), 0) AS success,
+                COALESCE(SUM(CASE WHEN d2.is_exposed = 0 THEN 1 ELSE 0 END), 0) AS leak,
+                COALESCE(SUM(CASE WHEN d2.branch_id IS NULL THEN 1 ELSE 0 END), 0) AS midal
+              FROM tracked t
+              LEFT JOIN d2 ON d2.branch_id = t.branch_id AND d2.keyword = t.keyword
+        """, (target,)).fetchone()
+        success = row["success"] or 0
+        leak = row["leak"] or 0
+        midal = row["midal"] or 0
+        return {
+            "as_of": target,
+            "success": success,
+            "leak": leak,
+            "midal": midal,
+            "total": success + leak + midal,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"_fetch_place_summary_d2 실패: {e}")
+        return {"as_of": None, "success": 0, "leak": 0, "midal": 0, "total": 0}
+    finally:
+        conn.close()
+
+
+def _fetch_webpage_summary_d2() -> dict:
+    """웹페이지 D-2 기준. place와 동일 로직, 테이블만 webpage_daily."""
+    from shared.db import get_conn, EQUIPMENT_DB
+    from datetime import date, timedelta
+    target = (date.today() - timedelta(days=2)).isoformat()
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        row = conn.execute("""
+            WITH tracked AS (
+                SELECT DISTINCT branch_id, keyword
+                  FROM webpage_daily
+                 WHERE date >= date('now','-7 days','localtime')
+                   AND keyword != '' AND branch_id > 0
+            ),
+            d2 AS (
+                SELECT branch_id, keyword, is_exposed
+                  FROM webpage_daily
+                 WHERE date = ?
+            )
+            SELECT
+                COALESCE(SUM(CASE WHEN d2.is_exposed = 1 THEN 1 ELSE 0 END), 0) AS success,
+                COALESCE(SUM(CASE WHEN d2.is_exposed = 0 THEN 1 ELSE 0 END), 0) AS leak,
+                COALESCE(SUM(CASE WHEN d2.branch_id IS NULL THEN 1 ELSE 0 END), 0) AS midal
+              FROM tracked t
+              LEFT JOIN d2 ON d2.branch_id = t.branch_id AND d2.keyword = t.keyword
+        """, (target,)).fetchone()
+        success = row["success"] or 0
+        leak = row["leak"] or 0
+        midal = row["midal"] or 0
+        return {
+            "as_of": target,
+            "success": success,
+            "leak": leak,
+            "midal": midal,
+            "total": success + leak + midal,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"_fetch_webpage_summary_d2 실패: {e}")
+        return {"as_of": None, "success": 0, "leak": 0, "midal": 0, "total": 0}
+    finally:
+        conn.close()
 
 
 def _fetch_place_summary() -> dict:

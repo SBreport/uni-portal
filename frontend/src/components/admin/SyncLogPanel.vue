@@ -153,6 +153,15 @@ function formatDate(iso: string): string {
   return `${mm}/${dd} ${hh}:${min}`
 }
 
+// sync_type별로 conflicts 컬럼의 의미가 다름
+// - equipment_sync: 시트 기준 업데이트 건수
+// - event_sync / cafe_sync: 실패 건수 (이미 별도 amber 뱃지로 표시되므로 결과 줄에선 생략)
+// - 그 외: 의미 없음 (0)
+function conflictsLabel(syncType: string): string | null {
+  if (syncType === 'equipment_sync') return '업데이트'
+  return null
+}
+
 function resultText(entry: SyncLogEntry): string {
   if (entry.is_failed) {
     const failParts = ['실패']
@@ -161,7 +170,10 @@ function resultText(entry: SyncLogEntry): string {
   }
   const parts = [`완료 ${entry.added.toLocaleString()}건`]
   if (entry.skipped > 0) parts.push(`스킵 ${entry.skipped}건`)
-  if (entry.conflicts > 0) parts.push(`충돌 ${entry.conflicts}건`)
+  if (entry.conflicts > 0) {
+    const label = conflictsLabel(entry.sync_type)
+    if (label) parts.push(`${label} ${entry.conflicts}건`)
+  }
   return parts.join(' · ')
 }
 

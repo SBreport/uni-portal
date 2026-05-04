@@ -364,19 +364,91 @@ Tailwind 기본 스케일만 사용. 커스텀 값 금지.
 
 ## 6. 레이아웃 원칙
 
-### 핵심: 콘텐츠가 자기 폭을 안다
+### 6.0 디자인 우선순위 (운영 도구 컨텍스트)
 
-페이지마다 **콘텐츠 본성**이 다르고, 그 본성에 맞는 레이아웃 모드를 선택해야 한다. max-width 절대값 하드코딩(`max-w-4xl` 등)은 특정 모니터에서만 좋고 다른 해상도에서 다시 사시 모드를 만든다.
+uni-portal은 데이터 운영 도구다. 마케팅·브랜드 사이트가 아니다. 디자인 결정 충돌 시 우선순위:
 
-→ **페이지 시작 시 4가지 모드 중 하나를 선택**한다.
+1. **정렬 (Alignment)** — 행열 격자, 컬럼 폭 통일, `tabular-nums`
+2. **사시 모드 회피** — 컬럼 사이 거대 공백 X, 빈 영역 X
+3. **정보 식별** — 채널 색, 카테고리 라벨 (즉시 구분)
+4. **시각 계층** — 핵심 vs 보조 (1-3을 해친다면 후순위)
+5. **alert 강조 / 아이콘** — 정말 필요할 때만. 평소엔 노이즈
 
-### 4가지 레이아웃 모드
+> **핵심 통찰 — 정렬이 시각 계층보다 우선이다.**
+> 디자이너 본능으로 ⚠ 아이콘·KPI 사이즈 강조를 추가하기 전에, 행열이 정확히 격자로 정렬되었는지 먼저 확인.
+
+---
+
+### 6.1 페이지 컨테이너 — 12 컬럼 그리드 시스템
+
+**페이지의 모든 섹션은 같은 12 컬럼 그리드 시스템 위에 놓인다.**
+이게 "각 섹션의 우측 끝이 일치"하는 시각 일관성의 본질.
+
+#### 표준 패턴
+
+```html
+<div class="p-5 max-w-7xl">  <!-- 페이지 wrapper -->
+  <!-- 헤더 -->
+  <div class="mb-6">...</div>
+
+  <!-- 섹션 1: 카드 3개 -->
+  <h3>섹션 헤더</h3>
+  <div class="grid grid-cols-12 gap-4 mb-10">
+    <div class="col-span-12 sm:col-span-4">카드 1</div>
+    <div class="col-span-12 sm:col-span-4">카드 2</div>
+    <div class="col-span-12 sm:col-span-4">카드 3</div>
+  </div>
+
+  <!-- 섹션 2: 카드 4개 -->
+  <h3>섹션 헤더</h3>
+  <div class="grid grid-cols-12 gap-3 mb-10">
+    <div class="col-span-6 sm:col-span-3">카드 1</div>
+    <div class="col-span-6 sm:col-span-3">카드 2</div>
+    <div class="col-span-6 sm:col-span-3">카드 3</div>
+    <div class="col-span-6 sm:col-span-3">카드 4</div>
+  </div>
+
+  <!-- 섹션 3: 카드 2개 -->
+  <h3>섹션 헤더</h3>
+  <div class="grid grid-cols-12 gap-4">
+    <div class="col-span-12 sm:col-span-6">카드 1</div>
+    <div class="col-span-12 sm:col-span-6">카드 2</div>
+  </div>
+</div>
+```
+
+#### 섹션 안 카드 분할 표준
+
+| 카드 개수 | col-span | 합계 |
+|---|---|---|
+| 2개 | `col-span-6` × 2 | 12 |
+| 3개 | `col-span-4` × 3 | 12 |
+| 4개 | `col-span-3` × 4 | 12 |
+| 6개 | `col-span-2` × 6 | 12 |
+| 비균등 | `col-span-8` + `col-span-4` 등 | 12 (콘텐츠 양 비례) |
+
+**작은 화면(sm 미만) 대응**: `col-span-12` 또는 `col-span-6`로 wrap 자연 발생.
+
+#### 페이지 컨테이너 max-width
+
+`max-w-7xl` (1280px) 권장. 이유:
+- 1500px+ 모니터에서 콘텐츠가 좌측에 모임 (우측 자연 공백, 사이드바 옆 자연스러움)
+- 1024~1280px 모니터에선 자연 신축 (반응형)
+- Linear/Notion/Stripe 같은 잘 만든 웹앱의 표준 폭
+
+`max-w-screen-2xl` (1536px)는 4K 모니터에서, `max-w-5xl` (1024px)는 좁은 페이지(설정·폼 등)에 사용.
+
+---
+
+### 6.2 4가지 레이아웃 모드
+
+페이지 컨테이너 + 12 컬럼 grid 위에서, 콘텐츠 본성에 맞는 모드를 선택한다.
 
 #### Reading mode — 텍스트·폼·1열 리스트
 - **콘텐츠 본성**: 한 줄에 너무 많은 글자가 들어가면 가독성이 떨어지는 콘텐츠
-- **클래스 패턴**: `max-w-prose mx-auto` (또는 `max-w-2xl mx-auto`)
-- **이유**: 한 줄 60~75자가 가독성 최적. 모니터 크기와 무관
-- **적용**: 사용자 프로필, 설정 폼, 블로그 본문, 계약 약관, 1열 정보 리스트
+- **클래스 패턴**: `max-w-2xl mx-auto` 또는 `max-w-prose mx-auto`
+- **이유**: 한 줄 60~75자가 가독성 최적
+- **적용**: 사용자 프로필, 설정 폼, 블로그 본문
 - **컴포넌트**: `<PageLayout mode="reading">`
 
 #### Table mode — 데이터 테이블
@@ -385,103 +457,137 @@ Tailwind 기본 스케일만 사용. 커스텀 값 금지.
   ```html
   <PageLayout mode="table">
     <div class="bg-white border border-slate-200 rounded-lg">
-      <table class="text-xs">  <!-- ⚠ w-full 절대 금지 — 사시 모드의 주범 -->
+      <table class="text-xs">  <!-- ⚠ w-full 절대 금지 -->
         ...
       </table>
     </div>
   </PageLayout>
   ```
   - `PageLayout mode="table"`이 자동 적용: `overflow-x-auto w-fit max-w-full`
-  - `<table>`에는 `w-full` 사용 금지. 테이블이 자연 폭으로 응축되도록
-  - 카드 박스(`bg-white border rounded-lg`)는 자식 div가 책임. 테이블 자체는 데이터 표시만
-- **이유**: 컬럼 자연 너비 합 ≈ 콘텐츠 적정 폭. 화면이 넓으면 좌측 정렬 + 우측 자연 공백 (사시 모드 X — 정보가 좌측에 모여있으므로). 콘텐츠가 화면보다 크면 `max-w-full`이 가로 스크롤로 안전 처리
+  - `<table>`에 `w-full` 금지 — 테이블이 콘텐츠 폭으로 응축
 - **적용**: 키워드 관리, 측정 이력, 동기화 로그, 사용자 목록
-- **검증**: 테이블 우측 끝 컬럼이 컬럼 사이 거대 공백을 두고 화면 우측에 붙어있다면 `w-full`이 어딘가 들어간 것 — 즉시 제거
+- **검증**: 테이블 우측 끝 컬럼이 컬럼 사이 거대 공백을 두고 화면 우측에 붙어있다면 `w-full`이 들어간 것
 
-#### Detail mode — 마스터 + 사이드 (마스터-디테일)
-- **콘텐츠 본성**: 메인 콘텐츠 + 우측 보조 패널 (선택한 항목의 상세, 필터, 헬프 등)
-- **클래스 패턴**:
-  ```html
-  <div class="flex flex-col lg:flex-row gap-6">
-    <main class="flex-1 min-w-0">...</main>     <!-- 신축 -->
-    <aside class="w-full lg:w-80 flex-shrink-0">...</aside>  <!-- 고정 -->
-  </div>
-  ```
-- **이유**: 메인이 화면 폭에 따라 자연 신축, 사이드는 항상 일정 폭. 좁은 화면에서는 stack
-- **적용**: SB체커 체크 이력, 메일 인박스, 파일 탐색기
-- **사이드는 inline (overlay X)**. overlay는 본 콘텐츠를 가려서 컨텍스트가 끊긴다.
+#### Detail mode — 마스터 + 사이드
+- **콘텐츠 본성**: 메인 콘텐츠 + 우측 보조 패널
+- **클래스 패턴**: `flex flex-col lg:flex-row gap-6`
+  - 메인: `flex-1 min-w-0` 또는 `min-w-0` (콘텐츠 자연 폭)
+  - 사이드: `w-full lg:w-80 flex-shrink-0` (고정)
+- **사이드는 inline (overlay X)** — 본 콘텐츠 가리지 않음
+- **적용**: SB체커 체크 이력, 메일 인박스
 - **컴포넌트**: `<PageLayout mode="detail">`
 
-#### Dashboard mode — 카드 그리드
-- **콘텐츠 본성**: 위젯·카드가 화면에 따라 N열로 자동 배치
-- **클래스 패턴**: `grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4`
-- **이유**: 미디어 쿼리 없이 화면 폭에 자동 적응. 1366px → 4열, 1920px → 5~6열, 4K → 8열
+#### Dashboard mode — 12 컬럼 그리드 카드
+- **콘텐츠 본성**: 여러 KPI/위젯 카드 한 화면
+- **표준 패턴**: `grid grid-cols-12 gap-4` + 카드별 `col-span-N`
+- **이유**: 모든 카드가 같은 12 컬럼 시스템에서 분할 → 섹션 간 우측 끝 일치
 - **적용**: 홈 대시보드, 관리자 통계 패널
-- **컴포넌트**: `<PageLayout mode="dashboard">`
 
-### 사용 — 글로벌 컴포넌트
+---
 
-```vue
-<PageLayout mode="detail">
-  <main class="flex-1 min-w-0">
-    <!-- 메인 콘텐츠 -->
-  </main>
-  <aside v-if="selected" class="w-full lg:w-80 flex-shrink-0">
-    <!-- 사이드 패널 -->
-  </aside>
-</PageLayout>
+### 6.3 같은 섹션 카드 폭 통일 (필수 룰)
+
+**같은 섹션 안 카드는 모두 같은 `col-span`을 사용한다.**
+
+```html
+<!-- ✓ OK -->
+<div class="grid grid-cols-12 gap-4">
+  <div class="col-span-4">카드 A</div>
+  <div class="col-span-4">카드 B</div>
+  <div class="col-span-4">카드 C</div>
+</div>
+
+<!-- ✗ 사용자가 정렬 깨짐으로 인식 -->
+<div class="grid grid-cols-12 gap-4">
+  <div class="col-span-5">카드 A (콘텐츠 많아서)</div>
+  <div class="col-span-3">카드 B</div>
+  <div class="col-span-4">카드 C</div>
+</div>
 ```
 
-### 모드 선택 결정 트리
+**예외**: 콘텐츠 양이 명확히 다른 의미일 때 (예: 메인 vs 사이드). 이 경우 `col-span-8 + col-span-4` 비율 사용.
+
+---
+
+### 6.4 카드 안 정보 분할
+
+카드 폭이 정해진 후, **카드 안 콘텐츠가 카드 폭의 절반 이상을 차지하도록** 한다.
+
+```html
+<!-- ✓ 카드 폭 50/50 분할로 콘텐츠가 카드를 채움 -->
+<div class="grid grid-cols-2 gap-3">
+  <span>라벨</span>
+  <span>값</span>
+</div>
+
+<!-- ✗ 콘텐츠가 카드 폭의 1/3만 차지하고 우측 빈 공간 -->
+<div class="flex gap-4">
+  <span>라벨</span>
+  <span>값</span>
+</div>
+```
+
+**카드 폭이 콘텐츠보다 훨씬 크면** (콘텐츠가 카드의 50% 이하):
+- 카드 안 grid를 카드 폭에 맞춰 N분할
+- 또는 카드 폭을 줄이는 게 적합한지 재검토 (col-span을 작게)
+
+---
+
+### 6.5 row 정렬 — grid > flex
+
+라벨 폭이 다양하면 (예: "SB체커" vs "플레이스 (오후)" vs "일별 스냅샷"):
+
+```html
+<!-- ✗ flex gap-4 — 라벨 다음 정보 시작점이 row마다 다름 -->
+<div class="flex gap-4">
+  <span>라벨</span>
+  <span>시각</span>
+</div>
+
+<!-- ✓ grid-cols-2 또는 grid-cols-[Npx_auto] — 시작점 일관 -->
+<div class="grid grid-cols-2 gap-3">
+  <span>라벨</span>
+  <span>시각</span>
+</div>
+```
+
+**검증 룰**: 같은 카드 안 row들의 두 번째 정보(시각/숫자/뱃지)가 정확히 같은 가로 위치에 있어야 한다.
+
+---
+
+### 6.6 반응형 브레이크포인트
 
 ```
-페이지 콘텐츠가 무엇인가?
-├─ 텍스트 위주, 1열, 폼 → Reading
-├─ 데이터 테이블 → Table
-├─ 메인 + 우측 사이드 (마스터-디테일) → Detail
-└─ 카드/위젯 그리드 → Dashboard
-
-여러 모드가 한 페이지에 섞이면?
-→ 페이지를 여러 영역으로 나눠 영역마다 다른 모드 적용
-   예: 헤더는 Reading, 본문 테이블은 Table
-```
-
-### ❌ 금지
-
-- **페이지 wrapper의 `max-w-Nxl` 절대값 하드코딩** (특정 모니터에서만 동작) — 위 4모드로 대체
-- **`justify-between`으로 좌·우 끝에만 정보 배치** (사시 모드의 주범)
-- **빈 컬럼 / 빈 영역** (조건부 렌더링으로 제거 — 변동 컬럼이 모두 ─면 컬럼 자체 숨김)
-- **사이드 overlay** (본 콘텐츠를 가림. inline aside로 대체)
-- **테이블에 `w-full`** (사시 모드의 주범 — Table mode 섹션 참고)
-
-### ⚠ 페이지 폭 vs 카드 폭 — 헷갈리지 말 것
-
-두 차원은 **다른 영역**:
-
-| 차원 | 룰 | 이유 |
-|---|---|---|
-| **페이지 wrapper** | `max-w-Nxl` 절대값 **금지** | 모니터마다 다름. 콘텐츠가 자기 폭 알아야 |
-| **카드/컴포넌트** | 폭 명시 **OK** (`w-[300px]` 등) | 콘텐츠 단위 결정. 시각 그리드 일관성 ↑ |
-
-같은 섹션 안 카드들은 폭 통일하면 정렬 일관됨 (예: 마케팅 채널 3카드 모두 `w-[300px]`). 단 카드 안 정보가 좌·우 끝 분리(`justify-between`/`grid-cols-N + 1fr`)되면 카드 안에서 사시 모드. 카드 폭이 좁으면(<320px) 카드 안 grid 분할은 사시 모드 X.
-
-### 반응형 브레이크포인트
-
-```
-sm: 640px   (태블릿 세로)
+sm: 640px   (태블릿 세로) — Dashboard 카드 col-span 분할 시작점
 md: 768px   (태블릿 가로)
-lg: 1024px  (데스크톱 기본)  ← Detail mode가 stack→side 전환되는 지점
-xl: 1280px  (와이드)
+lg: 1024px  (데스크톱 기본) — Detail mode가 stack→side 전환
+xl: 1280px  (와이드) — max-w-7xl 도달
 ```
 
-**원칙**: 관리 툴은 데스크톱 우선. lg 이하에서는 Detail mode를 stack으로 자동 전환.
+**원칙**: 관리 툴은 데스크톱 우선. sm 미만에서는 모든 카드 `col-span-12` (1열 stack), sm 이상에서 `sm:col-span-N`로 분할.
 
-### Flex vs Grid
+---
 
-- **Grid**: Dashboard mode (auto-fit), 카드 그리드, 큰 영역 배치
-- **Flex**: Detail mode (메인+사이드), 그 외 정렬
+### 6.7 ❌ 금지 패턴
 
-### Z-index 스케일 (기존 유지)
+- **페이지 wrapper에 너무 좁은 max-w** (예: `max-w-3xl`=768px 이하) — 1500px 모니터에서 좌우 광활한 공백, 사시 모드. `max-w-7xl`(1280px) 권장
+- **페이지 안 섹션마다 다른 grid 시스템** — 섹션 간 우측 끝 안 맞음. 12 컬럼 통일 필수
+- **`justify-between`으로 좌·우 끝에만 정보 배치** — 사시 모드의 주범
+- **빈 컬럼 / 빈 영역** — 조건부 렌더링으로 제거
+- **사이드 overlay** — 본 콘텐츠 가림. inline aside로
+- **테이블에 `w-full`** — 사시 모드의 주범 (Table mode 참고)
+- **flex gap-N으로 라벨 폭 가변 row** — row마다 정보 위치 다름. grid로
+
+---
+
+### 6.8 Flex vs Grid
+
+- **Grid**: Dashboard mode (12 컬럼), 카드 안 정보 분할, row 정렬
+- **Flex**: Detail mode (메인+사이드), 단일 라인 정렬, 자연 폭 조합
+
+---
+
+### 6.9 Z-index 스케일
 
 ```
 z-0:  기본

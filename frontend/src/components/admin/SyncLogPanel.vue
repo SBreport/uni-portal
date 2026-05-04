@@ -31,7 +31,7 @@ interface IngestionLog {
 }
 
 // ── 상수 ──
-const PAGE_SIZE = 10
+const PAGE_SIZE = 8
 
 const TYPE_LABEL: Record<string, string> = {
   event_sync: '이벤트',

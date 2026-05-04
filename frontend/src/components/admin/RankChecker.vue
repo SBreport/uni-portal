@@ -793,7 +793,7 @@ onMounted(loadKeywords)
     <!-- ═══ 체크 이력 탭 ═══ -->
     <template v-if="activeTab === 'history'">
       <PageLayout mode="detail">
-        <main class="flex-1 min-w-0">
+        <main class="min-w-0">
           <!-- 헤더 + 요약 -->
           <div class="mb-3 flex items-center gap-3">
             <div class="flex-1">
@@ -841,9 +841,9 @@ onMounted(loadKeywords)
             로딩 중...
           </div>
 
-          <!-- 평면 테이블 -->
-          <div v-else class="bg-white border border-slate-200 rounded-lg overflow-x-auto">
-            <table class="w-full text-xs">
+          <!-- 평면 테이블 — 자연 폭 (w-full 금지, 콘텐츠가 자기 폭 결정) -->
+          <div v-else class="bg-white border border-slate-200 rounded-lg overflow-x-auto inline-block">
+            <table class="text-xs">
               <thead class="bg-slate-50 border-b border-slate-200">
                 <tr class="text-slate-500">
                   <th class="text-left px-3 py-2 font-medium cursor-pointer hover:text-slate-700"
@@ -892,24 +892,30 @@ onMounted(loadKeywords)
           </div>
         </main>
 
-        <!-- 인라인 사이드 패널 (지점 30일 매트릭스) -->
-        <aside v-if="expandedBranchId !== null"
-               class="w-full lg:w-80 flex-shrink-0 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+        <!-- 사이드 패널 — 상시 표시. 선택 시 매트릭스, 미선택 시 안내 -->
+        <aside v-if="snapshotItems.length"
+               class="w-full lg:w-80 flex-shrink-0 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden self-start">
           <!-- 헤더 -->
           <div class="border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-            <div>
+            <div class="min-w-0">
               <p class="text-xs text-slate-400">지점 측정 이력</p>
-              <p class="text-sm font-bold text-slate-700">
+              <p v-if="expandedBranchId !== null" class="text-sm font-bold text-slate-700 truncate">
                 {{ snapshotItems.find(i => i.branch_id === expandedBranchId)?.branch_name || '' }}
                 <span class="text-xs font-normal text-slate-400 ml-1">최근 30일</span>
               </p>
+              <p v-else class="text-sm font-medium text-slate-400">지점을 선택하세요</p>
             </div>
-            <button @click="onToggleExpand(expandedBranchId!)"
-                    class="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
+            <button v-if="expandedBranchId !== null"
+                    @click="onToggleExpand(expandedBranchId!)"
+                    class="text-slate-400 hover:text-slate-700 text-lg leading-none flex-shrink-0">✕</button>
           </div>
-          <!-- 본문: 매트릭스 -->
+          <!-- 본문: 매트릭스 또는 안내 -->
           <div class="p-4 overflow-x-auto">
-            <p v-if="historyLoading" class="text-xs text-slate-400">로딩 중...</p>
+            <p v-if="expandedBranchId === null"
+               class="text-xs text-slate-400 py-8 text-center">
+              좌측 행을 클릭하면<br />그 지점의 30일 측정 이력을 보여줍니다
+            </p>
+            <p v-else-if="historyLoading" class="text-xs text-slate-400">로딩 중...</p>
             <div v-else-if="historyMatrix.dates.length">
               <table class="text-xs border border-slate-200 rounded">
                 <thead class="bg-slate-50">

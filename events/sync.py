@@ -233,9 +233,10 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
                 detail_parts.append(f"실패 {error_count}건")
             detail_text = " / ".join(detail_parts)
             conn.execute("""
-                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, ("event_sync", total_items, 0, error_count, detail_text, triggered_by))
+                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, ("event_sync", total_items, 0, error_count, detail_text,
+                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
             conn.commit()
         except Exception as _e:
             print(f"  [WARN] sync_log 기록 실패: {_e}")
@@ -249,9 +250,10 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
         try:
             err_conn = _get_conn()
             err_conn.execute(
-                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by) "
-                "VALUES (?, 0, 0, 0, ?, ?)",
-                ("event_sync", f"실패: {str(e)[:200]}", triggered_by),
+                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by) "
+                "VALUES (?, 0, 0, 0, ?, ?, ?)",
+                ("event_sync", f"실패: {str(e)[:200]}",
+                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by),
             )
             err_conn.commit()
             err_conn.close()

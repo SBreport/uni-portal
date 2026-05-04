@@ -201,9 +201,10 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "", triggered_by
             if errors:
                 detail_parts.append(f"실패 {len(errors)}건")
             _conn.execute("""
-                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, ("cafe_sync", total_articles, 0, len(errors), " / ".join(detail_parts), triggered_by))
+                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, ("cafe_sync", total_articles, 0, len(errors), " / ".join(detail_parts),
+                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
             _conn.commit()
             _conn.close()
         except Exception as _e:
@@ -219,9 +220,10 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "", triggered_by
             from shared.db import get_conn as _gc, EQUIPMENT_DB as _edb
             err_conn = _gc(_edb)
             err_conn.execute(
-                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by) "
-                "VALUES (?, 0, 0, 0, ?, ?)",
-                ("cafe_sync", f"실패: {str(e)[:200]}", triggered_by),
+                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by) "
+                "VALUES (?, 0, 0, 0, ?, ?, ?)",
+                ("cafe_sync", f"실패: {str(e)[:200]}",
+                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by),
             )
             err_conn.commit()
             err_conn.close()

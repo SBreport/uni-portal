@@ -209,9 +209,10 @@ def sync_from_sheets(triggered_by: str = "manual"):
         if updated:
             detail_text += f" (업데이트 {updated}건)"
         c.execute("""
-            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, ("equipment_sync", added, skipped, updated, detail_text, triggered_by))
+            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("equipment_sync", added, skipped, updated, detail_text,
+              datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
 
         conn.commit()
         conn.close()
@@ -235,9 +236,10 @@ def sync_from_sheets(triggered_by: str = "manual"):
             from shared.db import get_conn, EQUIPMENT_DB
             err_conn = get_conn(EQUIPMENT_DB)
             err_conn.execute(
-                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by) "
-                "VALUES (?, 0, 0, 0, ?, ?)",
-                ("equipment_sync", f"실패: {str(e)[:200]}", triggered_by),
+                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by) "
+                "VALUES (?, 0, 0, 0, ?, ?, ?)",
+                ("equipment_sync", f"실패: {str(e)[:200]}",
+                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by),
             )
             err_conn.commit()
             err_conn.close()

@@ -19,12 +19,12 @@ export const updateTreatment = (id: number, data: Record<string, any>) =>
 export const createTreatment = (data: Record<string, any>) =>
   api.post('/events/treatments', data)
 
-// 동기화
+// 동기화 — 16k+건 sync는 30초 이상 소요 가능, 5분 timeout
 export const syncEventsFromUrl = (data: { year: number; start_month: number; end_month: number; source_url: string }) =>
-  api.post('/events/sync', data)
+  api.post('/events/sync', data, { timeout: 300000 })
 
 export const syncEventsFromFile = (file: File, year: number, startMonth: number, endMonth: number) => {
   const form = new FormData()
   form.append('file', file)
-  return api.post(`/events/sync-file?year=${year}&start_month=${startMonth}&end_month=${endMonth}`, form)
+  return api.post(`/events/sync-file?year=${year}&start_month=${startMonth}&end_month=${endMonth}`, form, { timeout: 300000 })
 }

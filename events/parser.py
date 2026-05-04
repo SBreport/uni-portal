@@ -73,14 +73,20 @@ def find_category_marker(row_text: str) -> str | None:
 
     ■ 마커: 메인 카테고리
     # 마커: 서브카테고리 — 현재 DB 단일 카테고리라 그냥 덮어쓰기
-    # 규칙: # 다음에 공백 또는 한글이 바로 오는 경우만 인정 (해시태그/URL의 # 제외)
+    # 규칙: # 뒤에 1자 이상 있으면 인정 (한글/영문/숫자 모두 허용). 공백만 있으면 제외.
     """
     if "■" in row_text:
         cleaned = row_text.replace("■", "").strip()
         return cleaned if cleaned else None
 
-    # # 마커: 공백 또는 한글이 바로 뒤따르는 경우만 인정
-    hash_match = re.match(r"#([ ㄱ-힣가-힣].*)$", row_text.strip())
+    # # 마커: # 뒤에 1자 이상 있으면 서브카테고리 마커로 인정.
+    # 한글/영문/숫자/공백 모두 허용. strip() 후 빈 문자열이면 None 반환.
+    # - "# 리프팅"  → "리프팅"  (공백 후 한글)
+    # - "#ECM 스킨부스터" → "ECM 스킨부스터"  (영문 시작)
+    # - "#DCA"     → "DCA"    (영문 약어)
+    # - "#3D 입술필러" → "3D 입술필러" (숫자 시작)
+    # - "# "       → None    (공백만 있으면 제외)
+    hash_match = re.match(r"#(.+)$", row_text.strip())
     if hash_match:
         return hash_match.group(1).strip() or None
 
@@ -196,17 +202,28 @@ def infer_columns_from_data(row: list[str]) -> dict | None:
     }
 
 
+def _flatten_cell(cell: str) -> str:
+    """셀 내 개행을 ' / '로 변환하여 1줄로 만든다.
+
+    멀티라인 셀(예: 선릉 비고에 '\n턱밑 or 귀밑...')을 플래트닝.
+    빈 줄은 제외한다.
+    """
+    parts = [p.strip() for p in cell.split("\n") if p.strip()]
+    return " / ".join(parts)
+
+
 def _collect_notes(row: list[str], col_notes: int) -> str:
     """col_notes부터 행 끝까지 비어있지 않은 셀을 ' / '로 합쳐 반환.
 
     빈 셀 제외, 중복 제거(순서 유지).
+    멀티라인 셀은 개행을 ' / '로 변환하여 포함한다.
     """
     if col_notes >= len(row):
         return ""
     seen: list[str] = []
     seen_set: set[str] = set()
     for cell in row[col_notes:]:
-        val = cell.strip()
+        val = _flatten_cell(cell)
         if val and val not in seen_set:
             seen.append(val)
             seen_set.add(val)

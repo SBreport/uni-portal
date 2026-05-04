@@ -24,16 +24,22 @@ def _fail(label: str, detail: str) -> None:
 def test_case1_hash_marker():
     label = "케이스1 # 서브카테고리 마커"
 
-    # 인식해야 하는 케이스
+    # 인식해야 하는 케이스 — 한글
     assert find_category_marker("#레이저 리프팅") == "레이저 리프팅", "한글 바로"
-    # #보톡스/윤곽: 한글로 시작하므로 인식 (슬래시는 이후에 있음)
     result_slash = find_category_marker("#보톡스/윤곽")
     assert result_slash is not None, "한글 시작 + 슬래시 조합 인식 실패"
     assert find_category_marker("#보톡스·윤곽") == "보톡스·윤곽", "한글 시작"
     assert find_category_marker("# 리프팅") == "리프팅", "공백 후 한글"
-    # 제외해야 하는 케이스
-    assert find_category_marker("#abc123") is None, "영문/숫자 시작 제외"
-    assert find_category_marker("#hashtag") is None, "영문 해시태그 제외"
+    # 인식해야 하는 케이스 — 영문/숫자 시작 (결함 1 수정 후)
+    assert find_category_marker("#ECM 스킨부스터") == "ECM 스킨부스터", "영문 시작 + 한글 조합"
+    assert find_category_marker("#DCA") == "DCA", "영문 약어 3자"
+    assert find_category_marker("#FCR 필링") == "FCR 필링", "영문 + 공백 + 한글"
+    assert find_category_marker("#LDM") == "LDM", "영문 약어 3자"
+    assert find_category_marker("#V쎄라 윤곽PKG") == "V쎄라 윤곽PKG", "영문+한글 혼합"
+    assert find_category_marker("#3D 입술필러") == "3D 입술필러", "숫자 시작"
+    # 제외해야 하는 케이스 — 단순 # 또는 # 뒤 공백만
+    assert find_category_marker("#") is None, "# 단독"
+    assert find_category_marker("# ") is None, "# + 공백만"
     # ■ 기존 동작 유지
     assert find_category_marker("■ 단독이벤트") == "단독이벤트", "■ 기존 동작"
 
@@ -259,6 +265,50 @@ def test_case8_validate_no_price():
     _pass(label)
 
 
+# ── 케이스 9: 데이터 비고 셀 내 개행 플래트닝 (선릉 윤곽톡스 케이스) ───────────
+
+def test_case9_notes_multiline_flatten():
+    label = "케이스9 비고 셀 내 개행 플래트닝 (선릉 윤곽톡스)"
+
+    # col4(특이사항) 셀에 개행이 있는 실제 데이터 패턴
+    rows = [
+        ["■ 첫방문"],
+        ["이벤트명", "정상가", "최종 이벤트가", "특이사항\n★용량 중복적용 안됨. 추가 용량 시 정상가 안내 ★"],
+        [
+            "첫방문고객) 윤곽톡스 (국산)",
+            "14000",
+            "9000",
+            "* 4-6주안에 내원시리터치비용 : 22,000원\n턱밑 or 귀밑 침샘 중복 적용 가능",
+        ],
+    ]
+    events = parse_branch_sheet(rows, "선릉")
+    if not events:
+        _fail(label, "이벤트가 비어있음")
+        return
+
+    # notes에 \n이 없어야 하고, 두 줄이 ' / '로 합쳐져야 함
+    notes = events[0].notes
+    if "\n" in notes:
+        _fail(label, f"notes에 개행 잔류: {notes!r}")
+        return
+    if "4-6주" not in notes:
+        _fail(label, f"첫 줄 내용 누락: {notes!r}")
+        return
+    if "턱밑 or 귀밑" not in notes:
+        _fail(label, f"두 번째 줄 내용 누락: {notes!r}")
+        return
+    if " / " not in notes:
+        _fail(label, f"줄 간 구분자 없음: {notes!r}")
+        return
+
+    # 헤더 멀티라인 셀의 ★ 텍스트가 데이터 notes에 들어오지 않아야 함
+    if "★" in notes:
+        _fail(label, f"헤더 부가 텍스트(★)가 notes에 포함됨: {notes!r}")
+        return
+
+    _pass(label)
+
+
 def main():
     print("=" * 50)
     print("parser.py v2 케이스 검증")
@@ -272,6 +322,7 @@ def main():
         test_case6_regular_price_variants,
         test_case7_implicit_category,
         test_case8_validate_no_price,
+        test_case9_notes_multiline_flatten,
     ]
     passed = 0
     failed = 0

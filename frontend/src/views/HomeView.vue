@@ -232,8 +232,8 @@ function formatDate(iso: string) {
       <div v-if="auth.role === 'admin'" class="mb-6">
         <h3 class="text-sm font-medium text-slate-500 mb-3">동기화</h3>
         <div class="flex flex-wrap gap-4">
-          <!-- 최근 동기화 — 카드 자연 폭, max-w로 신축 제한 -->
-          <div class="bg-white border border-slate-200 rounded-lg p-4 w-full sm:w-auto sm:min-w-[360px] sm:max-w-md">
+          <!-- 최근 동기화 -->
+          <div class="bg-white border border-slate-200 rounded-lg p-4 w-full sm:w-[400px]">
             <p class="text-xs font-medium text-slate-500 mb-3">최근 동기화</p>
             <div v-if="data.recent_syncs && data.recent_syncs.length" class="flex flex-col gap-1.5">
               <div v-for="(s, i) in data.recent_syncs" :key="i"
@@ -270,8 +270,8 @@ function formatDate(iso: string) {
             <p v-else class="text-xs text-slate-400">동기화 이력 없음</p>
           </div>
 
-          <!-- 다음 자동 실행 — grid 정렬로 라벨/시각 가로 위치 통일 -->
-          <div class="bg-white border border-slate-200 rounded-lg p-4 w-full sm:w-auto sm:min-w-[280px]">
+          <!-- 다음 자동 실행 — 폭 통일 (같은 섹션 카드는 같은 폭) -->
+          <div class="bg-white border border-slate-200 rounded-lg p-4 w-full sm:w-[400px]">
             <p class="text-xs font-medium text-slate-500 mb-3">다음 자동 실행</p>
             <div v-if="sortedNextJobs.length" class="flex flex-col gap-1.5">
               <div v-for="job in sortedNextJobs" :key="job.id"

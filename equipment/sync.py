@@ -124,109 +124,126 @@ def get_or_create_category(cursor, name):
 
 def sync_from_sheets(triggered_by: str = "manual"):
     """Google Sheets → SQLite 동기화 실행"""
-    # 1. 백업
-    backup_path = backup_db()
-    if backup_path:
-        print(f"백업 완료: {backup_path}")
+    try:
+        # 1. 백업
+        backup_path = backup_db()
+        if backup_path:
+            print(f"백업 완료: {backup_path}")
 
-    # 2. Sheets 데이터 가져오기
-    print("Google Sheets 데이터 가져오는 중...")
-    df = fetch_sheets_data()
-    print(f"Sheets에서 {len(df)}건 로드 완료")
+        # 2. Sheets 데이터 가져오기
+        print("Google Sheets 데이터 가져오는 중...")
+        df = fetch_sheets_data()
+        print(f"Sheets에서 {len(df)}건 로드 완료")
 
-    # 3. DB 연결
-    from shared.db import get_conn, EQUIPMENT_DB
-    conn = get_conn(EQUIPMENT_DB)
-    c = conn.cursor()
+        # 3. DB 연결
+        from shared.db import get_conn, EQUIPMENT_DB
+        conn = get_conn(EQUIPMENT_DB)
+        c = conn.cursor()
 
-    added = 0
-    updated = 0
-    skipped = 0
-    conflict_details = []
+        added = 0
+        updated = 0
+        skipped = 0
+        conflict_details = []
 
-    for _, row in df.iterrows():
-        branch_name = str(row["지점명"]).strip()
-        category_name = str(row.get("카테고리", "")).strip()
-        from equipment.db import normalize_device_name
-        device_name = normalize_device_name(str(row.get("기기명", "")))
-        quantity = int(row.get("수량", 1))
-        note = str(row.get("비고", "")).strip()
-        photo_raw = str(row.get("사진", "")).strip()
-        photo_status = 1 if photo_raw in PHOTO_YES else 0
+        for _, row in df.iterrows():
+            branch_name = str(row["지점명"]).strip()
+            category_name = str(row.get("카테고리", "")).strip()
+            from equipment.db import normalize_device_name
+            device_name = normalize_device_name(str(row.get("기기명", "")))
+            quantity = int(row.get("수량", 1))
+            note = str(row.get("비고", "")).strip()
+            photo_raw = str(row.get("사진", "")).strip()
+            photo_status = 1 if photo_raw in PHOTO_YES else 0
 
-        if not branch_name or not device_name or device_name == "nan":
-            continue
+            if not branch_name or not device_name or device_name == "nan":
+                continue
 
-        # 지점/카테고리 가져오기 또는 생성
-        branch_id = get_or_create_branch(c, branch_name)
-        category_id = get_or_create_category(c, category_name) if category_name and category_name != "nan" else None
+            # 지점/카테고리 가져오기 또는 생성
+            branch_id = get_or_create_branch(c, branch_name)
+            category_id = get_or_create_category(c, category_name) if category_name and category_name != "nan" else None
 
-        # DB에 같은 행이 있는지 확인 (지점 + 기기명으로 매칭)
-        c.execute("""
-            SELECT id, quantity, photo_status, note, category_id
-            FROM equipment
-            WHERE branch_id = ? AND name = ?
-        """, (branch_id, device_name))
-        existing = c.fetchone()
-
-        if existing is None:
-            # 신규 행 → 추가
+            # DB에 같은 행이 있는지 확인 (지점 + 기기명으로 매칭)
             c.execute("""
-                INSERT INTO equipment
-                    (branch_id, category_id, name, name_original, quantity, photo_status, note, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'sheets')
-            """, (branch_id, category_id, device_name, device_name, quantity, photo_status, note))
-            added += 1
-        else:
-            # 기존 행 → 내용 비교
-            db_id = existing[0]
-            db_qty, db_photo, db_note, db_cat_id = existing[1], existing[2], existing[3], existing[4]
-            # 사진 상태는 DB 값 우선 (웹앱에서 수정한 내용 보존)
-            effective_photo = db_photo
+                SELECT id, quantity, photo_status, note, category_id
+                FROM equipment
+                WHERE branch_id = ? AND name = ?
+            """, (branch_id, device_name))
+            existing = c.fetchone()
 
-            if (db_qty == quantity and effective_photo == photo_status
-                    and (db_note or "") == note and db_cat_id == category_id):
-                skipped += 1
-            else:
-                # 내용 다름 → 시트 기준 업데이트 (사진은 DB 값 유지)
+            if existing is None:
+                # 신규 행 → 추가
                 c.execute("""
-                    UPDATE equipment
-                    SET quantity = ?, photo_status = ?, note = ?, category_id = ?
-                    WHERE id = ?
-                """, (quantity, effective_photo, note, category_id, db_id))
-                updated += 1
-                photo_note = ""
-                if db_photo != photo_status:
-                    photo_note = f" [사진: DB값({db_photo}) 유지, 시트값({photo_status}) 무시]"
-                conflict_details.append(
-                    f"{branch_name}/{device_name}: "
-                    f"수량({db_qty}->{quantity}), 비고({db_note}->{note}){photo_note}"
-                )
+                    INSERT INTO equipment
+                        (branch_id, category_id, name, name_original, quantity, photo_status, note, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'sheets')
+                """, (branch_id, category_id, device_name, device_name, quantity, photo_status, note))
+                added += 1
+            else:
+                # 기존 행 → 내용 비교
+                db_id = existing[0]
+                db_qty, db_photo, db_note, db_cat_id = existing[1], existing[2], existing[3], existing[4]
+                # 사진 상태는 DB 값 우선 (웹앱에서 수정한 내용 보존)
+                effective_photo = db_photo
 
-    # 4. 동기화 로그 기록
-    detail_text = f"보유장비 시트 / {added + skipped + updated}건 처리"
-    if updated:
-        detail_text += f" (업데이트 {updated}건)"
-    c.execute("""
-        INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, ("equipment_sync", added, skipped, updated, detail_text, triggered_by))
+                if (db_qty == quantity and effective_photo == photo_status
+                        and (db_note or "") == note and db_cat_id == category_id):
+                    skipped += 1
+                else:
+                    # 내용 다름 → 시트 기준 업데이트 (사진은 DB 값 유지)
+                    c.execute("""
+                        UPDATE equipment
+                        SET quantity = ?, photo_status = ?, note = ?, category_id = ?
+                        WHERE id = ?
+                    """, (quantity, effective_photo, note, category_id, db_id))
+                    updated += 1
+                    photo_note = ""
+                    if db_photo != photo_status:
+                        photo_note = f" [사진: DB값({db_photo}) 유지, 시트값({photo_status}) 무시]"
+                    conflict_details.append(
+                        f"{branch_name}/{device_name}: "
+                        f"수량({db_qty}->{quantity}), 비고({db_note}->{note}){photo_note}"
+                    )
 
-    conn.commit()
-    conn.close()
+        # 4. 동기화 로그 기록
+        detail_text = f"보유장비 시트 / {added + skipped + updated}건 처리"
+        if updated:
+            detail_text += f" (업데이트 {updated}건)"
+        c.execute("""
+            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, ("equipment_sync", added, skipped, updated, detail_text, triggered_by))
 
-    # 5. 결과 출력
-    print(f"\n동기화 완료:")
-    print(f"  추가: {added}건")
-    print(f"  업데이트: {updated}건")
-    print(f"  스킵: {skipped}건 (동일)")
+        conn.commit()
+        conn.close()
 
-    if conflict_details:
-        print(f"\n변경 상세 (상위 10건):")
-        for detail in conflict_details[:10]:
-            print(f"  - {detail}")
+        # 5. 결과 출력
+        print(f"\n동기화 완료:")
+        print(f"  추가: {added}건")
+        print(f"  업데이트: {updated}건")
+        print(f"  스킵: {skipped}건 (동일)")
 
-    return {"added": added, "updated": updated, "skipped": skipped}
+        if conflict_details:
+            print(f"\n변경 상세 (상위 10건):")
+            for detail in conflict_details[:10]:
+                print(f"  - {detail}")
+
+        return {"added": added, "updated": updated, "skipped": skipped}
+
+    except Exception as e:
+        # 실패 로그 기록 (별도 연결 사용 — 기존 conn은 롤백 상태일 수 있음)
+        try:
+            from shared.db import get_conn, EQUIPMENT_DB
+            err_conn = get_conn(EQUIPMENT_DB)
+            err_conn.execute(
+                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by) "
+                "VALUES (?, 0, 0, 0, ?, ?)",
+                ("equipment_sync", f"실패: {str(e)[:200]}", triggered_by),
+            )
+            err_conn.commit()
+            err_conn.close()
+        except Exception:
+            pass  # 실패 로그 기록도 실패하면 그냥 진행
+        raise
 
 
 if __name__ == "__main__":

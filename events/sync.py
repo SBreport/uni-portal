@@ -162,86 +162,102 @@ def _extract_sheet_id(url: str):
 
 def _process_branch_data(branch_data: dict, year: int, start_month: int, end_month: int, source_url: str = "", triggered_by: str = "manual") -> dict:
     """공통 처리 로직: 지점별 raw 데이터 → DB 저장."""
-    from events.parser import parse_branch_sheet, validate_parsed_events
-    from events.normalizer import CategoryNormalizer, ComponentParser
-    from events.db import (
-        ensure_period,
-        get_evt_branch_id,
-        insert_events,
-        create_ingestion_log,
-        update_ingestion_log,
-    )
+    try:
+        from events.parser import parse_branch_sheet, validate_parsed_events
+        from events.normalizer import CategoryNormalizer, ComponentParser
+        from events.db import (
+            ensure_period,
+            get_evt_branch_id,
+            insert_events,
+            create_ingestion_log,
+            update_ingestion_log,
+        )
 
-    label = f"{str(year)[-2:]}.{start_month}~{end_month}"
-    conn = _get_conn()
-    period_id = ensure_period(conn, year, start_month, end_month, label, source_url=source_url)
-    log_id = create_ingestion_log(conn, period_id)
+        label = f"{str(year)[-2:]}.{start_month}~{end_month}"
+        conn = _get_conn()
+        period_id = ensure_period(conn, year, start_month, end_month, label, source_url=source_url)
+        log_id = create_ingestion_log(conn, period_id)
 
-    cat_normalizer = CategoryNormalizer()
-    comp_parser = ComponentParser()
+        cat_normalizer = CategoryNormalizer()
+        comp_parser = ComponentParser()
 
-    total_items = 0
-    processed = 0
-    errors = []
+        total_items = 0
+        processed = 0
+        errors = []
 
-    for tab_name, rows in branch_data.items():
-        resolved_name = BRANCH_ALIAS.get(tab_name, tab_name)
-        branch_id = get_evt_branch_id(conn, resolved_name)
-        if branch_id is None:
-            branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", resolved_name))
-        if branch_id is None:
-            errors.append(f"{tab_name}: DB에 지점 없음")
-            continue
-
-        try:
-            events = parse_branch_sheet(rows, tab_name)
-            if not events:
+        for tab_name, rows in branch_data.items():
+            resolved_name = BRANCH_ALIAS.get(tab_name, tab_name)
+            branch_id = get_evt_branch_id(conn, resolved_name)
+            if branch_id is None:
+                branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", resolved_name))
+            if branch_id is None:
+                errors.append(f"{tab_name}: DB에 지점 없음")
                 continue
 
-            parse_issues = validate_parsed_events(events)
-            if parse_issues:
-                for issue in parse_issues:
-                    errors.append(f"{tab_name}: {issue['event']} — {issue['issue']}")
+            try:
+                events = parse_branch_sheet(rows, tab_name)
+                if not events:
+                    continue
 
-            count = insert_events(
-                conn, events, period_id, branch_id,
-                category_resolver=cat_normalizer.normalize,
-                component_parser=comp_parser,
+                parse_issues = validate_parsed_events(events)
+                if parse_issues:
+                    for issue in parse_issues:
+                        errors.append(f"{tab_name}: {issue['event']} — {issue['issue']}")
+
+                count = insert_events(
+                    conn, events, period_id, branch_id,
+                    category_resolver=cat_normalizer.normalize,
+                    component_parser=comp_parser,
+                )
+                total_items += count
+                processed += 1
+                print(f"  {tab_name}: {count}건 저장")
+            except Exception as e:
+                errors.append(f"{tab_name}: {e}")
+                print(f"  {tab_name}: 오류 - {e}")
+
+        unmapped = cat_normalizer.get_unmapped()
+        if unmapped:
+            cat_normalizer.save_review_queue()
+            print(f"  미매핑 카테고리 {len(unmapped)}건 → review_queue.json 저장")
+
+        status = "completed" if not errors else "completed_with_errors"
+        error_log = [{"error": e} for e in errors] if errors else None
+        update_ingestion_log(conn, log_id, status, processed, total_items, error_log)
+
+        # sync_log 통합 기록
+        try:
+            error_count = len(errors)
+            detail_parts = [f"{label} / {processed}개 지점"]
+            if error_count:
+                detail_parts.append(f"실패 {error_count}건")
+            detail_text = " / ".join(detail_parts)
+            conn.execute("""
+                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, ("event_sync", total_items, 0, error_count, detail_text, triggered_by))
+            conn.commit()
+        except Exception as _e:
+            print(f"  [WARN] sync_log 기록 실패: {_e}")
+
+        conn.close()
+
+        return {"processed": processed, "total_items": total_items, "errors": errors}
+
+    except Exception as e:
+        # 실패 로그 기록 (별도 연결 사용 — 기존 conn은 롤백 상태일 수 있음)
+        try:
+            err_conn = _get_conn()
+            err_conn.execute(
+                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by) "
+                "VALUES (?, 0, 0, 0, ?, ?)",
+                ("event_sync", f"실패: {str(e)[:200]}", triggered_by),
             )
-            total_items += count
-            processed += 1
-            print(f"  {tab_name}: {count}건 저장")
-        except Exception as e:
-            errors.append(f"{tab_name}: {e}")
-            print(f"  {tab_name}: 오류 - {e}")
-
-    unmapped = cat_normalizer.get_unmapped()
-    if unmapped:
-        cat_normalizer.save_review_queue()
-        print(f"  미매핑 카테고리 {len(unmapped)}건 → review_queue.json 저장")
-
-    status = "completed" if not errors else "completed_with_errors"
-    error_log = [{"error": e} for e in errors] if errors else None
-    update_ingestion_log(conn, log_id, status, processed, total_items, error_log)
-
-    # sync_log 통합 기록
-    try:
-        error_count = len(errors)
-        detail_parts = [f"{label} / {processed}개 지점"]
-        if error_count:
-            detail_parts.append(f"실패 {error_count}건")
-        detail_text = " / ".join(detail_parts)
-        conn.execute("""
-            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, ("event_sync", total_items, 0, error_count, detail_text, triggered_by))
-        conn.commit()
-    except Exception as _e:
-        print(f"  [WARN] sync_log 기록 실패: {_e}")
-
-    conn.close()
-
-    return {"processed": processed, "total_items": total_items, "errors": errors}
+            err_conn.commit()
+            err_conn.close()
+        except Exception:
+            pass  # 실패 로그 기록도 실패하면 그냥 진행
+        raise
 
 
 def _read_excel_to_branch_data(content, skip_tabs=None) -> dict:

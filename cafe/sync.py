@@ -36,181 +36,198 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "", triggered_by
     Returns:
         {"processed": int, "total_articles": int, "errors": list}
     """
-    # 지연 import
     try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-    except ImportError:
-        return {"processed": 0, "total_articles": 0,
-                "errors": ["gspread/google-auth 패키지가 설치되지 않았습니다."]}
-
-    from events.db import get_evt_branch_id
-    from cafe.db import (
-        get_or_create_period,
-        get_or_create_branch_period,
-        update_branch_metadata,
-        upsert_article,
-        upsert_comment,
-        create_sync_log,
-        update_sync_log,
-        load_cafe_articles,
-    )
-
-    # 환경변수에서 시트 ID
-    cafe_sheet_id = os.environ.get("CAFE_SHEET_ID", "")
-    credentials_file = os.environ.get(
-        "GOOGLE_CREDENTIALS_FILE",
-        os.path.join(os.path.dirname(__file__), "..", "credentials.json"),
-    )
-    scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-
-    if not cafe_sheet_id:
-        return {"processed": 0, "total_articles": 0,
-                "errors": ["CAFE_SHEET_ID 환경변수가 설정되지 않았습니다."]}
-    if not os.path.exists(credentials_file):
-        return {"processed": 0, "total_articles": 0,
-                "errors": [f"credentials.json을 찾을 수 없습니다: {credentials_file}"]}
-
-    print(f"카페 원고 가져오기 시작: {year}년 {month}월")
-
-    # 1. 기간 생성
-    period_id = get_or_create_period(year, month)
-    log_id = create_sync_log(period_id)
-
-    # 2. 시트 읽기
-    creds = Credentials.from_service_account_file(credentials_file, scopes=scopes)
-    client = gspread.authorize(creds)
-    spreadsheet = client.open_by_key(cafe_sheet_id)
-    worksheets = spreadsheet.worksheets()
-
-    branch_data = {}
-    for ws in worksheets:
-        tab = ws.title.strip()
-        if tab in SKIP_TABS:
-            continue
-        # 지점 필터
-        if branch_filter and branch_filter not in tab:
-            continue
+        # 지연 import
         try:
-            data = ws.get_all_values()
-            if data and len(data) >= 5:
-                branch_data[tab] = data
-        except Exception as e:
-            print(f"  시트 읽기 오류 ({tab}): {e}")
+            import gspread
+            from google.oauth2.service_account import Credentials
+        except ImportError:
+            return {"processed": 0, "total_articles": 0,
+                    "errors": ["gspread/google-auth 패키지가 설치되지 않았습니다."]}
 
-    print(f"  읽은 지점 수: {len(branch_data)}")
+        from events.db import get_evt_branch_id
+        from cafe.db import (
+            get_or_create_period,
+            get_or_create_branch_period,
+            update_branch_metadata,
+            upsert_article,
+            upsert_comment,
+            create_sync_log,
+            update_sync_log,
+            load_cafe_articles,
+        )
 
-    # 3. 각 지점 처리
-    from shared.db import get_conn, CAFE_DB, EQUIPMENT_DB
-    conn = get_conn(CAFE_DB)
-    equip_conn = get_conn(EQUIPMENT_DB)
+        # 환경변수에서 시트 ID
+        cafe_sheet_id = os.environ.get("CAFE_SHEET_ID", "")
+        credentials_file = os.environ.get(
+            "GOOGLE_CREDENTIALS_FILE",
+            os.path.join(os.path.dirname(__file__), "..", "credentials.json"),
+        )
+        scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
-    total_articles = 0
-    processed = 0
-    errors = []
+        if not cafe_sheet_id:
+            return {"processed": 0, "total_articles": 0,
+                    "errors": ["CAFE_SHEET_ID 환경변수가 설정되지 않았습니다."]}
+        if not os.path.exists(credentials_file):
+            return {"processed": 0, "total_articles": 0,
+                    "errors": [f"credentials.json을 찾을 수 없습니다: {credentials_file}"]}
 
-    for tab_name, rows in branch_data.items():
-        resolved = BRANCH_ALIAS.get(tab_name, tab_name)
+        print(f"카페 원고 가져오기 시작: {year}년 {month}월")
 
-        # evt_branches에서 지점 ID 찾기 (equipment.db)
-        try:
-            branch_id = get_evt_branch_id(equip_conn, resolved)
+        # 1. 기간 생성
+        period_id = get_or_create_period(year, month)
+        log_id = create_sync_log(period_id)
+
+        # 2. 시트 읽기
+        creds = Credentials.from_service_account_file(credentials_file, scopes=scopes)
+        client = gspread.authorize(creds)
+        spreadsheet = client.open_by_key(cafe_sheet_id)
+        worksheets = spreadsheet.worksheets()
+
+        branch_data = {}
+        for ws in worksheets:
+            tab = ws.title.strip()
+            if tab in SKIP_TABS:
+                continue
+            # 지점 필터
+            if branch_filter and branch_filter not in tab:
+                continue
+            try:
+                data = ws.get_all_values()
+                if data and len(data) >= 5:
+                    branch_data[tab] = data
+            except Exception as e:
+                print(f"  시트 읽기 오류 ({tab}): {e}")
+
+        print(f"  읽은 지점 수: {len(branch_data)}")
+
+        # 3. 각 지점 처리
+        from shared.db import get_conn, CAFE_DB, EQUIPMENT_DB
+        conn = get_conn(CAFE_DB)
+        equip_conn = get_conn(EQUIPMENT_DB)
+
+        total_articles = 0
+        processed = 0
+        errors = []
+
+        for tab_name, rows in branch_data.items():
+            resolved = BRANCH_ALIAS.get(tab_name, tab_name)
+
+            # evt_branches에서 지점 ID 찾기 (equipment.db)
+            try:
+                branch_id = get_evt_branch_id(equip_conn, resolved)
+                if branch_id is None:
+                    branch_id = get_evt_branch_id(equip_conn, re.sub(r"점$", "", resolved))
+            except Exception as e:
+                errors.append(f"{tab_name}: 지점 조회 오류 - {e}")
+                continue
             if branch_id is None:
-                branch_id = get_evt_branch_id(equip_conn, re.sub(r"점$", "", resolved))
-        except Exception as e:
-            errors.append(f"{tab_name}: 지점 조회 오류 - {e}")
-            continue
-        if branch_id is None:
-            errors.append(f"{tab_name}: DB에 지점 없음")
-            continue
+                errors.append(f"{tab_name}: DB에 지점 없음")
+                continue
 
+            try:
+                bp_id = get_or_create_branch_period(period_id, branch_id)
+
+                # 헤더 메타데이터 파싱 (Row 1~3)
+                meta = _parse_header_meta(rows)
+                update_branch_metadata(bp_id, **meta)
+
+                # 원고 파싱 (Row 5~24, 0-indexed: rows[4]~rows[23])
+                count = 0
+                for i in range(4, min(24, len(rows))):
+                    row = rows[i]
+                    if len(row) < 8:
+                        continue
+
+                    # E열(idx 4)=순번
+                    order_str = row[4].strip() if len(row) > 4 else ""
+                    if not order_str or not order_str.isdigit():
+                        continue
+
+                    article_order = int(order_str)
+                    article_id = upsert_article(
+                        bp_id, article_order,
+                        keyword=_safe_get(row, 1),       # B열
+                        category=_safe_get(row, 2),       # C열
+                        equipment_name=_safe_get(row, 3), # D열
+                        photo_ref=_safe_get(row, 5),      # F열
+                        title=_safe_get(row, 6),          # G열
+                        body=_safe_get(row, 7),           # H열
+                    )
+
+                    # 댓글 3쌍: I/J, K/L, M/N (idx 8~13)
+                    for slot in range(1, 4):
+                        c_idx = 6 + (slot * 2)     # 8, 10, 12
+                        r_idx = c_idx + 1          # 9, 11, 13
+                        comment = _safe_get(row, c_idx)
+                        reply = _safe_get(row, r_idx)
+                        if comment or reply:
+                            upsert_comment(article_id, slot, comment, reply)
+
+                    # 본문이 있으면 상태를 '작성완료'로
+                    if _safe_get(row, 7):
+                        from cafe.db import change_status
+                        try:
+                            change_status(article_id, "작성완료", changed_by="시트가져오기")
+                        except Exception as e:
+                            print(f"[WARN] 상태 변경 실패 (article_id={article_id}): {e}")
+
+                    count += 1
+
+                total_articles += count
+                processed += 1
+                print(f"  {tab_name}: {count}건 저장")
+
+                # 캐시 없음
+
+            except Exception as e:
+                errors.append(f"{tab_name}: {e}")
+                print(f"  {tab_name}: 오류 - {e}")
+
+        conn.close()  # sync는 장시간 작업이므로 명시적 close 유지
+        equip_conn.close()
+
+        # 4. 로그 업데이트
+        status = "completed" if not errors else "completed_with_errors"
+        error_json = json.dumps([{"error": e} for e in errors], ensure_ascii=False) if errors else None
+        update_sync_log(log_id, status, processed, total_articles, error_json)
+
+        # sync_log 통합 기록
         try:
-            bp_id = get_or_create_branch_period(period_id, branch_id)
+            from shared.db import get_conn as _gc, EQUIPMENT_DB as _edb
+            _conn = _gc(_edb)
+            branch_label = branch_filter if branch_filter else "전체"
+            detail_parts = [f"{year}년 {month}월 원고 / 지점={branch_label}"]
+            if errors:
+                detail_parts.append(f"실패 {len(errors)}건")
+            _conn.execute("""
+                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, ("cafe_sync", total_articles, 0, len(errors), " / ".join(detail_parts), triggered_by))
+            _conn.commit()
+            _conn.close()
+        except Exception as _e:
+            print(f"  [WARN] sync_log 기록 실패: {_e}")
 
-            # 헤더 메타데이터 파싱 (Row 1~3)
-            meta = _parse_header_meta(rows)
-            update_branch_metadata(bp_id, **meta)
+        result = {"processed": processed, "total_articles": total_articles, "errors": errors}
+        print(f"가져오기 완료: {processed}개 지점, {total_articles}건")
+        return result
 
-            # 원고 파싱 (Row 5~24, 0-indexed: rows[4]~rows[23])
-            count = 0
-            for i in range(4, min(24, len(rows))):
-                row = rows[i]
-                if len(row) < 8:
-                    continue
-
-                # E열(idx 4)=순번
-                order_str = row[4].strip() if len(row) > 4 else ""
-                if not order_str or not order_str.isdigit():
-                    continue
-
-                article_order = int(order_str)
-                article_id = upsert_article(
-                    bp_id, article_order,
-                    keyword=_safe_get(row, 1),       # B열
-                    category=_safe_get(row, 2),       # C열
-                    equipment_name=_safe_get(row, 3), # D열
-                    photo_ref=_safe_get(row, 5),      # F열
-                    title=_safe_get(row, 6),          # G열
-                    body=_safe_get(row, 7),           # H열
-                )
-
-                # 댓글 3쌍: I/J, K/L, M/N (idx 8~13)
-                for slot in range(1, 4):
-                    c_idx = 6 + (slot * 2)     # 8, 10, 12
-                    r_idx = c_idx + 1          # 9, 11, 13
-                    comment = _safe_get(row, c_idx)
-                    reply = _safe_get(row, r_idx)
-                    if comment or reply:
-                        upsert_comment(article_id, slot, comment, reply)
-
-                # 본문이 있으면 상태를 '작성완료'로
-                if _safe_get(row, 7):
-                    from cafe.db import change_status
-                    try:
-                        change_status(article_id, "작성완료", changed_by="시트가져오기")
-                    except Exception as e:
-                        print(f"[WARN] 상태 변경 실패 (article_id={article_id}): {e}")
-
-                count += 1
-
-            total_articles += count
-            processed += 1
-            print(f"  {tab_name}: {count}건 저장")
-
-            # 캐시 없음
-
-        except Exception as e:
-            errors.append(f"{tab_name}: {e}")
-            print(f"  {tab_name}: 오류 - {e}")
-
-    conn.close()  # sync는 장시간 작업이므로 명시적 close 유지
-    equip_conn.close()
-
-    # 4. 로그 업데이트
-    status = "completed" if not errors else "completed_with_errors"
-    error_json = json.dumps([{"error": e} for e in errors], ensure_ascii=False) if errors else None
-    update_sync_log(log_id, status, processed, total_articles, error_json)
-
-    # sync_log 통합 기록
-    try:
-        from shared.db import get_conn as _gc, EQUIPMENT_DB as _edb
-        _conn = _gc(_edb)
-        branch_label = branch_filter if branch_filter else "전체"
-        detail_parts = [f"{year}년 {month}월 원고 / 지점={branch_label}"]
-        if errors:
-            detail_parts.append(f"실패 {len(errors)}건")
-        _conn.execute("""
-            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, ("cafe_sync", total_articles, 0, len(errors), " / ".join(detail_parts), triggered_by))
-        _conn.commit()
-        _conn.close()
-    except Exception as _e:
-        print(f"  [WARN] sync_log 기록 실패: {_e}")
-
-    result = {"processed": processed, "total_articles": total_articles, "errors": errors}
-    print(f"가져오기 완료: {processed}개 지점, {total_articles}건")
-    return result
+    except Exception as e:
+        # 실패 로그 기록 (별도 연결 사용 — 기존 conn은 롤백 상태일 수 있음)
+        try:
+            from shared.db import get_conn as _gc, EQUIPMENT_DB as _edb
+            err_conn = _gc(_edb)
+            err_conn.execute(
+                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by) "
+                "VALUES (?, 0, 0, 0, ?, ?)",
+                ("cafe_sync", f"실패: {str(e)[:200]}", triggered_by),
+            )
+            err_conn.commit()
+            err_conn.close()
+        except Exception:
+            pass  # 실패 로그 기록도 실패하면 그냥 진행
+        raise
 
 
 def _parse_header_meta(rows: list) -> dict:

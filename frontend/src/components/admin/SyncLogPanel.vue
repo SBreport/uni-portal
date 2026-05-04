@@ -64,6 +64,28 @@ const evtDetailLoading = ref<Set<number>>(new Set())
 const evtDetailData = ref<Map<number, IngestionLog>>(new Map())
 const evtDetailError = ref<Map<number, string>>(new Map())
 
+// 실패 항목 필터 검색어 (entryId → 검색어)
+const evtErrorFilter = ref<Map<number, string>>(new Map())
+
+// 실패 항목 필터링 (검색어 적용, 최대 30건)
+const EVT_ERROR_LIMIT = 30
+
+function getFilteredErrors(entryId: number, errorLog: IngestionError[]): { items: IngestionError[]; total: number; overflow: number } {
+  const q = (evtErrorFilter.value.get(entryId) ?? '').trim().toLowerCase()
+  const filtered = q
+    ? errorLog.filter(item => item.error.toLowerCase().includes(q) || (item.branch ?? '').toLowerCase().includes(q))
+    : errorLog
+  const total = filtered.length
+  const items = filtered.slice(0, EVT_ERROR_LIMIT)
+  return { items, total, overflow: Math.max(0, total - EVT_ERROR_LIMIT) }
+}
+
+function setErrorFilter(entryId: number, val: string) {
+  const m = new Map(evtErrorFilter.value)
+  m.set(entryId, val)
+  evtErrorFilter.value = m
+}
+
 // 스크롤 컨테이너 ref
 const scrollContainer = ref<HTMLElement | null>(null)
 
@@ -405,18 +427,35 @@ onUnmounted(() => {
                       - {{ cat.label }}: {{ cat.count }}건
                     </div>
                   </div>
-                  <!-- 실패 항목 처음 10건 -->
+                  <!-- 실패 항목 (검색 + 최대 30건) -->
                   <div v-if="evtDetailData.get(entry.id)!.error_log.length > 0">
-                    <div class="text-[10px] font-medium text-slate-500 mb-0.5 mt-1">
-                      실패 항목 (처음 10건)
+                    <div class="text-[10px] font-medium text-slate-500 mt-1 mb-0.5">
+                      실패 항목 (전체 {{ evtDetailData.get(entry.id)!.error_log.length }}건)
                     </div>
-                    <div
-                      v-for="(item, idx) in evtDetailData.get(entry.id)!.error_log.slice(0, 10)"
-                      :key="idx"
-                      class="text-[11px] text-slate-600 pl-2 truncate"
-                    >
-                      - {{ item.branch ?? '?' }}: {{ item.error }}
-                    </div>
+                    <!-- 검색 박스 -->
+                    <input
+                      type="text"
+                      :value="evtErrorFilter.get(entry.id) ?? ''"
+                      @input="setErrorFilter(entry.id, ($event.target as HTMLInputElement).value)"
+                      placeholder="실패 항목 필터..."
+                      class="w-full text-[10px] px-1.5 py-0.5 border border-slate-200 rounded bg-white text-slate-600 placeholder-slate-300 mb-1 focus:outline-none focus:border-slate-400"
+                    />
+                    <!-- 필터링된 항목 -->
+                    <template v-if="getFilteredErrors(entry.id, evtDetailData.get(entry.id)!.error_log) as filtered">
+                      <div
+                        v-for="(item, idx) in filtered.items"
+                        :key="idx"
+                        class="text-[11px] text-slate-600 pl-2 truncate"
+                      >
+                        - {{ item.branch ?? '?' }}: {{ item.error }}
+                      </div>
+                      <div v-if="filtered.overflow > 0" class="text-[10px] text-slate-400 pl-2 mt-0.5">
+                        외 {{ filtered.overflow }}건 더 있음
+                      </div>
+                      <div v-if="filtered.total === 0" class="text-[10px] text-slate-400 pl-2">
+                        일치하는 항목 없음
+                      </div>
+                    </template>
                   </div>
                   <div v-else class="text-[11px] text-slate-400">에러 없음</div>
                 </div>

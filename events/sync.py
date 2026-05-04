@@ -185,9 +185,10 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
     errors = []
 
     for tab_name, rows in branch_data.items():
-        branch_id = get_evt_branch_id(conn, tab_name)
+        resolved_name = BRANCH_ALIAS.get(tab_name, tab_name)
+        branch_id = get_evt_branch_id(conn, resolved_name)
         if branch_id is None:
-            branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", tab_name))
+            branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", resolved_name))
         if branch_id is None:
             errors.append(f"{tab_name}: DB에 지점 없음")
             continue

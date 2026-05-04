@@ -13,7 +13,7 @@ from typing import Optional
 
 import requests
 
-from shared.db import get_conn, EQUIPMENT_DB
+from shared.db import get_conn, EQUIPMENT_DB, log_sync
 
 logger = logging.getLogger(__name__)
 
@@ -192,13 +192,11 @@ def _run_check_all_inner(triggered_by: str) -> dict:
         if inactive_count > 0:
             detail = f"실패: 추적 미설정 키워드 {inactive_count}건. " + detail
 
-        conn2.execute("""
-            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
-            VALUES ('rank_check_auto', ?, ?, 0, ?, ?, ?)
-        """, (success_count, skipped_count, detail, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
-        conn2.commit()
     finally:
         conn2.close()
+
+    log_sync("rank_check_auto", added=success_count, skipped=skipped_count,
+             detail=detail, triggered_by=triggered_by)
 
     return {
         "ok": True,

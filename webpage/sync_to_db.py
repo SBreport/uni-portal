@@ -4,7 +4,7 @@ import logging
 import threading
 from datetime import date
 
-from shared.db import get_conn, EQUIPMENT_DB
+from shared.db import get_conn, EQUIPMENT_DB, log_sync
 from shared.branch_resolver import resolve_evt_branch_id
 
 # 수동 매핑은 evt_branches.aliases 컬럼으로 이전됨 (resolver가 자동 처리).
@@ -142,29 +142,18 @@ def _sync_all_to_db_inner(target_month: str | None, triggered_by: str) -> dict:
             "agency_changes": agency_changes,
         }
 
-        from datetime import datetime
         detail = f"{sheets_processed}개 시트 (실행사별)"
         if agency_changes:
             detail += f", 실행사 변경 {len(agency_changes)}건"
-        conn.execute("""
-            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
-            VALUES (?, ?, 0, 0, ?, ?, ?)
-        """, ("webpage_sheets_to_db", total_inserted, detail,
-              datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
-        conn.commit()
+        log_sync("webpage_sheets_to_db", added=total_inserted, detail=detail,
+                 triggered_by=triggered_by)
 
         logger.info(f"[webpage_sync] 완료: {result}")
         return result
     except Exception as e:
         logger.error(f"[webpage_sync] 실패: {e}", exc_info=True)
         try:
-            from datetime import datetime
-            conn.execute("""
-                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
-                VALUES (?, 0, 0, 0, ?, ?, ?)
-            """, ("webpage_sheets_to_db", f"실패: {e}",
-                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
-            conn.commit()
+            log_sync("webpage_sheets_to_db", detail=f"실패: {e}", triggered_by=triggered_by)
         except Exception:
             pass
         return {"ok": False, "error": str(e)}

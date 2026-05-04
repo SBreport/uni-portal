@@ -141,11 +141,11 @@ function formatDate(iso: string) {
             </div>
             <div>
               <p class="text-xs text-slate-400 mb-1">저번주</p>
-              <p class="text-xl font-semibold text-slate-400 tabular-nums">{{ data.blog.last_week }}</p>
+              <p class="text-2xl font-bold text-slate-500 tabular-nums">{{ data.blog.last_week }}</p>
             </div>
             <div v-if="data.blog.review_count">
-              <p class="text-xs text-rose-500 mb-1 font-medium">⚠ 검토</p>
-              <p class="text-2xl font-bold text-rose-600 tabular-nums">{{ data.blog.review_count }}</p>
+              <p class="text-xs text-slate-400 mb-1">검토</p>
+              <p class="text-2xl font-bold text-rose-500 tabular-nums">{{ data.blog.review_count }}</p>
             </div>
           </div>
         </router-link>
@@ -160,15 +160,15 @@ function formatDate(iso: string) {
           <div class="grid grid-cols-3 gap-2">
             <div>
               <p class="text-xs text-slate-400 mb-1">성공</p>
-              <p class="text-xl font-semibold text-blue-600 tabular-nums">{{ data.place.success }}</p>
+              <p class="text-2xl font-bold text-blue-600 tabular-nums">{{ data.place.success }}</p>
             </div>
             <div>
-              <p class="text-xs text-rose-500 mb-1 font-medium">⚠ 이탈</p>
-              <p class="text-2xl font-bold text-rose-600 tabular-nums">{{ data.place.leak }}</p>
+              <p class="text-xs text-slate-400 mb-1">이탈</p>
+              <p class="text-2xl font-bold text-rose-500 tabular-nums">{{ data.place.leak }}</p>
             </div>
             <div>
               <p class="text-xs text-slate-400 mb-1">미점유</p>
-              <p class="text-xl font-semibold text-slate-400 tabular-nums">{{ data.place.midal }}</p>
+              <p class="text-2xl font-bold text-slate-400 tabular-nums">{{ data.place.midal }}</p>
             </div>
           </div>
         </router-link>
@@ -183,15 +183,15 @@ function formatDate(iso: string) {
           <div class="grid grid-cols-3 gap-2">
             <div>
               <p class="text-xs text-slate-400 mb-1">성공</p>
-              <p class="text-xl font-semibold text-emerald-600 tabular-nums">{{ data.webpage.success }}</p>
+              <p class="text-2xl font-bold text-emerald-600 tabular-nums">{{ data.webpage.success }}</p>
             </div>
             <div>
-              <p class="text-xs text-amber-600 mb-1 font-medium">⚠ 이탈</p>
-              <p class="text-2xl font-bold text-amber-600 tabular-nums">{{ data.webpage.leak }}</p>
+              <p class="text-xs text-slate-400 mb-1">이탈</p>
+              <p class="text-2xl font-bold text-amber-500 tabular-nums">{{ data.webpage.leak }}</p>
             </div>
             <div>
               <p class="text-xs text-slate-400 mb-1">미점유</p>
-              <p class="text-xl font-semibold text-slate-400 tabular-nums">{{ data.webpage.midal }}</p>
+              <p class="text-2xl font-bold text-slate-400 tabular-nums">{{ data.webpage.midal }}</p>
             </div>
           </div>
         </router-link>
@@ -270,11 +270,12 @@ function formatDate(iso: string) {
             <p v-else class="text-xs text-slate-400">동기화 이력 없음</p>
           </div>
 
-          <!-- 다음 자동 실행 — 카드 자연 폭 -->
+          <!-- 다음 자동 실행 — grid 정렬로 라벨/시각 가로 위치 통일 -->
           <div class="bg-white border border-slate-200 rounded-lg p-4 w-full sm:w-auto sm:min-w-[280px]">
             <p class="text-xs font-medium text-slate-500 mb-3">다음 자동 실행</p>
             <div v-if="sortedNextJobs.length" class="flex flex-col gap-1.5">
-              <div v-for="job in sortedNextJobs" :key="job.id" class="flex items-center gap-4 text-xs">
+              <div v-for="job in sortedNextJobs" :key="job.id"
+                   class="grid grid-cols-[120px_auto] gap-3 text-xs">
                 <span class="text-slate-600">{{ job.label || job.id }}</span>
                 <span class="font-medium text-slate-700 tabular-nums">{{ formatJobNextRun(job.next_run) }}</span>
               </div>

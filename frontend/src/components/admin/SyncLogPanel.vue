@@ -242,10 +242,11 @@ async function fetchLogs() {
     const wasOnFirstPage = currentPage.value === 1
     logs.value = newData
 
-    // 새 데이터 기준으로 expanded 갱신 (실패 + 부분 실패 기본 펼침)
-    const newExpanded = new Set<number>()
+    // 완전 실패만 기본 펼침 (부분 실패는 amber 뱃지로 강조됨, 자동 펼치면 다른 카드 가림)
+    // 사용자가 이미 펼친 항목은 유지
+    const newExpanded = new Set<number>(expanded.value)
     for (const entry of newData) {
-      if (entry.is_failed || parseFailCount(entry.detail) > 0) {
+      if (entry.is_failed) {
         newExpanded.add(entry.id)
       }
     }

@@ -92,7 +92,7 @@ function formatDate(iso: string) {
 </script>
 
 <template>
-  <div class="p-5">
+  <div class="p-5 max-w-7xl">
     <!-- 헤더 -->
     <div class="mb-6">
       <h2 class="text-xl font-bold text-slate-800">대시보드</h2>
@@ -124,12 +124,12 @@ function formatDate(iso: string) {
         </div>
       </div>
 
-      <!-- 섹션 1: 마케팅 채널 (핵심 KPI — 가장 큰 시각 강도) -->
+      <!-- 섹션 1: 마케팅 채널 — 12 컬럼 grid (col-span-4 × 3 = 12) -->
       <h3 class="text-base font-bold text-slate-700 mb-3">마케팅 채널</h3>
-      <div class="flex flex-wrap gap-4 mb-10">
+      <div class="grid grid-cols-12 gap-4 mb-10">
         <!-- 블로그: 이번주 / 저번주 / 검토 -->
         <router-link to="/blog"
-          class="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition block w-full sm:w-[300px]">
+          class="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition block col-span-12 sm:col-span-4">
           <div class="flex items-baseline gap-3 mb-3">
             <span class="text-sm font-semibold text-blue-700">블로그 발행</span>
             <span class="text-xs text-slate-400">총 {{ data.blog.total.toLocaleString() }}건</span>
@@ -152,7 +152,7 @@ function formatDate(iso: string) {
 
         <!-- 플레이스: D-2 기준 성공/이탈/미점유 -->
         <router-link to="/place"
-          class="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition block w-full sm:w-[300px]">
+          class="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition block col-span-12 sm:col-span-4">
           <div class="flex items-baseline gap-3 mb-3">
             <span class="text-sm font-semibold text-rose-700">플레이스 상위노출</span>
             <span class="text-xs text-slate-400">{{ data.place.as_of || '-' }} 기준</span>
@@ -175,7 +175,7 @@ function formatDate(iso: string) {
 
         <!-- 웹페이지: D-2 기준 -->
         <router-link to="/webpage"
-          class="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition block w-full sm:w-[300px]">
+          class="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition block col-span-12 sm:col-span-4">
           <div class="flex items-baseline gap-3 mb-3">
             <span class="text-sm font-semibold text-emerald-700">웹페이지 노출</span>
             <span class="text-xs text-slate-400">{{ data.webpage.as_of || '-' }} 기준</span>
@@ -197,30 +197,30 @@ function formatDate(iso: string) {
         </router-link>
       </div>
 
-      <!-- 섹션 2: 운영 현황 (보조 컨텍스트 — 시각 강도 약화) -->
+      <!-- 섹션 2: 운영 현황 — 12 컬럼 grid (col-span-3 × 4 = 12) -->
       <h3 class="text-sm font-medium text-slate-500 mb-3">운영 현황</h3>
-      <div class="flex flex-wrap gap-3 mb-10">
+      <div class="grid grid-cols-12 gap-3 mb-10">
         <router-link to="/branches"
-          class="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:border-blue-300 transition block w-full sm:w-44">
+          class="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:border-blue-300 transition block col-span-6 sm:col-span-3">
           <p class="text-xs text-slate-400 mb-0.5">전체 지점</p>
           <p class="text-lg font-semibold text-slate-700 tabular-nums">{{ data.branches }}<span class="text-xs font-normal text-slate-400 ml-1">개</span></p>
         </router-link>
         <router-link to="/equipment"
-          class="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:border-blue-300 transition block w-full sm:w-44">
+          class="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:border-blue-300 transition block col-span-6 sm:col-span-3">
           <p class="text-xs text-slate-400 mb-0.5">보유장비</p>
           <p class="text-lg font-semibold text-slate-700 tabular-nums">{{ data.equipment.total.toLocaleString() }}
             <span class="text-xs font-normal text-slate-400 ml-1">사진 {{ photoRate }}%</span>
           </p>
         </router-link>
         <router-link to="/events"
-          class="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:border-blue-300 transition block w-full sm:w-44">
+          class="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:border-blue-300 transition block col-span-6 sm:col-span-3">
           <p class="text-xs text-slate-400 mb-0.5">이벤트 ({{ data.events.label }})</p>
           <p class="text-lg font-semibold text-slate-700 tabular-nums">{{ data.events.count.toLocaleString() }}
             <span class="text-xs font-normal text-slate-400 ml-1">건</span>
           </p>
         </router-link>
         <router-link to="/encyclopedia"
-          class="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:border-blue-300 transition block w-full sm:w-44">
+          class="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:border-blue-300 transition block col-span-6 sm:col-span-3">
           <p class="text-xs text-slate-400 mb-0.5">시술사전</p>
           <p class="text-lg font-semibold text-slate-700 tabular-nums">{{ data.dictionary.total }}
             <span class="text-xs font-normal text-slate-400 ml-1">검증 {{ data.dictionary.verified }}건</span>
@@ -228,12 +228,12 @@ function formatDate(iso: string) {
         </router-link>
       </div>
 
-      <!-- 섹션 3: 동기화 (admin only — 운영 메타) -->
+      <!-- 섹션 3: 동기화 — 12 컬럼 grid (col-span-6 × 2 = 12) -->
       <div v-if="auth.role === 'admin'" class="mb-6">
         <h3 class="text-sm font-medium text-slate-500 mb-3">동기화</h3>
-        <div class="flex flex-wrap gap-4">
+        <div class="grid grid-cols-12 gap-4">
           <!-- 최근 동기화 -->
-          <div class="bg-white border border-slate-200 rounded-lg p-4 w-full sm:w-[400px]">
+          <div class="bg-white border border-slate-200 rounded-lg p-4 col-span-12 sm:col-span-6">
             <p class="text-xs font-medium text-slate-500 mb-3">최근 동기화</p>
             <div v-if="data.recent_syncs && data.recent_syncs.length" class="flex flex-col gap-1.5">
               <div v-for="(s, i) in data.recent_syncs" :key="i"
@@ -270,12 +270,12 @@ function formatDate(iso: string) {
             <p v-else class="text-xs text-slate-400">동기화 이력 없음</p>
           </div>
 
-          <!-- 다음 자동 실행 — 폭 통일 (같은 섹션 카드는 같은 폭) -->
-          <div class="bg-white border border-slate-200 rounded-lg p-4 w-full sm:w-[400px]">
+          <!-- 다음 자동 실행 -->
+          <div class="bg-white border border-slate-200 rounded-lg p-4 col-span-12 sm:col-span-6">
             <p class="text-xs font-medium text-slate-500 mb-3">다음 자동 실행</p>
             <div v-if="sortedNextJobs.length" class="flex flex-col gap-1.5">
               <div v-for="job in sortedNextJobs" :key="job.id"
-                   class="grid grid-cols-[120px_auto] gap-3 text-xs">
+                   class="grid grid-cols-2 gap-3 text-xs">
                 <span class="text-slate-600">{{ job.label || job.id }}</span>
                 <span class="font-medium text-slate-700 tabular-nums">{{ formatJobNextRun(job.next_run) }}</span>
               </div>

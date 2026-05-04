@@ -3,6 +3,7 @@
 각 지점 시트는 다음 구조를 가짐:
   - 상단: 제목 행 ("[지점명] 3-4월 이벤트")
   - ■ 카테고리 마커 행 (예: "■ 단독이벤트")
+  - # 서브카테고리 마커 행 (예: "#레이저 리프팅") — 현재 DB 단일 카테고리이므로 덮어쓰기
   - 헤더 행: 이벤트명 | 정상가 | 최종 이벤트가 | 비고
   - 데이터 행들
   - (반복)
@@ -62,26 +63,45 @@ def split_components(name: str) -> list[str]:
     return [name.strip()]
 
 
+def _normalize_cell(cell: str) -> str:
+    """멀티라인 헤더 셀 처리: 개행이 있으면 첫 줄만 반환."""
+    return cell.split("\n")[0].strip()
+
+
 def find_category_marker(row_text: str) -> str | None:
-    """행 텍스트에서 ■ 카테고리 마커를 찾아 카테고리명 반환."""
+    """행 텍스트에서 ■ 또는 # 카테고리 마커를 찾아 카테고리명 반환.
+
+    ■ 마커: 메인 카테고리
+    # 마커: 서브카테고리 — 현재 DB 단일 카테고리라 그냥 덮어쓰기
+    # 규칙: # 다음에 공백 또는 한글이 바로 오는 경우만 인정 (해시태그/URL의 # 제외)
+    """
     if "■" in row_text:
         cleaned = row_text.replace("■", "").strip()
         return cleaned if cleaned else None
+
+    # # 마커: 공백 또는 한글이 바로 뒤따르는 경우만 인정
+    hash_match = re.match(r"#([ ㄱ-힣가-힣].*)$", row_text.strip())
+    if hash_match:
+        return hash_match.group(1).strip() or None
+
     return None
 
 
 _NAME_KEYWORDS = {"이벤트명", "시술명", "상품명", "항목", "메뉴명"}
 _REGULAR_KEYWORDS = {"정상"}    # "정상가", "정상 가격" etc.
 _EVENT_PRICE_KEYWORDS = {"이벤트"}  # "이벤트가", "이벤트 제안가", "최종 이벤트가" etc.
-_NOTES_KEYWORDS = {"비고", "참고", "메모", "설명"}
+_NOTES_KEYWORDS = {"비고", "참고", "메모", "설명", "특이사항", "관리 순서"}
 
 
 def is_header_row(cells: list[str]) -> bool:
-    """헤더 행 여부 판별 — 셀 단위로 이름 컬럼과 가격 컬럼을 각각 확인."""
+    """헤더 행 여부 판별 — 셀 단위로 이름 컬럼과 가격 컬럼을 각각 확인.
+
+    멀티라인 셀은 첫 줄만 사용해서 키워드 매칭한다.
+    """
     found_name = False
     found_price = False
     for cell in cells:
-        ct = cell.strip()
+        ct = _normalize_cell(cell)
         if not ct:
             continue
         # 이름 컬럼 체크 (우선순위 높음)
@@ -93,6 +113,30 @@ def is_header_row(cells: list[str]) -> bool:
             # "이벤트"가 포함되지만 이름 키워드가 아닌 셀 → 가격 컬럼
             found_price = True
     return found_name and found_price
+
+
+def _pick_best_name_col(rows: list[list[str]], candidates: list[int]) -> int:
+    """이벤트명 후보 컬럼이 여럿일 때 데이터 샘플로 최적 컬럼을 선택.
+
+    이후 최대 5개 행을 샘플링하여 비어있지 않은 비율이 높은 컬럼 반환.
+    동률이면 가장 우측(인덱스가 큰) 컬럼 반환.
+    """
+    sample_rows = rows[:5]
+    best_col = candidates[-1]  # 기본값: 가장 우측
+    best_fill = -1.0
+    for col in candidates:
+        filled = sum(
+            1 for r in sample_rows
+            if col < len(r) and r[col].strip()
+        )
+        ratio = filled / len(sample_rows) if sample_rows else 0.0
+        if ratio > best_fill:
+            best_fill = ratio
+            best_col = col
+        elif ratio == best_fill:
+            # 동률: 우측 우선
+            best_col = max(best_col, col)
+    return best_col
 
 
 def infer_columns_from_data(row: list[str]) -> dict | None:
@@ -152,6 +196,23 @@ def infer_columns_from_data(row: list[str]) -> dict | None:
     }
 
 
+def _collect_notes(row: list[str], col_notes: int) -> str:
+    """col_notes부터 행 끝까지 비어있지 않은 셀을 ' / '로 합쳐 반환.
+
+    빈 셀 제외, 중복 제거(순서 유지).
+    """
+    if col_notes >= len(row):
+        return ""
+    seen: list[str] = []
+    seen_set: set[str] = set()
+    for cell in row[col_notes:]:
+        val = cell.strip()
+        if val and val not in seen_set:
+            seen.append(val)
+            seen_set.add(val)
+    return " / ".join(seen)
+
+
 def parse_branch_sheet(
     rows: list[list[str]], branch_name: str
 ) -> list[ParsedEvent]:
@@ -166,38 +227,63 @@ def parse_branch_sheet(
     col_event = 2
     col_notes = 3
 
-    for row in rows:
+    for row_idx, row in enumerate(rows):
         if not any(cell.strip() for cell in row):
             continue
 
         full_text = " ".join(cell.strip() for cell in row)
 
+        # --- 카테고리 마커 감지 (■ 또는 #) ---
         cat = None
         for cell in row:
-            cat = find_category_marker(cell.strip())
+            # 멀티라인 셀은 첫 줄만 사용
+            first_line = cell.split("\n")[0].strip()
+            cat = find_category_marker(first_line)
             if cat:
                 break
         if cat is None:
-            cat = find_category_marker(full_text)
+            cat = find_category_marker(full_text.split("\n")[0])
         if cat:
             current_category = cat
             header_found = False
             continue
 
+        # --- 헤더 행 감지 ---
         if is_header_row(row):
+            name_col_candidates: list[int] = []
+            col_regular_new = col_regular
+            col_event_new = col_event
+            col_notes_new = -1
+
             for i, cell in enumerate(row):
-                cell_text = cell.strip()
+                # 멀티라인 셀은 첫 줄만 사용
+                cell_text = _normalize_cell(cell)
                 if any(kw in cell_text for kw in _NAME_KEYWORDS):
-                    col_name = i
+                    name_col_candidates.append(i)
                 elif "정상" in cell_text:
-                    col_regular = i
+                    col_regular_new = i
                 elif "이벤트" in cell_text:
-                    col_event = i
+                    col_event_new = i
                 elif any(kw in cell_text for kw in _NOTES_KEYWORDS):
-                    col_notes = i
+                    col_notes_new = i
+
+            # 이벤트명 컬럼 다중 매칭 처리 (광교 케이스)
+            if len(name_col_candidates) >= 2:
+                # 이후 데이터 행 5개 샘플로 최적 컬럼 선택
+                remaining_rows = rows[row_idx + 1:]
+                col_name = _pick_best_name_col(remaining_rows, name_col_candidates)
+            elif name_col_candidates:
+                col_name = name_col_candidates[0]
+
+            col_regular = col_regular_new
+            col_event = col_event_new
+
             # 비고 컬럼 미감지 시 마지막 가격 컬럼 다음으로 설정
-            if col_notes <= max(col_name, col_regular, col_event):
+            if col_notes_new >= 0:
+                col_notes = col_notes_new
+            elif col_notes <= max(col_name, col_regular, col_event):
                 col_notes = max(col_name, col_regular, col_event) + 1
+
             header_found = True
             continue
 
@@ -225,11 +311,22 @@ def parse_branch_sheet(
 
         regular_str = row[col_regular].strip() if col_regular < len(row) else ""
         event_str = row[col_event].strip() if col_event < len(row) else ""
-        notes_str = row[col_notes].strip() if col_notes < len(row) else ""
 
         regular_price = parse_price(regular_str)
         event_price = parse_price(event_str)
+
+        # --- 카테고리 행 안전망 (케이스 7) ---
+        # 가격 둘 다 None이고 단 하나의 셀만 텍스트가 있는 행 → 카테고리 후보
+        if regular_price is None and event_price is None:
+            non_empty_cells = [c.strip() for c in row if c.strip()]
+            if len(non_empty_cells) == 1 and non_empty_cells[0] == name:
+                current_category = name
+                continue
+
         discount_rate = calc_discount_rate(regular_price, event_price)
+
+        # --- 비고: col_notes 이후 모든 셀 합산 (케이스 3) ---
+        notes_str = _collect_notes(row, col_notes)
 
         is_pkg = detect_package(name)
         components = split_components(name) if is_pkg else [name]
@@ -263,4 +360,7 @@ def validate_parsed_events(events: list[ParsedEvent]) -> list[dict]:
             issues.append({"event": e.display_name, "issue": f"이벤트가({e.event_price}) > 정상가({e.regular_price})"})
         if e.event_price and e.event_price < 1000:
             issues.append({"event": e.display_name, "issue": f"이벤트가 이상 ({e.event_price}원)"})
+        # 가격 정보 없음 — 카테고리 행으로 오분류됐을 수 있음 (케이스 8)
+        if e.regular_price is None and e.event_price is None:
+            issues.append({"event": e.display_name, "issue": "가격 정보 없음 (카테고리 행으로 의심)"})
     return issues

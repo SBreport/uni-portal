@@ -110,7 +110,7 @@ function formatDate(iso: string) {
 </script>
 
 <template>
-  <div class="p-5 max-w-6xl">
+  <div class="p-5">
     <!-- 헤더 -->
     <div class="mb-6">
       <h2 class="text-xl font-bold text-slate-800">대시보드</h2>
@@ -128,7 +128,7 @@ function formatDate(iso: string) {
 
       <!-- ━━ 섹션 1: 마케팅 성과 ━━ -->
       <h3 class="text-sm font-bold text-slate-500 mb-3 tracking-wide">마케팅 채널</h3>
-      <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4 mb-6">
         <!-- 블로그 -->
         <router-link to="/blog"
           class="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition block">
@@ -200,7 +200,7 @@ function formatDate(iso: string) {
       </div>
 
       <!-- ━━ 섹션 2: 카페 진행 + 블로그 주간 추이 ━━ -->
-      <div class="grid grid-cols-2 gap-4 mb-6">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(360px,1fr))] gap-4 mb-6">
         <!-- 카페 발행 현황 -->
         <router-link to="/cafe"
           class="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition block">
@@ -217,7 +217,7 @@ function formatDate(iso: string) {
               <div class="bg-emerald-500 h-2.5 rounded-full transition-all" :style="{ width: cafeRate + '%' }"></div>
             </div>
           </div>
-          <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="grid grid-cols-[repeat(auto-fit,minmax(80px,1fr))] gap-2 text-center">
             <div class="bg-slate-50 rounded p-2">
               <p class="text-lg font-bold text-amber-500">{{ data.cafe.total - data.cafe.published - data.cafe.pending }}</p>
               <p class="text-xs text-slate-400">진행중</p>
@@ -254,7 +254,7 @@ function formatDate(iso: string) {
 
       <!-- ━━ 섹션 3: 운영 현황 (축소) ━━ -->
       <h3 class="text-sm font-bold text-slate-500 mb-3 tracking-wide">운영 현황</h3>
-      <div class="grid grid-cols-4 gap-3 mb-6">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3 mb-6">
         <div class="bg-white border border-slate-200 rounded-lg px-4 py-3">
           <p class="text-xs text-slate-400 mb-0.5">전체 지점</p>
           <p class="text-xl font-bold text-slate-800">{{ data.branches }}<span class="text-xs font-normal text-slate-400 ml-1">개</span></p>
@@ -303,7 +303,7 @@ function formatDate(iso: string) {
         <!-- 다음 자동 실행 패널 -->
         <div v-if="sortedNextJobs.length" class="bg-white border border-slate-200 rounded-lg p-3 mb-3">
           <p class="text-xs font-medium text-slate-500 mb-2">다음 자동 실행</p>
-          <div class="grid grid-cols-2 gap-2">
+          <div class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
             <div v-for="job in sortedNextJobs" :key="job.id" class="flex items-center justify-between">
               <span class="text-xs text-slate-600">{{ job.label || job.id }}</span>
               <span class="text-xs font-medium text-slate-700 tabular-nums">{{ formatJobNextRun(job.next_run) }}</span>

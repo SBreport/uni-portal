@@ -69,15 +69,26 @@ async function loadKeywords() {
   }
 }
 
-// 지점별 그룹핑
-const groupedKeywords = computed(() => {
-  const groups: Record<string, any[]> = {}
-  for (const kw of keywords.value) {
-    const name = kw.branch_name
-    if (!groups[name]) groups[name] = []
-    groups[name].push(kw)
+// 키워드 정렬
+const keywordsSortKey = ref<'branch' | 'keyword'>('branch')
+const keywordsSortDir = ref<'asc' | 'desc'>('asc')
+
+function toggleKeywordsSort(key: typeof keywordsSortKey.value) {
+  if (keywordsSortKey.value === key) {
+    keywordsSortDir.value = keywordsSortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    keywordsSortKey.value = key
+    keywordsSortDir.value = 'asc'
   }
-  return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
+}
+
+const sortedFilteredKeywords = computed(() => {
+  const dir = keywordsSortDir.value === 'asc' ? 1 : -1
+  return [...keywords.value].sort((a, b) => {
+    const av = keywordsSortKey.value === 'branch' ? a.branch_name : a.keyword
+    const bv = keywordsSortKey.value === 'branch' ? b.branch_name : b.keyword
+    return av.localeCompare(bv) * dir
+  })
 })
 
 
@@ -720,66 +731,63 @@ onMounted(loadKeywords)
         </div>
       </div>
 
-      <!-- 키워드 테이블 (지점별 그룹) -->
+      <!-- 평면 테이블 -->
       <div v-if="loading" class="text-sm text-slate-400 py-4 text-center">로딩 중...</div>
-      <div v-else-if="groupedKeywords.length === 0" class="text-sm text-slate-400 py-8 text-center">
-        등록된 키워드가 없습니다. 위 버튼으로 키워드를 등록하세요.
-      </div>
-      <div v-else class="space-y-3">
-        <div v-for="[branchName, kws] in groupedKeywords" :key="branchName"
-          class="bg-white border border-slate-200 rounded-lg overflow-hidden">
-          <!-- 지점 헤더 -->
-          <div class="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-bold text-slate-700">{{ shortName(branchName) }}</span>
-              <span class="text-[10px] text-slate-400">{{ kws.length }}개 키워드</span>
-            </div>
-            <button @click="runCheckBranch(kws[0].branch_id)" :disabled="checking"
-              class="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50 transition">
-              체크 실행
-            </button>
-          </div>
-          <!-- 키워드 행 -->
-          <table class="w-full text-xs">
-            <thead>
-              <tr class="border-b border-slate-100 text-slate-400">
-                <th class="text-left px-3 py-1.5 font-medium">키워드</th>
-                <th class="text-left px-2 py-1.5 font-medium">검색어</th>
-                <th class="text-left px-2 py-1.5 font-medium">Place ID</th>
-                <th class="text-center px-2 py-1.5 font-medium w-16">보장순위</th>
-                <th class="text-left px-2 py-1.5 font-medium">메모</th>
-                <th class="text-center px-2 py-1.5 font-medium w-20">액션</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="kw in kws" :key="kw.id" class="border-b border-slate-50 hover:bg-blue-50/30">
-                <template v-if="editingId === kw.id">
-                  <td class="px-3 py-1.5"><input v-model="editForm.keyword" class="w-full text-xs border rounded px-1.5 py-0.5" /></td>
-                  <td class="px-2 py-1.5"><input v-model="editForm.search_keyword" class="w-full text-xs border rounded px-1.5 py-0.5" /></td>
-                  <td class="px-2 py-1.5"><input v-model="editForm.place_id" class="w-full text-xs border rounded px-1.5 py-0.5" /></td>
-                  <td class="px-2 py-1.5 text-center"><input v-model.number="editForm.guaranteed_rank" type="number" class="w-12 text-xs border rounded px-1 py-0.5 text-center" /></td>
-                  <td class="px-2 py-1.5"><input v-model="editForm.memo" class="w-full text-xs border rounded px-1.5 py-0.5" /></td>
-                  <td class="px-2 py-1.5 text-center">
-                    <button @click="saveEdit" class="text-blue-600 hover:underline mr-1">저장</button>
-                    <button @click="cancelEdit" class="text-slate-400 hover:underline">취소</button>
-                  </td>
-                </template>
-                <template v-else>
-                  <td class="px-3 py-1.5 text-slate-700 font-medium">{{ kw.keyword }}</td>
-                  <td class="px-2 py-1.5 text-slate-500">{{ kw.search_keyword || '-' }}</td>
-                  <td class="px-2 py-1.5 text-slate-500 font-mono text-[11px]">{{ kw.place_id }}</td>
-                  <td class="px-2 py-1.5 text-center text-slate-600">{{ kw.guaranteed_rank }}위</td>
-                  <td class="px-2 py-1.5 text-slate-400">{{ kw.memo || '-' }}</td>
-                  <td class="px-2 py-1.5 text-center">
-                    <button @click="startEdit(kw)" class="text-blue-500 hover:underline mr-1">수정</button>
-                    <button @click="removeKeyword(kw)" class="text-red-400 hover:underline">삭제</button>
-                  </td>
-                </template>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <PageLayout v-else mode="table">
+        <table class="w-full text-xs bg-white border border-slate-200 rounded-lg">
+          <thead class="bg-slate-50 border-b border-slate-200">
+            <tr class="text-slate-500">
+              <th class="text-left px-3 py-2 font-medium cursor-pointer hover:text-slate-700"
+                  @click="toggleKeywordsSort('branch')">
+                지점 <span v-if="keywordsSortKey === 'branch'">{{ keywordsSortDir === 'asc' ? '↑' : '↓' }}</span>
+              </th>
+              <th class="text-left px-3 py-2 font-medium cursor-pointer hover:text-slate-700"
+                  @click="toggleKeywordsSort('keyword')">
+                키워드 <span v-if="keywordsSortKey === 'keyword'">{{ keywordsSortDir === 'asc' ? '↑' : '↓' }}</span>
+              </th>
+              <th class="text-left px-3 py-2 font-medium">검색어</th>
+              <th class="text-left px-3 py-2 font-medium">Place ID</th>
+              <th class="text-center px-3 py-2 font-medium w-20">보장순위</th>
+              <th class="text-left px-3 py-2 font-medium">메모</th>
+              <th class="text-center px-3 py-2 font-medium w-28">액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="kw in sortedFilteredKeywords" :key="kw.id"
+                class="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+              <template v-if="editingId === kw.id">
+                <td class="px-3 py-1.5 text-slate-700">{{ shortName(kw.branch_name) }}</td>
+                <td class="px-3 py-1.5"><input v-model="editForm.keyword" class="w-full text-xs border rounded px-1.5 py-0.5" /></td>
+                <td class="px-3 py-1.5"><input v-model="editForm.search_keyword" class="w-full text-xs border rounded px-1.5 py-0.5" /></td>
+                <td class="px-3 py-1.5"><input v-model="editForm.place_id" class="w-full text-xs border rounded px-1.5 py-0.5 font-mono" /></td>
+                <td class="px-3 py-1.5 text-center"><input v-model.number="editForm.guaranteed_rank" type="number" class="w-12 text-xs border rounded px-1 py-0.5 text-center" /></td>
+                <td class="px-3 py-1.5"><input v-model="editForm.memo" class="w-full text-xs border rounded px-1.5 py-0.5" /></td>
+                <td class="px-3 py-1.5 text-center">
+                  <button @click="saveEdit" class="text-blue-600 hover:underline mr-2">저장</button>
+                  <button @click="cancelEdit" class="text-slate-400 hover:underline">취소</button>
+                </td>
+              </template>
+              <template v-else>
+                <td class="px-3 py-1.5 text-slate-700 font-medium">{{ shortName(kw.branch_name) }}</td>
+                <td class="px-3 py-1.5 text-slate-700">{{ kw.keyword }}</td>
+                <td class="px-3 py-1.5 text-slate-500">{{ kw.search_keyword || '-' }}</td>
+                <td class="px-3 py-1.5 text-slate-500 font-mono text-[11px]">{{ kw.place_id }}</td>
+                <td class="px-3 py-1.5 text-center text-slate-600 tabular-nums">{{ kw.guaranteed_rank }}위</td>
+                <td class="px-3 py-1.5 text-slate-400 max-w-[12rem] truncate">{{ kw.memo || '-' }}</td>
+                <td class="px-3 py-1.5 text-center whitespace-nowrap">
+                  <button @click="runCheckBranch(kw.branch_id)" :disabled="checking"
+                          class="text-amber-600 hover:underline mr-2 disabled:opacity-50">체크</button>
+                  <button @click="startEdit(kw)" class="text-blue-500 hover:underline mr-2">수정</button>
+                  <button @click="removeKeyword(kw)" class="text-red-400 hover:underline">삭제</button>
+                </td>
+              </template>
+            </tr>
+          </tbody>
+        </table>
+        <p v-if="!keywords.length && !loading" class="text-sm text-slate-400 py-8 text-center">
+          등록된 키워드가 없습니다.
+        </p>
+      </PageLayout>
     </template>
 
     <!-- ═══ 체크 이력 탭 ═══ -->

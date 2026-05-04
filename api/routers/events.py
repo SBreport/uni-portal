@@ -150,6 +150,40 @@ async def remove_item(item_id: int, user: Annotated[dict, Depends(_editor)]):
     return {"ok": True}
 
 
+# ── 수집 로그 (admin) ──
+@router.get("/ingestion-logs/latest")
+async def get_latest_ingestion_log(
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    """가장 최근 evt_ingestion_log 1건 반환 (error_log JSON 파싱 포함)."""
+    import json
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        row = conn.execute(
+            """SELECT l.id, ep.label AS period_label, l.status,
+                      l.total_branches, l.total_items, l.error_log, l.completed_at
+                 FROM evt_ingestion_logs l
+                 LEFT JOIN evt_periods ep ON l.event_period_id = ep.id
+                ORDER BY l.id DESC LIMIT 1"""
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="수집 로그 없음")
+
+    r = dict(row)
+    if r["error_log"]:
+        try:
+            r["error_log"] = json.loads(r["error_log"])
+        except Exception:
+            r["error_log"] = []
+    else:
+        r["error_log"] = []
+    return r
+
+
 # ── 동기화 (admin) ──
 @router.post("/sync")
 async def post_sync(

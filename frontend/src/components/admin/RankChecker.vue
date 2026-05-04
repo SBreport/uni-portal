@@ -731,10 +731,11 @@ onMounted(loadKeywords)
         </div>
       </div>
 
-      <!-- 평면 테이블 -->
+      <!-- 평면 테이블 — 자연 폭 (PageLayout mode="table"이 w-fit + max-w-full 자동 적용) -->
       <div v-if="loading" class="text-sm text-slate-400 py-4 text-center">로딩 중...</div>
       <PageLayout v-else mode="table">
-        <table class="w-full text-xs bg-white border border-slate-200 rounded-lg">
+       <div class="bg-white border border-slate-200 rounded-lg">
+        <table class="text-xs">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr class="text-slate-500">
               <th class="text-left px-3 py-2 font-medium cursor-pointer hover:text-slate-700"
@@ -787,6 +788,7 @@ onMounted(loadKeywords)
         <p v-if="!keywords.length && !loading" class="text-sm text-slate-400 py-8 text-center">
           등록된 키워드가 없습니다.
         </p>
+       </div>
       </PageLayout>
     </template>
 
@@ -841,8 +843,8 @@ onMounted(loadKeywords)
             로딩 중...
           </div>
 
-          <!-- 평면 테이블 — 자연 폭 (w-full 금지, 콘텐츠가 자기 폭 결정) -->
-          <div v-else class="bg-white border border-slate-200 rounded-lg overflow-x-auto inline-block">
+          <!-- 평면 테이블 — 자연 폭 (Table mode 표준 패턴) -->
+          <div v-else class="bg-white border border-slate-200 rounded-lg overflow-x-auto w-fit max-w-full">
             <table class="text-xs">
               <thead class="bg-slate-50 border-b border-slate-200">
                 <tr class="text-slate-500">

@@ -381,17 +381,22 @@ Tailwind 기본 스케일만 사용. 커스텀 값 금지.
 
 #### Table mode — 데이터 테이블
 - **콘텐츠 본성**: 컬럼 자연 너비의 합이 적정 폭
-- **클래스 패턴**:
+- **표준 패턴**:
   ```html
-  <div class="overflow-x-auto">  <!-- 컨테이너 -->
-    <table class="w-fit">          <!-- 테이블 자체는 자연 폭 -->
-      ...
-    </table>
-  </div>
+  <PageLayout mode="table">
+    <div class="bg-white border border-slate-200 rounded-lg">
+      <table class="text-xs">  <!-- ⚠ w-full 절대 금지 — 사시 모드의 주범 -->
+        ...
+      </table>
+    </div>
+  </PageLayout>
   ```
-- **이유**: 컬럼 자연 너비 합 ≈ 콘텐츠 적정 폭. 화면이 넓으면 좌측 정렬 + 우측 자연 공백 (사시 모드 X — 정보가 좌측에 모여있으므로)
+  - `PageLayout mode="table"`이 자동 적용: `overflow-x-auto w-fit max-w-full`
+  - `<table>`에는 `w-full` 사용 금지. 테이블이 자연 폭으로 응축되도록
+  - 카드 박스(`bg-white border rounded-lg`)는 자식 div가 책임. 테이블 자체는 데이터 표시만
+- **이유**: 컬럼 자연 너비 합 ≈ 콘텐츠 적정 폭. 화면이 넓으면 좌측 정렬 + 우측 자연 공백 (사시 모드 X — 정보가 좌측에 모여있으므로). 콘텐츠가 화면보다 크면 `max-w-full`이 가로 스크롤로 안전 처리
 - **적용**: 키워드 관리, 측정 이력, 동기화 로그, 사용자 목록
-- **컴포넌트**: `<PageLayout mode="table">`
+- **검증**: 테이블 우측 끝 컬럼이 컬럼 사이 거대 공백을 두고 화면 우측에 붙어있다면 `w-full`이 어딘가 들어간 것 — 즉시 제거
 
 #### Detail mode — 마스터 + 사이드 (마스터-디테일)
 - **콘텐츠 본성**: 메인 콘텐츠 + 우측 보조 패널 (선택한 항목의 상세, 필터, 헬프 등)

@@ -5,8 +5,11 @@ import * as eventsApi from '@/api/events'
 import * as cafeApi from '@/api/cafe'
 import * as blogApi from '@/api/blog'
 import { useAsyncAction } from '@/composables/useAsyncAction'
+import SyncLogPanel from '@/components/admin/SyncLogPanel.vue'
 
 const props = defineProps<{ branches: { id: number; name: string }[] }>()
+
+const logPanel = ref<InstanceType<typeof SyncLogPanel> | null>(null)
 
 const { loading: syncing, message: syncMsg, error: syncError, execute: executeSync } = useAsyncAction()
 
@@ -30,6 +33,7 @@ async function runDaily() {
     dailyResult.value = { error: { ok: false, message: e.response?.data?.detail || '실행 실패' } }
   } finally {
     dailyRunning.value = false
+    logPanel.value?.refresh()
   }
 }
 
@@ -39,6 +43,7 @@ async function syncEquipment() {
     const { data } = await equipApi.syncFromSheets()
     return `장비 동기화 완료: +${data.added} ↻${data.updated} =${data.skipped}`
   })
+  logPanel.value?.refresh()
 }
 
 // 이벤트
@@ -68,6 +73,7 @@ async function syncEvents() {
     const errors = data.errors || []
     return `이벤트 수집 완료: ${data.processed}개 지점, ${data.total_items?.toLocaleString()}건` + (errors.length ? ` (오류 ${errors.length}건)` : '')
   })
+  logPanel.value?.refresh()
 }
 
 function onEvtFileChange(e: Event) {
@@ -86,6 +92,7 @@ async function syncCafe() {
     const errors = data.errors || []
     return `카페 원고 완료: ${data.processed}개 지점, ${data.total_articles}건` + (errors.length ? ` (오류 ${errors.length}건)` : '')
   })
+  logPanel.value?.refresh()
 }
 
 // DB 파일 관리
@@ -157,6 +164,9 @@ onMounted(() => {})
 
 <template>
   <div class="max-w-3xl space-y-2.5">
+    <!-- 동기화 로그 패널 -->
+    <SyncLogPanel ref="logPanel" />
+
     <!-- 전역 알림 -->
     <div v-if="syncMsg" class="px-3 py-2 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700">{{ syncMsg }}</div>
     <div v-if="syncError" class="px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{{ syncError }}</div>

@@ -159,7 +159,7 @@ async def post_sync(
     user: Annotated[dict, Depends(require_role("admin"))],
 ):
     from equipment.sync import sync_from_sheets
-    result = sync_from_sheets()
+    result = sync_from_sheets(triggered_by="manual")
     return result
 
 

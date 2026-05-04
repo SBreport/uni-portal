@@ -216,7 +216,7 @@ async def post_sync(
 
     try:
         from cafe.sync import run_cafe_import
-        result = run_cafe_import(req.year, req.month, req.branch_filter)
+        result = run_cafe_import(req.year, req.month, req.branch_filter, triggered_by="manual")
         return result
     except Exception as e:
         tb = traceback.format_exc()

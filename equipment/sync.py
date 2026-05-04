@@ -122,7 +122,7 @@ def get_or_create_category(cursor, name):
     return cursor.lastrowid
 
 
-def sync_from_sheets():
+def sync_from_sheets(triggered_by: str = "manual"):
     """Google Sheets → SQLite 동기화 실행"""
     # 1. 백업
     backup_path = backup_db()
@@ -204,11 +204,13 @@ def sync_from_sheets():
                 )
 
     # 4. 동기화 로그 기록
-    detail_text = "\n".join(conflict_details[:50]) if conflict_details else None
+    detail_text = f"보유장비 시트 / {added + skipped + updated}건 처리"
+    if updated:
+        detail_text += f" (업데이트 {updated}건)"
     c.execute("""
-        INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail)
-        VALUES (?, ?, ?, ?, ?)
-    """, ("sheets_to_db", added, skipped, updated, detail_text))
+        INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, ("equipment_sync", added, skipped, updated, detail_text, triggered_by))
 
     conn.commit()
     conn.close()

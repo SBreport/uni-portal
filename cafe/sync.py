@@ -24,13 +24,14 @@ BRANCH_ALIAS = {
 SKIP_TABS = {"목차", "보유장비", "raw", "template"}
 
 
-def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
+def run_cafe_import(year: int, month: int, branch_filter: str = "", triggered_by: str = "manual") -> dict:
     """카페 원고 시트에서 데이터를 가져와 DB에 저장.
 
     Args:
         year: 연도 (2026)
         month: 월 (1~12)
         branch_filter: 특정 지점만 가져오기 (예: "동탄점"). 빈 문자열이면 전체.
+        triggered_by: 'manual' 또는 'auto'
 
     Returns:
         {"processed": int, "total_articles": int, "errors": list}
@@ -189,6 +190,23 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "") -> dict:
     status = "completed" if not errors else "completed_with_errors"
     error_json = json.dumps([{"error": e} for e in errors], ensure_ascii=False) if errors else None
     update_sync_log(log_id, status, processed, total_articles, error_json)
+
+    # sync_log 통합 기록
+    try:
+        from shared.db import get_conn as _gc, EQUIPMENT_DB as _edb
+        _conn = _gc(_edb)
+        branch_label = branch_filter if branch_filter else "전체"
+        detail_parts = [f"{year}년 {month}월 원고 / 지점={branch_label}"]
+        if errors:
+            detail_parts.append(f"실패 {len(errors)}건")
+        _conn.execute("""
+            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, ("cafe_sync", total_articles, 0, len(errors), " / ".join(detail_parts), triggered_by))
+        _conn.commit()
+        _conn.close()
+    except Exception as _e:
+        print(f"  [WARN] sync_log 기록 실패: {_e}")
 
     result = {"processed": processed, "total_articles": total_articles, "errors": errors}
     print(f"가져오기 완료: {processed}개 지점, {total_articles}건")

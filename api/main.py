@@ -141,6 +141,41 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/admin/sync-log")
+async def admin_sync_log(
+    limit: int = 50,
+    user: dict = Depends(get_current_user),
+):
+    """통합 sync_log 조회 (admin 전용). notion_sync_log도 통합."""
+    from api.deps import ROLE_HIERARCHY
+    if ROLE_HIERARCHY.get(user["role"], 0) < ROLE_HIERARCHY.get("admin", 3):
+        from fastapi import HTTPException, status as st
+        raise HTTPException(st.HTTP_403_FORBIDDEN, "관리자 권한 필요")
+    from shared.db import get_conn, EQUIPMENT_DB
+    conn = get_conn(EQUIPMENT_DB)
+    rows = conn.execute("""
+        SELECT id, sync_type, added, skipped, conflicts, detail, synced_at, triggered_by,
+               CASE WHEN detail LIKE '실패%' THEN 1 ELSE 0 END AS is_failed
+          FROM (
+            SELECT id, sync_type, added, skipped, conflicts, detail, synced_at, triggered_by
+              FROM sync_log
+            UNION ALL
+            SELECT id,
+                   'blog_notion_sync' AS sync_type,
+                   new_posts AS added,
+                   CASE WHEN matched - new_posts - updated > 0 THEN matched - new_posts - updated ELSE 0 END AS skipped,
+                   0 AS conflicts,
+                   '신규 ' || new_posts || '건, 업데이트 ' || updated || '건' AS detail,
+                   synced_at,
+                   COALESCE(triggered_by, 'manual') AS triggered_by
+              FROM notion_sync_log
+          )
+        ORDER BY synced_at DESC LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 @app.get("/admin/scheduler-status")
 async def scheduler_status(user: dict = Depends(get_current_user)):
     """등록된 스케줄러 잡과 다음 실행 시각 (admin 전용 read-only)."""

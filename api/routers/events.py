@@ -159,7 +159,7 @@ async def post_sync(
     from events.sync import run_event_sync_from_url
     if not req.source_url:
         raise HTTPException(status_code=400, detail="source_url이 필요합니다.")
-    result = run_event_sync_from_url(req.source_url, req.year, req.start_month, req.end_month)
+    result = run_event_sync_from_url(req.source_url, req.year, req.start_month, req.end_month, triggered_by="manual")
     return result
 
 
@@ -173,5 +173,5 @@ async def post_sync_file(
 ):
     from events.sync import run_event_sync_from_file
     content = await file.read()
-    result = run_event_sync_from_file(content, year, start_month, end_month)
+    result = run_event_sync_from_file(content, year, start_month, end_month, triggered_by="manual")
     return result

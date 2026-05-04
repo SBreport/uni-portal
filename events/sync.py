@@ -160,7 +160,7 @@ def _extract_sheet_id(url: str):
     return match.group(1) if match else None
 
 
-def _process_branch_data(branch_data: dict, year: int, start_month: int, end_month: int, source_url: str = "") -> dict:
+def _process_branch_data(branch_data: dict, year: int, start_month: int, end_month: int, source_url: str = "", triggered_by: str = "manual") -> dict:
     """공통 처리 로직: 지점별 raw 데이터 → DB 저장."""
     from events.parser import parse_branch_sheet, validate_parsed_events
     from events.normalizer import CategoryNormalizer, ComponentParser
@@ -222,6 +222,22 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
     status = "completed" if not errors else "completed_with_errors"
     error_log = [{"error": e} for e in errors] if errors else None
     update_ingestion_log(conn, log_id, status, processed, total_items, error_log)
+
+    # sync_log 통합 기록
+    try:
+        error_count = len(errors)
+        detail_parts = [f"{label} / {processed}개 지점"]
+        if error_count:
+            detail_parts.append(f"실패 {error_count}건")
+        detail_text = " / ".join(detail_parts)
+        conn.execute("""
+            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, triggered_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, ("event_sync", total_items, 0, error_count, detail_text, triggered_by))
+        conn.commit()
+    except Exception as _e:
+        print(f"  [WARN] sync_log 기록 실패: {_e}")
+
     conn.close()
 
     return {"processed": processed, "total_items": total_items, "errors": errors}
@@ -256,7 +272,7 @@ def _read_excel_to_branch_data(content, skip_tabs=None) -> dict:
     return branch_data
 
 
-def run_event_sync_from_url(url: str, year: int, start_month: int, end_month: int) -> dict:
+def run_event_sync_from_url(url: str, year: int, start_month: int, end_month: int, triggered_by: str = "manual") -> dict:
     """Google Sheets URL에서 이벤트 데이터를 읽어 DB에 저장.
 
     공개 시트의 경우 xlsx export를 통해 데이터를 가져옵니다.
@@ -290,10 +306,10 @@ def run_event_sync_from_url(url: str, year: int, start_month: int, end_month: in
         return {"processed": 0, "total_items": 0, "errors": ["읽을 수 있는 지점 시트가 없습니다."]}
 
     print(f"  읽은 지점 수: {len(branch_data)} ({', '.join(branch_data.keys())})")
-    return _process_branch_data(branch_data, year, start_month, end_month, source_url=url)
+    return _process_branch_data(branch_data, year, start_month, end_month, source_url=url, triggered_by=triggered_by)
 
 
-def run_event_sync_from_file(file_bytes: bytes, year: int, start_month: int, end_month: int) -> dict:
+def run_event_sync_from_file(file_bytes: bytes, year: int, start_month: int, end_month: int, triggered_by: str = "manual") -> dict:
     """업로드된 Excel 파일에서 이벤트 데이터를 읽어 DB에 저장."""
     print("이벤트 수집 (파일 업로드)")
 
@@ -306,7 +322,7 @@ def run_event_sync_from_file(file_bytes: bytes, year: int, start_month: int, end
         return {"processed": 0, "total_items": 0, "errors": ["읽을 수 있는 지점 시트가 없습니다."]}
 
     print(f"  읽은 지점 수: {len(branch_data)} ({', '.join(branch_data.keys())})")
-    return _process_branch_data(branch_data, year, start_month, end_month, source_url="file_upload")
+    return _process_branch_data(branch_data, year, start_month, end_month, source_url="file_upload", triggered_by=triggered_by)
 
 
 def main():

@@ -47,3 +47,24 @@ def now_str() -> str:
     SQLite의 datetime('now','localtime')와 동일.
     """
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def log_sync(sync_type: str, added: int = 0, skipped: int = 0, conflicts: int = 0,
+             detail: str = "", triggered_by: str = "manual") -> None:
+    """sync_log 통합 기록 헬퍼.
+
+    - synced_at은 KST datetime.now()로 명시 (SQLite DEFAULT CURRENT_TIMESTAMP는 UTC라 사용 금지)
+    - 별도 connection으로 안전 기록 (호출자의 트랜잭션 영향 없음)
+    - 호출자가 try/except로 감싸서 실패 로깅도 가능
+    """
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        conn.execute(
+            "INSERT INTO sync_log (sync_type, added, skipped, conflicts, "
+            "detail, synced_at, triggered_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (sync_type, added, skipped, conflicts, detail,
+             datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by)
+        )
+        conn.commit()
+    finally:
+        conn.close()

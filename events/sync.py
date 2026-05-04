@@ -225,38 +225,27 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
         error_log = [{"error": e} for e in errors] if errors else None
         update_ingestion_log(conn, log_id, status, processed, total_items, error_log)
 
-        # sync_log 통합 기록
+        conn.close()
+
+        # sync_log 통합 기록 (conn close 후에 헬퍼 호출 — 같은 DB 파일 락 충돌 방지)
         try:
+            from shared.db import log_sync
             error_count = len(errors)
             detail_parts = [f"{label} / {processed}개 지점"]
             if error_count:
                 detail_parts.append(f"실패 {error_count}건")
-            detail_text = " / ".join(detail_parts)
-            conn.execute("""
-                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, ("event_sync", total_items, 0, error_count, detail_text,
-                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
-            conn.commit()
+            log_sync("event_sync", added=total_items, skipped=0, conflicts=error_count,
+                     detail=" / ".join(detail_parts), triggered_by=triggered_by)
         except Exception as _e:
             print(f"  [WARN] sync_log 기록 실패: {_e}")
-
-        conn.close()
 
         return {"processed": processed, "total_items": total_items, "errors": errors}
 
     except Exception as e:
-        # 실패 로그 기록 (별도 연결 사용 — 기존 conn은 롤백 상태일 수 있음)
+        # 실패 로그 기록
         try:
-            err_conn = _get_conn()
-            err_conn.execute(
-                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by) "
-                "VALUES (?, 0, 0, 0, ?, ?, ?)",
-                ("event_sync", f"실패: {str(e)[:200]}",
-                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by),
-            )
-            err_conn.commit()
-            err_conn.close()
+            from shared.db import log_sync
+            log_sync("event_sync", detail=f"실패: {str(e)[:200]}", triggered_by=triggered_by)
         except Exception:
             pass  # 실패 로그 기록도 실패하면 그냥 진행
         raise

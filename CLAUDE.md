@@ -22,3 +22,19 @@
 ### 사례 (2026-04)
 플레이스 회복 표시 `recovery_active` 단일 boolean으로 백엔드에서 결정.
 이전에는 `recovery_date`/`recovery_gap`을 백엔드가 주고 프론트가 "오늘 성공 + 7일 이내" 조건을 추가 판정 → 기준 바꿀 때 양쪽 다 고쳐야 함 → 깨지기 쉬움.
+
+---
+
+## 시각 저장 규칙 (MUST)
+
+DB에 시각 저장 시 다음 룰 준수:
+
+- **항상 KST 명시**: `datetime.now().strftime("%Y-%m-%d %H:%M:%S")` 사용
+- **SQLite DEFAULT CURRENT_TIMESTAMP 사용 금지**: SQLite는 timezone-aware하지 않고 항상 UTC를 반환. 컨테이너 TZ가 KST여도 무관.
+- **sync_log 기록은 `shared.db.log_sync()` 헬퍼 사용**: 직접 INSERT 금지
+
+### 사례 (2026-05-04)
+equipment/events/cafe sync가 sync_log INSERT 시 synced_at 컬럼 미명시 → SQLite DEFAULT CURRENT_TIMESTAMP(UTC)가 들어가 KST보다 9시간 빠름. 같은 테이블에 KST(place/webpage/SB체커) + UTC(equipment/events/cafe)가 혼재되어 사용자가 "오전 9시"로 착각.
+
+판단 기준:
+> "이 시각을 사용자가 보거나 다른 시각과 비교하나?" YES → KST 명시 필수.

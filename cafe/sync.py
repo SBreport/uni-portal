@@ -192,21 +192,15 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "", triggered_by
         error_json = json.dumps([{"error": e} for e in errors], ensure_ascii=False) if errors else None
         update_sync_log(log_id, status, processed, total_articles, error_json)
 
-        # sync_log 통합 기록
+        # sync_log 통합 기록 (conn close 후에 헬퍼 호출 — 같은 DB 파일 락 충돌 방지)
         try:
-            from shared.db import get_conn as _gc, EQUIPMENT_DB as _edb
-            _conn = _gc(_edb)
+            from shared.db import log_sync
             branch_label = branch_filter if branch_filter else "전체"
             detail_parts = [f"{year}년 {month}월 원고 / 지점={branch_label}"]
             if errors:
                 detail_parts.append(f"실패 {len(errors)}건")
-            _conn.execute("""
-                INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, ("cafe_sync", total_articles, 0, len(errors), " / ".join(detail_parts),
-                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
-            _conn.commit()
-            _conn.close()
+            log_sync("cafe_sync", added=total_articles, skipped=0, conflicts=len(errors),
+                     detail=" / ".join(detail_parts), triggered_by=triggered_by)
         except Exception as _e:
             print(f"  [WARN] sync_log 기록 실패: {_e}")
 
@@ -215,18 +209,10 @@ def run_cafe_import(year: int, month: int, branch_filter: str = "", triggered_by
         return result
 
     except Exception as e:
-        # 실패 로그 기록 (별도 연결 사용 — 기존 conn은 롤백 상태일 수 있음)
+        # 실패 로그 기록
         try:
-            from shared.db import get_conn as _gc, EQUIPMENT_DB as _edb
-            err_conn = _gc(_edb)
-            err_conn.execute(
-                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by) "
-                "VALUES (?, 0, 0, 0, ?, ?, ?)",
-                ("cafe_sync", f"실패: {str(e)[:200]}",
-                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by),
-            )
-            err_conn.commit()
-            err_conn.close()
+            from shared.db import log_sync
+            log_sync("cafe_sync", detail=f"실패: {str(e)[:200]}", triggered_by=triggered_by)
         except Exception:
             pass  # 실패 로그 기록도 실패하면 그냥 진행
         raise

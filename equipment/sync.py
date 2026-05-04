@@ -204,18 +204,16 @@ def sync_from_sheets(triggered_by: str = "manual"):
                         f"수량({db_qty}->{quantity}), 비고({db_note}->{note}){photo_note}"
                     )
 
-        # 4. 동기화 로그 기록
+        conn.commit()
+        conn.close()
+
+        # 4. 동기화 로그 기록 (conn close 후에 헬퍼 호출 — 같은 DB 파일 락 충돌 방지)
+        from shared.db import log_sync
         detail_text = f"보유장비 시트 / {added + skipped + updated}건 처리"
         if updated:
             detail_text += f" (업데이트 {updated}건)"
-        c.execute("""
-            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, ("equipment_sync", added, skipped, updated, detail_text,
-              datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by))
-
-        conn.commit()
-        conn.close()
+        log_sync("equipment_sync", added=added, skipped=skipped, conflicts=updated,
+                 detail=detail_text, triggered_by=triggered_by)
 
         # 5. 결과 출력
         print(f"\n동기화 완료:")
@@ -231,18 +229,10 @@ def sync_from_sheets(triggered_by: str = "manual"):
         return {"added": added, "updated": updated, "skipped": skipped}
 
     except Exception as e:
-        # 실패 로그 기록 (별도 연결 사용 — 기존 conn은 롤백 상태일 수 있음)
+        # 실패 로그 기록
         try:
-            from shared.db import get_conn, EQUIPMENT_DB
-            err_conn = get_conn(EQUIPMENT_DB)
-            err_conn.execute(
-                "INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at, triggered_by) "
-                "VALUES (?, 0, 0, 0, ?, ?, ?)",
-                ("equipment_sync", f"실패: {str(e)[:200]}",
-                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), triggered_by),
-            )
-            err_conn.commit()
-            err_conn.close()
+            from shared.db import log_sync
+            log_sync("equipment_sync", detail=f"실패: {str(e)[:200]}", triggered_by=triggered_by)
         except Exception:
             pass  # 실패 로그 기록도 실패하면 그냥 진행
         raise

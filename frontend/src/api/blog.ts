@@ -86,8 +86,5 @@ export const getDataQuality = () =>
 export const getDataQualityDetails = (category: string, limit = 50) =>
   api.get('/blog/data-quality/details', { params: { category, limit } })
 
-export const runDailySync = () =>
-  api.post('/daily-sync')
-
 export const getActiveAccounts = (params?: { branch_filter?: string }) =>
   api.get('/blog/active-accounts', { params })

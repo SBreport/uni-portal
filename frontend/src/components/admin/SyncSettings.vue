@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import * as equipApi from '@/api/equipment'
 import * as eventsApi from '@/api/events'
 import * as cafeApi from '@/api/cafe'
-import * as blogApi from '@/api/blog'
 import { useAsyncAction } from '@/composables/useAsyncAction'
 import SyncLogPanel from '@/components/admin/SyncLogPanel.vue'
 
@@ -12,30 +11,6 @@ const props = defineProps<{ branches: { id: number; name: string }[] }>()
 const logPanel = ref<InstanceType<typeof SyncLogPanel> | null>(null)
 
 const { loading: syncing, message: syncMsg, error: syncError, execute: executeSync } = useAsyncAction()
-
-// 일간 동기화
-const dailyRunning = ref(false)
-const dailyResult = ref<any>(null)
-const dailyLabels: Record<string, string> = {
-  blog_sync: '블로그 노션 동기화',
-  place_snapshot: '플레이스 스냅샷',
-  webpage_snapshot: '웹페이지 스냅샷',
-  title_scrape: '제목 스크래핑',
-}
-
-async function runDaily() {
-  dailyRunning.value = true
-  dailyResult.value = null
-  try {
-    const { data } = await blogApi.runDailySync()
-    dailyResult.value = data
-  } catch (e: any) {
-    dailyResult.value = { error: { ok: false, message: e.response?.data?.detail || '실행 실패' } }
-  } finally {
-    dailyRunning.value = false
-    logPanel.value?.refresh()
-  }
-}
 
 // 장비
 async function syncEquipment() {
@@ -171,28 +146,6 @@ onMounted(() => {})
       <!-- 전역 알림 -->
       <div v-if="syncMsg" class="px-3 py-2 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700">{{ syncMsg }}</div>
       <div v-if="syncError" class="px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">{{ syncError }}</div>
-
-      <!-- 일간 동기화 -->
-      <div class="border border-blue-200 rounded-lg bg-blue-50 p-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <h3 class="text-sm font-bold text-blue-800">일간 동기화</h3>
-            <p class="text-xs text-blue-500 mt-0.5">블로그 노션 동기화 + 플레이스/웹페이지 스냅샷 + 제목 스크래핑</p>
-          </div>
-          <button @click="runDaily" :disabled="dailyRunning"
-            class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
-            {{ dailyRunning ? '실행 중...' : '전체 실행' }}
-          </button>
-        </div>
-        <!-- Results display after running -->
-        <div v-if="dailyResult" class="mt-3 space-y-1 text-xs">
-          <div v-for="(val, key) in dailyResult" :key="key" class="flex items-center gap-2">
-            <span :class="val.ok ? 'text-emerald-600' : 'text-red-500'">{{ val.ok ? '✓' : '✗' }}</span>
-            <span class="text-slate-600">{{ dailyLabels[key] || key }}</span>
-            <span class="text-slate-400">{{ val.message || '' }}</span>
-          </div>
-        </div>
-      </div>
 
       <!-- ═══ E 보유장비 ═══ -->
       <div class="space-y-1.5">

@@ -37,17 +37,22 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="p-5">
-    <h2 class="text-xl font-bold text-slate-800 mb-4">관리자 모드</h2>
+  <!-- height 체인: 부모(main)에서 h-screen 받아 flex-col로 분배 -->
+  <div class="h-full flex flex-col p-5 overflow-hidden">
+    <h2 class="text-xl font-bold text-slate-800 mb-4 shrink-0">관리자 모드</h2>
 
-    <TabBar :model-value="activeTab" :tabs="tabs" @update:model-value="(v: string) => activeTab = v as AdminTab" />
+    <div class="shrink-0">
+      <TabBar :model-value="activeTab" :tabs="tabs" @update:model-value="(v: string) => activeTab = v as AdminTab" />
+    </div>
 
-    <SyncSettings v-if="activeTab === 'sync'" :branches="branches" />
-    <DataQualityLog v-if="activeTab === 'quality'" />
-    <AgencyManagement v-if="activeTab === 'agency'" :branches="branches" />
-    <RankChecker v-if="activeTab === 'sb-checker'" :branches="branches" />
-    <EncyclopediaAdmin v-if="activeTab === 'encyclopedia'" />
-    <UserManagement v-if="activeTab === 'users'" :branches="branches" />
-
+    <!-- 탭 콘텐츠 영역: 남은 공간 차지 + 자체 스크롤 (자식이 자체 처리하면 발동 안 함) -->
+    <div class="flex-1 min-h-0 mt-4 overflow-y-auto">
+      <SyncSettings v-if="activeTab === 'sync'" :branches="branches" />
+      <DataQualityLog v-if="activeTab === 'quality'" />
+      <AgencyManagement v-if="activeTab === 'agency'" :branches="branches" />
+      <RankChecker v-if="activeTab === 'sb-checker'" :branches="branches" class="h-full" />
+      <EncyclopediaAdmin v-if="activeTab === 'encyclopedia'" />
+      <UserManagement v-if="activeTab === 'users'" :branches="branches" />
+    </div>
   </div>
 </template>

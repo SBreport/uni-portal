@@ -679,9 +679,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
+  <!-- height 체인: 부모(AdminView 탭 영역)에서 h-full 받아 flex-col로 분배 -->
+  <div class="h-full flex flex-col">
     <!-- 탭 -->
-    <div class="flex gap-3 mb-4 border-b border-slate-200">
+    <div class="flex gap-3 mb-4 border-b border-slate-200 shrink-0">
       <button v-for="tab in [{ key: 'history', label: '체크 이력' }, { key: 'keywords', label: '키워드 관리' }]"
         :key="tab.key" @click="activeTab = tab.key as Tab"
         :class="['pb-2 text-sm font-medium border-b-2 transition',
@@ -955,8 +956,8 @@ onMounted(async () => {
 
     <!-- ═══ 체크 이력 탭 ═══ -->
     <template v-if="activeTab === 'history'">
-      <!-- 스크롤 분리 컨테이너 -->
-      <div class="flex flex-col" style="height: calc(100dvh - 145px)">
+      <!-- 스크롤 분리 컨테이너 (부모 height 체인에서 받기 — magic number 제거) -->
+      <div class="flex-1 min-h-0 flex flex-col">
 
         <!-- 헤더: KPI 4카드 + 측정일/새로고침 (정보 밀도 우선, 한 행) -->
         <div class="shrink-0 mb-2 flex items-stretch gap-2">

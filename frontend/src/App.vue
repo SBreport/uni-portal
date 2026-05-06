@@ -11,10 +11,10 @@ const auth = useAuthStore()
   <!-- 공개 라우트 (로그인 / 공유 링크): 사이드바 없음 -->
   <RouterView v-if="route.meta.public" />
 
-  <!-- 인증된 페이지: 사이드바 + 콘텐츠 -->
-  <div v-else class="flex min-h-screen bg-slate-50">
+  <!-- 인증된 페이지: 사이드바 + 콘텐츠 (height 체인 시작점) -->
+  <div v-else class="flex h-screen bg-slate-50">
     <AppSidebar />
-    <main class="ml-48 flex-1 min-w-0">
+    <main class="ml-48 flex-1 min-w-0 h-screen flex flex-col">
       <RouterView :key="route.path" />
     </main>
   </div>

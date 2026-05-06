@@ -237,9 +237,9 @@ function formatDate(iso: string) {
             <p class="text-xs font-medium text-slate-500 mb-3">최근 동기화</p>
             <div v-if="data.recent_syncs && data.recent_syncs.length" class="flex flex-col gap-1.5">
               <div v-for="(s, i) in data.recent_syncs" :key="i"
-                   class="grid grid-cols-[80px_36px_90px_60px] items-center gap-2 text-xs"
+                   class="grid grid-cols-[max-content_36px_1fr_auto] items-center gap-2 text-xs"
                    :class="s.is_failed ? 'bg-red-50 border-l-2 border-red-300 pl-2 py-1' : 'py-1'">
-                <span class="text-xs font-medium px-2 py-0.5 rounded text-center truncate"
+                <span class="text-xs font-medium px-2 py-0.5 rounded text-center whitespace-nowrap"
                   :class="{
                     'bg-blue-50 text-blue-600': s.sync_type === 'equipment_sync' || s.sync_type === 'equipment',
                     'bg-amber-50 text-amber-600': s.sync_type === 'event_sync' || s.sync_type === 'events',

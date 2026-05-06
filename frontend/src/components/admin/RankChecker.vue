@@ -1047,11 +1047,12 @@ onMounted(async () => {
           로딩 중...
         </div>
 
-        <!-- 본문: 좌(테이블) + 가운데(지점상세) + 우(대시보드) 3분할 -->
-        <div v-else class="flex-1 min-h-0 flex flex-row gap-3">
+        <!-- 본문: lg 이상 [그래프 | 메인 | 측정이력] 3분할 균등,
+                    lg 미만 [메인 → 그래프 → 측정이력] vertical stack -->
+        <div v-else class="flex-1 min-h-0 flex flex-col lg:flex-row gap-3 overflow-y-auto lg:overflow-visible">
 
-          <!-- 좌측: 메인 테이블 (lg 이상: 균등 분배, lg 미만: 자연 너비) -->
-          <div class="shrink-0 lg:flex-1 lg:min-w-0 min-h-0 overflow-y-auto overflow-x-auto max-w-[520px] lg:max-w-[600px]">
+          <!-- 메인 테이블 (lg에서 가운데, 미만에서 1번째) -->
+          <div class="lg:flex-1 lg:min-w-0 lg:min-h-0 lg:overflow-y-auto overflow-x-auto max-w-full lg:max-w-[600px] order-1 lg:order-2">
             <div class="bg-white border border-slate-200 rounded-lg w-full">
               <table class="text-xs w-full">
                 <thead class="bg-slate-50 border-b border-slate-200 sticky top-0">
@@ -1111,12 +1112,8 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- 우측 영역: lg 이상 [가운데(상세) | 우측(대시)] 3분할,
-                          lg 미만 [대시 위 + 상세 아래] vertical stack -->
-          <div class="flex-1 min-w-0 min-h-0 flex flex-col lg:flex-row gap-3 overflow-y-auto lg:overflow-visible">
-
-            <!-- 가운데 영역: 지점 상세 (lg에서 좌측, 미만에서 하단) -->
-            <div class="lg:flex-1 lg:min-w-0 lg:min-h-0 lg:overflow-y-auto order-2 lg:order-1 flex flex-col gap-3">
+          <!-- 측정 이력 (lg에서 3번째 가장 우측, 미만에서 stack 3번째) -->
+          <div class="lg:flex-1 lg:min-w-0 lg:min-h-0 lg:overflow-y-auto order-3 lg:order-3 flex flex-col gap-3">
               <template v-if="expandedBranchId !== null">
                 <!-- 헤더 -->
                 <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-between shrink-0">
@@ -1178,56 +1175,20 @@ onMounted(async () => {
                 <p v-else class="text-xs text-slate-400 text-center py-4">측정 이력 없음</p>
               </template>
 
-              <!-- 미선택 placeholder (lg에서 가운데 영역 차지) -->
+              <!-- 미선택 placeholder -->
               <div v-else
                    class="lg:flex-1 bg-slate-50/60 border border-dashed border-slate-200 rounded-lg flex items-center justify-center min-h-[200px]">
                 <div class="text-center px-6">
-                  <p class="text-sm text-slate-500 mb-1">왼쪽 테이블에서 지점을 클릭하세요</p>
+                  <p class="text-sm text-slate-500 mb-1">테이블에서 지점을 클릭하세요</p>
                   <p class="text-[11px] text-slate-400">선택한 지점의 30일 순위 추이와 측정 이력이 여기에 표시됩니다</p>
                 </div>
               </div>
             </div>
 
-            <!-- 우측 대시보드 영역 (lg에서 균등 분배 max-w-[420px], 미만에서 풀너비 상단) -->
-            <aside class="lg:flex-1 lg:min-w-0 lg:max-w-[420px] lg:min-h-0 lg:overflow-y-auto order-1 lg:order-2 flex flex-col gap-3">
+          <!-- 그래프 / 대시보드 (lg에서 1번째 가장 좌측, 미만에서 stack 2번째) -->
+          <aside class="lg:flex-1 lg:min-w-0 lg:max-w-[420px] lg:min-h-0 lg:overflow-y-auto order-2 lg:order-1 flex flex-col gap-3">
 
-            <!-- ── 대시보드 위젯 ── -->
-
-            <!-- (a) 노출 분포 도넛 -->
-            <div class="bg-white border border-slate-200 rounded p-3">
-              <p class="text-[11px] font-medium text-slate-600 mb-2">노출 분포</p>
-              <div class="flex items-center gap-3">
-                <div style="height: 80px; width: 80px; flex-shrink: 0">
-                  <Doughnut :data="doughnutData" :options="doughnutOptions" />
-                </div>
-                <div class="flex flex-col gap-1">
-                  <div class="flex items-center gap-1.5">
-                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span class="text-xs text-slate-600">노출 {{ snapshotSummary.exposed }}건</span>
-                    <span class="text-[11px] text-slate-400 tabular-nums">
-                      ({{ snapshotSummary.total > 0 ? Math.round(snapshotSummary.exposed / snapshotSummary.total * 100) : 0 }}%)
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="inline-block w-2 h-2 rounded-full bg-red-400"></span>
-                    <span class="text-xs text-slate-600">미노출 {{ snapshotSummary.total - snapshotSummary.exposed }}건</span>
-                    <span class="text-[11px] text-slate-400 tabular-nums">
-                      ({{ snapshotSummary.total > 0 ? Math.round((snapshotSummary.total - snapshotSummary.exposed) / snapshotSummary.total * 100) : 0 }}%)
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- (b) 순위 분포 막대 -->
-            <div class="bg-white border border-slate-200 rounded p-3">
-              <p class="text-[11px] font-medium text-slate-600 mb-2">순위 분포</p>
-              <div style="height: 100px">
-                <Bar :data="rankDistData" :options="rankDistOptions" />
-              </div>
-            </div>
-
-            <!-- (c) 변동 요약 -->
+            <!-- (a) 변동 요약 -->
             <div class="bg-white border border-slate-200 rounded p-3">
               <p class="text-[11px] font-medium text-slate-600 mb-2">변동 요약</p>
               <!-- 신규이탈 -->
@@ -1262,8 +1223,41 @@ onMounted(async () => {
               </div>
             </div>
 
-            </aside>
-          </div>
+            <!-- (b) 노출 분포 도넛 -->
+            <div class="bg-white border border-slate-200 rounded p-3">
+              <p class="text-[11px] font-medium text-slate-600 mb-2">노출 분포</p>
+              <div class="flex items-center gap-3">
+                <div style="height: 80px; width: 80px; flex-shrink: 0">
+                  <Doughnut :data="doughnutData" :options="doughnutOptions" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span class="text-xs text-slate-600">노출 {{ snapshotSummary.exposed }}건</span>
+                    <span class="text-[11px] text-slate-400 tabular-nums">
+                      ({{ snapshotSummary.total > 0 ? Math.round(snapshotSummary.exposed / snapshotSummary.total * 100) : 0 }}%)
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-red-400"></span>
+                    <span class="text-xs text-slate-600">미노출 {{ snapshotSummary.total - snapshotSummary.exposed }}건</span>
+                    <span class="text-[11px] text-slate-400 tabular-nums">
+                      ({{ snapshotSummary.total > 0 ? Math.round((snapshotSummary.total - snapshotSummary.exposed) / snapshotSummary.total * 100) : 0 }}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- (c) 순위 분포 막대 -->
+            <div class="bg-white border border-slate-200 rounded p-3">
+              <p class="text-[11px] font-medium text-slate-600 mb-2">순위 분포</p>
+              <div style="height: 100px">
+                <Bar :data="rankDistData" :options="rankDistOptions" />
+              </div>
+            </div>
+
+          </aside>
         </div>
 
       </div>

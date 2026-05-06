@@ -1049,17 +1049,17 @@ onMounted(async () => {
         <!-- 본문: 좌(테이블) + 가운데(지점상세) + 우(대시보드) 3분할 -->
         <div v-else class="flex-1 min-h-0 flex flex-row gap-3">
 
-          <!-- 좌측: 메인 테이블 (자연 너비) -->
-          <div class="shrink-0 min-h-0 overflow-y-auto overflow-x-auto">
+          <!-- 좌측: 메인 테이블 (자연 너비, 최대 폭 제한 + 좁은 화면 자체 가로 스크롤) -->
+          <div class="shrink-0 min-h-0 overflow-y-auto overflow-x-auto max-w-[520px]">
             <div class="bg-white border border-slate-200 rounded-lg">
               <table class="text-xs">
                 <thead class="bg-slate-50 border-b border-slate-200 sticky top-0">
                   <tr class="text-slate-500">
-                    <th class="text-left px-3 py-2 font-medium cursor-pointer hover:text-slate-700"
+                    <th class="text-left px-3 py-2 font-medium whitespace-nowrap cursor-pointer hover:text-slate-700"
                         @click="toggleSort('keyword')">
                       키워드 <span v-if="sortKey === 'keyword'">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
                     </th>
-                    <th class="text-left px-3 py-2 font-medium cursor-pointer hover:text-slate-700"
+                    <th class="text-left px-3 py-2 font-medium whitespace-nowrap cursor-pointer hover:text-slate-700"
                         @click="toggleSort('branch')">
                       지점 <span v-if="sortKey === 'branch'">{{ sortDir === 'asc' ? '↑' : '↓' }}</span>
                     </th>
@@ -1080,8 +1080,8 @@ onMounted(async () => {
                       class="border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer"
                       :class="expandedBranchId === item.branch_id ? 'bg-blue-50' : ''"
                       @click="onToggleExpand(item.branch_id)">
-                    <td class="px-3 py-1.5">{{ item.keyword }}</td>
-                    <td class="px-3 py-1.5">{{ shortName(item.branch_name) }}</td>
+                    <td class="px-3 py-1.5 whitespace-nowrap">{{ item.keyword }}</td>
+                    <td class="px-3 py-1.5 whitespace-nowrap">{{ shortName(item.branch_name) }}</td>
                     <td class="text-center px-3 py-1.5 tabular-nums font-medium">
                       <span v-if="item.rank !== null"
                             :class="item.rank <= item.guaranteed_rank ? 'text-emerald-600' : 'text-red-500'">

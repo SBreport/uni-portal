@@ -228,6 +228,7 @@ async def get_ranking_daily(
         # 휴식 요약 맵 — 한 번에 모든 branch 조회 (N+1 방지)
         from datetime import datetime as _dt2
         _today_kst = _dt2.now().date()
+        target_date_obj = _dt2.strptime(date, "%Y-%m-%d").date()
         pause_detail_rows = conn.execute("""
             SELECT branch_id, paused_at, resumed_at
             FROM place_branch_pause_history
@@ -242,6 +243,7 @@ async def get_ranking_daily(
                     "current_days": None,
                     "history_count": 0,
                     "total_days": 0,
+                    "was_paused_on_target": False,
                 }
             agg = _pause_agg[bid]
             agg["history_count"] += 1
@@ -250,15 +252,35 @@ async def get_ranking_daily(
                 dur = (_today_kst - paused_at_d).days + 1
                 agg["is_paused_now"] = True
                 agg["current_days"] = dur
+                # target 날짜에 휴식 중이었는지
+                if paused_at_d <= target_date_obj:
+                    agg["was_paused_on_target"] = True
             else:
                 resumed_at_d = _dt2.strptime(pr["resumed_at"], "%Y-%m-%d").date()
                 dur = (resumed_at_d - paused_at_d).days + 1
+                # target 날짜에 휴식 중이었는지
+                if paused_at_d <= target_date_obj and resumed_at_d >= target_date_obj:
+                    agg["was_paused_on_target"] = True
             agg["total_days"] += dur
 
-        def _pause_summary_for(branch_id_val) -> dict:
-            if branch_id_val is None:
-                return {"is_paused_now": False, "current_days": None, "history_count": 0, "total_days": 0}
-            return _pause_agg.get(branch_id_val, {"is_paused_now": False, "current_days": None, "history_count": 0, "total_days": 0})
+        DEFAULT_PAUSE_SUMMARY = {
+            "is_paused_now": False,
+            "current_days": None,
+            "history_count": 0,
+            "total_days": 0,
+            "was_paused_on_target": False,
+        }
+
+        def _pause_summary_for(branch_name: str) -> dict:
+            """branch_name → resolver → evt_branches.id → _pause_agg 조회."""
+            if not branch_name:
+                return DEFAULT_PAUSE_SUMMARY
+            if branch_name not in _resolve_cache:
+                _resolve_cache[branch_name] = resolve_evt_branch_id(conn, branch_name)
+            eid = _resolve_cache[branch_name]
+            if eid is None:
+                return DEFAULT_PAUSE_SUMMARY
+            return _pause_agg.get(eid, DEFAULT_PAUSE_SUMMARY)
 
 
         # 지점별 그룹핑
@@ -344,7 +366,7 @@ async def get_ranking_daily(
                 "recent_30d_rate": rate30_map.get(bname, 0),         # 최근 30일 노출률 (0~100)
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "is_paused": _is_paused(bname),
-                "pause_summary": _pause_summary_for(bid),
+                "pause_summary": _pause_summary_for(bname),
                 "daily": recent,
                 "recovery_active": _calc_recovery_active(hist, target, streak),
             })
@@ -357,7 +379,7 @@ async def get_ranking_daily(
                 "success_today": sum(1 for b in result if b["today_success"]),
                 "fail_today": sum(1 for b in result if b["status"] == "fail"),
                 "midal": sum(1 for b in result if b["status"] == "미달"),
-                "paused": sum(1 for b in result if b.get("is_paused")),
+                "paused": sum(1 for b in result if b.get("pause_summary", {}).get("was_paused_on_target")),
             },
             "source": "db",
         }

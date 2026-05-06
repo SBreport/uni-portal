@@ -38,6 +38,7 @@ interface BranchRanking {
     current_days: number | null
     history_count: number
     total_days: number
+    was_paused_on_target: boolean
   }
 }
 
@@ -62,7 +63,7 @@ const showMonthPicker = ref(false)
 const pickerYear = ref(new Date().getFullYear())
 const pickerMonth = ref<number | null>(null)
 const lastSync = ref<string | null>(null)
-const graphMode = ref<'nosul' | 'streak' | 'rate30'>('nosul')
+const graphMode = ref<'nosul' | 'rate30'>('rate30')
 
 // 날짜 선택 (기본: 오늘)
 const today = new Date()
@@ -189,13 +190,6 @@ const sortedByNosul = computed(() => {
     .sort((a, b) => b.nosul_count - a.nosul_count)
 })
 
-const sortedByStreak = computed(() => {
-  if (!data.value) return []
-  return [...data.value.branches]
-    .filter(b => b.status !== '미달')
-    .sort((a, b) => b.streak - a.streak)
-})
-
 const sortedByRate30 = computed(() => {
   if (!data.value) return []
   return [...data.value.branches]
@@ -203,24 +197,18 @@ const sortedByRate30 = computed(() => {
     .sort((a, b) => (b.recent_30d_rate ?? 0) - (a.recent_30d_rate ?? 0))
 })
 
-const sortedForGraph = computed(() => {
-  if (graphMode.value === 'streak') return sortedByStreak.value
-  if (graphMode.value === 'rate30') return sortedByRate30.value
-  return sortedByNosul.value
-})
+const sortedForGraph = computed(() =>
+  graphMode.value === 'rate30' ? sortedByRate30.value : sortedByNosul.value
+)
 
-const graphMax = computed(() => {
-  if (graphMode.value === 'streak') return 90   // cap 90일 (막대 표시용)
-  if (graphMode.value === 'rate30') return 100
-  return 25
-})
+const graphMax = computed(() => graphMode.value === 'rate30' ? 100 : 25)
 
 const midalBranches = computed(() =>
   data.value?.branches.filter(b => b.status === '미달') ?? []
 )
 
 const pausedBranches = computed(() =>
-  data.value?.branches.filter(b => b.is_paused) ?? []
+  data.value?.branches.filter(b => b.pause_summary?.was_paused_on_target) ?? []
 )
 
 const allFailed = computed(() => {
@@ -296,14 +284,6 @@ function graphBarWidth(b: BranchRanking): number {
 }
 
 function graphBarColor(b: BranchRanking): string {
-  if (graphMode.value === 'streak') {
-    if (b.streak >= 90) return 'bg-red-500'
-    if (b.streak >= 30) return 'bg-red-400'
-    if (b.streak >= 14) return 'bg-amber-400'
-    if (b.streak >= 7) return 'bg-blue-400'
-    if (b.streak >= 1) return 'bg-blue-300'
-    return 'bg-slate-300'
-  }
   if (graphMode.value === 'rate30') {
     const r = b.recent_30d_rate ?? 0
     if (r >= 80) return 'bg-blue-400'
@@ -315,7 +295,6 @@ function graphBarColor(b: BranchRanking): string {
 }
 
 function graphValue(b: BranchRanking): number {
-  if (graphMode.value === 'streak') return b.streak
   if (graphMode.value === 'rate30') return b.recent_30d_rate ?? 0
   return b.nosul_count
 }
@@ -329,9 +308,6 @@ function graphNumberClass(b: BranchRanking): string {
   if (graphMode.value === 'rate30') {
     const r = b.recent_30d_rate ?? 0
     return r < 20 ? 'text-red-500' : 'text-slate-600'
-  }
-  if (graphMode.value === 'streak') {
-    return b.streak >= 90 ? 'text-red-500' : 'text-slate-600'
   }
   return b.nosul_count >= 23 ? 'text-red-500' : 'text-slate-600'
 }
@@ -661,7 +637,7 @@ onMounted(async () => {
                     <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]" title="작업 시작일부터 현재까지 총 진행일수">총진행일 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
                     <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 이탈: 오늘 미노출 / 미점유: 데이터 없음 / ●: 휴식 중">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
                     <th v-if="canSeeAgency" @click="toggleSort('agency')" class="th-cell text-center w-[64px]" title="해당 지점 담당 실행사">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
-                    <th class="th-cell px-2 py-1 text-center text-[11px] font-semibold text-slate-600 whitespace-nowrap pr-3">휴식</th>
+                    <th class="th-cell px-2 py-1 text-center text-[11px] font-semibold text-slate-600 whitespace-nowrap w-[110px] min-w-[110px]">휴식</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -708,7 +684,7 @@ onMounted(async () => {
                         </span>
                       </td>
                       <td v-if="canSeeAgency" class="py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
-                      <td class="pr-3 py-[5px] text-center whitespace-nowrap text-[11px]">
+                      <td class="px-2 py-[5px] text-center whitespace-nowrap text-[11px] w-[110px] min-w-[110px]">
                         <template v-if="b.pause_summary?.is_paused_now">
                           <span class="text-amber-700 font-semibold">휴식중 {{ b.pause_summary.current_days }}일</span>
                         </template>
@@ -891,36 +867,24 @@ onMounted(async () => {
           <div class="bg-white border border-slate-200 rounded-lg p-3 flex-1 min-h-0 flex flex-col overflow-hidden">
             <div class="flex items-center justify-between mb-2 shrink-0">
               <h3 class="text-xs font-bold text-slate-600">
-                <template v-if="graphMode === 'streak'">연속 노출일</template>
-                <template v-else-if="graphMode === 'rate30'">30일 노출률</template>
+                <template v-if="graphMode === 'rate30'">30일 노출률</template>
                 <template v-else>노출일수 현황</template>
               </h3>
               <div class="flex items-center gap-2">
                 <div class="flex items-center gap-0.5 bg-slate-100 rounded p-0.5">
+                  <button @click="graphMode = 'rate30'"
+                    class="text-[10px] px-2 py-0.5 rounded transition"
+                    :class="graphMode === 'rate30' ? 'bg-white text-slate-700 font-semibold shadow-sm' : 'text-slate-500'">
+                    30일%
+                  </button>
                   <button @click="graphMode = 'nosul'"
                     class="text-[10px] px-2 py-0.5 rounded transition"
                     :class="graphMode === 'nosul' ? 'bg-white text-slate-700 font-semibold shadow-sm' : 'text-slate-500'">
                     노출일수
                   </button>
-                  <button @click="graphMode = 'streak'"
-                    class="text-[10px] px-2 py-0.5 rounded transition"
-                    :class="graphMode === 'streak' ? 'bg-white text-slate-700 font-semibold shadow-sm' : 'text-slate-500'">
-                    연속일수
-                  </button>
-                  <button @click="graphMode = 'rate30'"
-                    class="text-[10px] px-2 py-0.5 rounded transition"
-                    :class="graphMode === 'rate30' ? 'bg-white text-slate-700 font-semibold shadow-sm' : 'text-slate-500'">
-                    30일률
-                  </button>
                 </div>
                 <div class="flex items-center gap-2 text-[10px] text-slate-400">
-                  <template v-if="graphMode === 'streak'">
-                    <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-red-500"></span>90+</span>
-                    <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-red-400"></span>30+</span>
-                    <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-amber-400"></span>14+</span>
-                    <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-blue-400"></span>7+</span>
-                  </template>
-                  <template v-else-if="graphMode === 'rate30'">
+                  <template v-if="graphMode === 'rate30'">
                     <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-blue-400"></span>80+</span>
                     <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-amber-400"></span>50+</span>
                     <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-red-400"></span>20+</span>

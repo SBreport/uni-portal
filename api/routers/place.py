@@ -352,6 +352,12 @@ async def get_ranking_daily(
             bid = bdata["branch_id"]
             kw = bdata["keyword"]
 
+            _ps = _pause_summary_for(bname)
+            # fallback: evt_branches.is_paused=1인데 pause_summary가 비었으면
+            # (history INSERT 누락 케이스) 도트/카운트만이라도 정상 표시
+            if not _ps["is_paused_now"] and _is_paused(bname):
+                _ps = {**_ps, "is_paused_now": True, "was_paused_on_target": True}
+
             result.append({
                 "branch": bname,
                 "branch_id": bid,
@@ -366,7 +372,7 @@ async def get_ranking_daily(
                 "recent_30d_rate": rate30_map.get(bname, 0),         # 최근 30일 노출률 (0~100)
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "is_paused": _is_paused(bname),
-                "pause_summary": _pause_summary_for(bname),
+                "pause_summary": _ps,
                 "daily": recent,
                 "recovery_active": _calc_recovery_active(hist, target, streak),
             })

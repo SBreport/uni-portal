@@ -112,7 +112,7 @@ def _sync_all_to_db_inner(target_month: str | None, triggered_by: str) -> dict:
 
             # 휴식 플래그 일괄 반영 — 시트 branch_name에 포함된 short_name으로 매칭
             # 예: 시트 '안양유앤아이' → evt_branches.short_name='안양' → is_paused 업데이트
-            from place.pause_history import ensure_pause_history_table, record_pause_change
+            from place.pause_history import ensure_pause_history_table, record_pause_change, backfill_orphan_paused_branches
             ensure_pause_history_table(conn)
 
             # 변경 전 is_paused 값 미리 조회
@@ -122,6 +122,11 @@ def _sync_all_to_db_inner(target_month: str | None, triggered_by: str) -> dict:
             }
 
             today_str = date.today().isoformat()
+
+            # pause_history 도입 전부터 휴식중이었던 지점들을 한 번 backfill (멱등)
+            _bf = backfill_orphan_paused_branches(conn, today_str)
+            if _bf > 0:
+                logger.info(f"[place_sync] pause_history backfill: {_bf}건 추가")
 
             for sheet_branch, is_paused in paused_flags.items():
                 if not sheet_branch:

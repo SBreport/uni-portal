@@ -148,8 +148,8 @@ async function toggleBranch(b: BranchRanking) {
 // 검색 + 정렬
 const searchQuery = ref('')
 const hidePaused = ref(false)
-type SortKey = 'branch' | 'keyword' | 'today_rank' | 'streak' | 'nosul_count' | 'total_exposed' | 'work_days' | 'status' | 'agency'
-const sortKey = ref<SortKey>('nosul_count')
+type SortKey = 'branch' | 'keyword' | 'today_rank' | 'streak' | 'recent_30d_rate' | 'total_exposed' | 'work_days' | 'status' | 'agency'
+const sortKey = ref<SortKey>('recent_30d_rate')
 const sortAsc = ref(false)
 
 function toggleSort(key: SortKey) {
@@ -191,7 +191,7 @@ const filteredBranches = computed(() => {
       case 'keyword': av = a.keyword; bv = b.keyword; break
       case 'today_rank': av = a.today_rank ?? 999; bv = b.today_rank ?? 999; break
       case 'streak': av = a.streak; bv = b.streak; break
-      case 'nosul_count': av = a.nosul_count; bv = b.nosul_count; break
+      case 'recent_30d_rate': av = a.recent_30d_rate ?? 0; bv = b.recent_30d_rate ?? 0; break
       case 'total_exposed': av = a.total_exposed; bv = b.total_exposed; break
       case 'work_days': av = a.work_days; bv = b.work_days; break
       case 'agency': av = getAgency(a.branch); bv = getAgency(b.branch); break
@@ -660,7 +660,7 @@ onMounted(async () => {
                     <th @click="toggleSort('today_rank')" class="th-cell text-center w-[44px]" title="오늘 측정된 플레이스 순위">오늘 <span class="sort-icon">{{ sortIcon('today_rank') }}</span></th>
                     <th class="th-cell text-center w-[100px]" title="최근 5일간 일별 성공 여부 (O/X)">최근 5일</th>
                     <th @click="toggleSort('streak')"     class="th-cell text-center w-[42px]" title="끊김 없이 연속 성공한 일수">연속 <span class="sort-icon">{{ sortIcon('streak') }}</span></th>
-                    <th @click="toggleSort('nosul_count')" class="th-cell text-center w-[36px]" title="시트 AF열 기준 당월 노출일수">노출일수 <span class="sort-icon">{{ sortIcon('nosul_count') }}</span></th>
+                    <th @click="toggleSort('recent_30d_rate')" class="th-cell text-center w-[44px]" title="최근 30일간 노출 성공 비율 (%)">최근 30일% <span class="sort-icon">{{ sortIcon('recent_30d_rate') }}</span></th>
                     <th @click="toggleSort('total_exposed')" class="th-cell text-center w-[36px]" title="전체 이력 중 노출 성공한 총 일수">총노출 <span class="sort-icon">{{ sortIcon('total_exposed') }}</span></th>
                     <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]" title="작업 시작일부터 현재까지 총 진행일수">총진행일 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
                     <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 이탈: 오늘 미노출 / 미점유: 데이터 없음 / ●: 휴식 중">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
@@ -701,8 +701,8 @@ onMounted(async () => {
                       </td>
                       <td class="py-[5px] text-center text-slate-500 tabular-nums">{{ b.streak > 0 ? b.streak + '일' : '-' }}</td>
                       <td class="py-[5px] text-center font-semibold tabular-nums"
-                        :class="b.nosul_count >= 23 ? 'text-red-500' : b.nosul_count >= 15 ? 'text-amber-500' : 'text-blue-600'">
-                        {{ b.nosul_count }}
+                        :class="(b.recent_30d_rate ?? 0) >= 80 ? 'text-blue-600' : (b.recent_30d_rate ?? 0) >= 50 ? 'text-amber-500' : 'text-red-500'">
+                        {{ Math.round(b.recent_30d_rate ?? 0) }}%
                       </td>
                       <td class="py-[5px] text-center text-blue-600 font-medium tabular-nums">{{ b.total_exposed || 0 }}</td>
                       <td class="py-[5px] text-center text-slate-400 tabular-nums">{{ b.work_days > 0 ? b.work_days + '일' : '-' }}</td>
@@ -932,7 +932,7 @@ onMounted(async () => {
           <div class="bg-white border border-slate-200 rounded-lg p-3 flex-1 min-h-0 flex flex-col overflow-hidden">
             <div class="flex items-center justify-between mb-2 shrink-0">
               <h3 class="text-xs font-bold text-slate-600">
-                <template v-if="graphMode === 'rate30'">30일 노출률</template>
+                <template v-if="graphMode === 'rate30'">최근 30일 노출률</template>
                 <template v-else>노출일수 현황</template>
               </h3>
               <div class="flex items-center gap-2">

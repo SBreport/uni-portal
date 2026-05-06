@@ -56,3 +56,43 @@ def record_pause_change(
                 ORDER BY paused_at DESC LIMIT 1
             )
         """, (change_date, branch_id))
+
+
+def backfill_orphan_paused_branches(conn: sqlite3.Connection, today: str) -> int:
+    """pause_history 테이블 도입 전부터 휴식중이었던 지점들을 backfill.
+
+    조건:
+    - evt_branches.is_paused = 1
+    - place_branch_pause_history에 미해결 행(resumed_at IS NULL)이 없음
+
+    멱등: 이미 미해결 행이 있으면 skip. 여러 번 실행해도 안전.
+
+    Args:
+        today: YYYY-MM-DD 형식. backfill 시점의 paused_at 값.
+
+    Returns:
+        새로 INSERT된 row 수.
+    """
+    rows = conn.execute('''
+        SELECT eb.id, eb.name
+        FROM evt_branches eb
+        WHERE eb.is_paused = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM place_branch_pause_history p
+            WHERE p.branch_id = eb.id AND p.resumed_at IS NULL
+          )
+    ''').fetchall()
+
+    inserted = 0
+    for r in rows:
+        bid = r["id"] if hasattr(r, "keys") else r[0]
+        bname = r["name"] if hasattr(r, "keys") else r[1]
+        conn.execute('''
+            INSERT INTO place_branch_pause_history (branch_id, branch_name, paused_at)
+            VALUES (?, ?, ?)
+        ''', (bid, bname, today))
+        inserted += 1
+
+    if inserted > 0:
+        conn.commit()
+    return inserted

@@ -1050,10 +1050,10 @@ onMounted(async () => {
         <!-- 본문: 좌(테이블) + 가운데(지점상세) + 우(대시보드) 3분할 -->
         <div v-else class="flex-1 min-h-0 flex flex-row gap-3">
 
-          <!-- 좌측: 메인 테이블 (자연 너비, 최대 폭 제한 + 좁은 화면 자체 가로 스크롤) -->
-          <div class="shrink-0 min-h-0 overflow-y-auto overflow-x-auto max-w-[520px]">
-            <div class="bg-white border border-slate-200 rounded-lg">
-              <table class="text-xs">
+          <!-- 좌측: 메인 테이블 (lg 이상: 균등 분배, lg 미만: 자연 너비) -->
+          <div class="shrink-0 lg:flex-1 lg:min-w-0 min-h-0 overflow-y-auto overflow-x-auto max-w-[520px] lg:max-w-[600px]">
+            <div class="bg-white border border-slate-200 rounded-lg w-full">
+              <table class="text-xs w-full">
                 <thead class="bg-slate-50 border-b border-slate-200 sticky top-0">
                   <tr class="text-slate-500">
                     <th class="text-left px-3 py-2 font-medium whitespace-nowrap cursor-pointer hover:text-slate-700"
@@ -1188,8 +1188,8 @@ onMounted(async () => {
               </div>
             </div>
 
-            <!-- 우측 대시보드 영역 (lg에서 w-72, 미만에서 풀너비 상단) -->
-            <aside class="lg:w-72 lg:shrink-0 lg:min-h-0 lg:overflow-y-auto order-1 lg:order-2 flex flex-col gap-3">
+            <!-- 우측 대시보드 영역 (lg에서 균등 분배 max-w-[420px], 미만에서 풀너비 상단) -->
+            <aside class="lg:flex-1 lg:min-w-0 lg:max-w-[420px] lg:min-h-0 lg:overflow-y-auto order-1 lg:order-2 flex flex-col gap-3">
 
             <!-- ── 대시보드 위젯 ── -->
 

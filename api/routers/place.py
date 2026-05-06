@@ -609,7 +609,7 @@ async def get_branch_detail(
             from datetime import datetime as _dt
             today_kst = _dt.now().date()
             pause_rows = conn.execute("""
-                SELECT paused_at, resumed_at FROM place_branch_pause_history
+                SELECT id, paused_at, resumed_at FROM place_branch_pause_history
                 WHERE branch_id = ?
                 ORDER BY paused_at DESC
             """, (branch_id,)).fetchall()
@@ -627,6 +627,7 @@ async def get_branch_detail(
                     duration = (resumed_at_date - paused_at_date).days + 1
                 total_days_acc += duration
                 pause_history.append({
+                    "id": r["id"],
                     "paused_at": r["paused_at"],
                     "resumed_at": r["resumed_at"],
                     "duration_days": duration,
@@ -789,5 +790,62 @@ async def get_ranking_from_db(
             },
             "source": "db",
         }
+    finally:
+        conn.close()
+
+
+class PauseHistoryUpdate(BaseModel):
+    paused_at: str  # YYYY-MM-DD
+
+
+@router.patch("/pause-history/{history_id}")
+async def update_pause_history(
+    history_id: int,
+    body: PauseHistoryUpdate,
+    user: dict = Depends(get_current_user),
+):
+    """휴식 이력의 paused_at 수정 (admin only)."""
+    from datetime import datetime as _dt_pause
+    from shared.db import get_conn, EQUIPMENT_DB
+
+    # 권한 체크
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")
+
+    # 날짜 형식 검증
+    try:
+        new_paused = _dt_pause.strptime(body.paused_at, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).")
+
+    # 미래 날짜 거부
+    today = _dt_pause.now().date()
+    if new_paused > today:
+        raise HTTPException(status_code=400, detail="시작일이 미래일 수 없습니다.")
+
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        # 기존 row 조회
+        row = conn.execute(
+            "SELECT id, branch_id, branch_name, paused_at, resumed_at FROM place_branch_pause_history WHERE id = ?",
+            (history_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="해당 휴식 이력을 찾을 수 없습니다.")
+
+        # paused_at <= resumed_at 검증 (resumed_at 있을 때만)
+        if row["resumed_at"]:
+            resumed_d = _dt_pause.strptime(row["resumed_at"], "%Y-%m-%d").date()
+            if new_paused > resumed_d:
+                raise HTTPException(status_code=400, detail=f"시작일이 종료일({row['resumed_at']})보다 늦을 수 없습니다.")
+
+        # UPDATE
+        conn.execute(
+            "UPDATE place_branch_pause_history SET paused_at = ? WHERE id = ?",
+            (body.paused_at, history_id)
+        )
+        conn.commit()
+
+        return {"ok": True, "id": history_id, "paused_at": body.paused_at}
     finally:
         conn.close()

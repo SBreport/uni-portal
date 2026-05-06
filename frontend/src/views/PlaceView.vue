@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAgencyVisibility } from '@/composables/useAgencyVisibility'
-import { getPlaceRankingDaily, syncPlaceToDB, getPlaceLastSync, getPlaceBranchDetail } from '@/api/place'
+import { getPlaceRankingDaily, syncPlaceToDB, getPlaceLastSync, getPlaceBranchDetail, updatePauseHistory } from '@/api/place'
 import { fetchAgencyMap } from '@/api/branches'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { shortName } from '@/utils/branchName'
@@ -94,6 +94,34 @@ const expandedBranch = ref<string | null>(null)
 const detailData = ref<any>(null)
 const detailLoading = ref(false)
 const detailError = ref('')
+
+// 휴식 시작일 인라인 편집 상태 (admin only)
+const editingPauseId = ref<number | null>(null)
+const editingPauseValue = ref<string>('')
+const todayIso = computed(() => new Date().toISOString().slice(0, 10))
+
+function startEditPause(p: { id: number; paused_at: string }) {
+  editingPauseId.value = p.id
+  editingPauseValue.value = p.paused_at
+}
+
+function cancelEditPause() {
+  editingPauseId.value = null
+  editingPauseValue.value = ''
+}
+
+async function saveEditPause(b: BranchRanking) {
+  if (!editingPauseId.value) return
+  try {
+    await updatePauseHistory(editingPauseId.value, editingPauseValue.value)
+    // 상세 패널 데이터 재로드
+    const { data: res } = await getPlaceBranchDetail(b.branch, b.keyword, selectedDate.value)
+    detailData.value = res
+    editingPauseId.value = null
+  } catch (e: any) {
+    alert(e.response?.data?.detail || '저장 실패')
+  }
+}
 
 async function toggleBranch(b: BranchRanking) {
   if (!canOpenDetailFor(b)) return
@@ -839,11 +867,48 @@ onMounted(async () => {
                                 <!-- 각 휴식 항목 -->
                                 <template v-for="p in detailData.pause_history" :key="p.paused_at">
                                   <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide self-center py-0.5 min-w-[48px]"></span>
-                                  <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">{{ fmtDate(p.paused_at) }}</span>
+                                  <!-- 시작일: admin이면 인라인 편집 가능 -->
+                                  <span class="text-xs text-slate-500 self-center py-0.5 tabular-nums">
+                                    <template v-if="isAdmin && editingPauseId === p.id">
+                                      <input
+                                        type="date"
+                                        v-model="editingPauseValue"
+                                        class="text-xs border border-slate-200 rounded px-1 py-0.5 w-[110px]"
+                                        :max="todayIso"
+                                      />
+                                    </template>
+                                    <template v-else>
+                                      <span class="inline-flex items-center gap-0.5 group/pause">
+                                        {{ fmtDate(p.paused_at) }}
+                                        <button
+                                          v-if="isAdmin"
+                                          @click.stop="startEditPause(p)"
+                                          class="text-[10px] text-slate-300 hover:text-slate-500 opacity-0 group-hover/pause:opacity-100 transition-opacity leading-none"
+                                          title="시작일 수정"
+                                        >✎</button>
+                                      </span>
+                                    </template>
+                                  </span>
                                   <span class="text-xs text-slate-700 self-center py-0.5 tabular-nums col-span-2">
-                                    ~ {{ p.resumed_at ? fmtDate(p.resumed_at) : '진행 중' }}
-                                    <span class="text-slate-400 ml-1">· {{ p.resumed_at ? `${p.duration_days}일간` : `${p.duration_days}일째` }}</span>
-                                    <span v-if="!p.resumed_at" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 ml-1 align-middle"></span>
+                                    <template v-if="isAdmin && editingPauseId === p.id">
+                                      <span class="inline-flex items-center gap-1">
+                                        <button
+                                          @click.stop="saveEditPause(b)"
+                                          class="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold leading-none px-1"
+                                          title="저장"
+                                        >✓</button>
+                                        <button
+                                          @click.stop="cancelEditPause()"
+                                          class="text-[11px] text-slate-400 hover:text-slate-600 leading-none px-1"
+                                          title="취소"
+                                        >✗</button>
+                                      </span>
+                                    </template>
+                                    <template v-else>
+                                      ~ {{ p.resumed_at ? fmtDate(p.resumed_at) : '진행 중' }}
+                                      <span class="text-slate-400 ml-1">· {{ p.resumed_at ? `${p.duration_days}일간` : `${p.duration_days}일째` }}</span>
+                                      <span v-if="!p.resumed_at" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 ml-1 align-middle"></span>
+                                    </template>
                                   </span>
                                 </template>
                               </template>

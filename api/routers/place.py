@@ -244,6 +244,7 @@ async def get_ranking_daily(
                     "history_count": 0,
                     "total_days": 0,
                     "was_paused_on_target": False,
+                    "days_at_target": None,
                 }
             agg = _pause_agg[bid]
             agg["history_count"] += 1
@@ -252,15 +253,17 @@ async def get_ranking_daily(
                 dur = (_today_kst - paused_at_d).days + 1
                 agg["is_paused_now"] = True
                 agg["current_days"] = dur
-                # target 날짜에 휴식 중이었는지
+                # target 날짜에 휴식 중이었는지 + target 시점 휴식 일수
                 if paused_at_d <= target_date_obj:
                     agg["was_paused_on_target"] = True
+                    agg["days_at_target"] = (target_date_obj - paused_at_d).days + 1
             else:
                 resumed_at_d = _dt2.strptime(pr["resumed_at"], "%Y-%m-%d").date()
                 dur = (resumed_at_d - paused_at_d).days + 1
-                # target 날짜에 휴식 중이었는지
+                # target 날짜에 휴식 중이었는지 + target 시점 휴식 일수
                 if paused_at_d <= target_date_obj and resumed_at_d >= target_date_obj:
                     agg["was_paused_on_target"] = True
+                    agg["days_at_target"] = (target_date_obj - paused_at_d).days + 1
             agg["total_days"] += dur
 
         DEFAULT_PAUSE_SUMMARY = {
@@ -269,6 +272,7 @@ async def get_ranking_daily(
             "history_count": 0,
             "total_days": 0,
             "was_paused_on_target": False,
+            "days_at_target": None,
         }
 
         def _pause_summary_for(branch_name: str) -> dict:
@@ -356,7 +360,8 @@ async def get_ranking_daily(
             # fallback: evt_branches.is_paused=1인데 pause_summary가 비었으면
             # (history INSERT 누락 케이스) 도트/카운트만이라도 정상 표시
             if not _ps["is_paused_now"] and _is_paused(bname):
-                _ps = {**_ps, "is_paused_now": True, "was_paused_on_target": True}
+                _ps = {**_ps, "is_paused_now": True, "was_paused_on_target": True,
+                       "days_at_target": _ps.get("days_at_target") or 1}
 
             result.append({
                 "branch": bname,

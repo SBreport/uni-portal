@@ -39,6 +39,7 @@ interface BranchRanking {
     history_count: number
     total_days: number
     was_paused_on_target: boolean
+    days_at_target: number | null
   }
 }
 
@@ -714,7 +715,7 @@ onMounted(async () => {
                       <td v-if="canSeeAgency" class="py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
                       <td class="px-2 py-[5px] text-center whitespace-nowrap text-[11px] w-[110px] min-w-[110px]">
                         <template v-if="b.pause_summary?.was_paused_on_target">
-                          <span class="text-amber-700 font-semibold">휴식중 {{ b.pause_summary.current_days }}일</span>
+                          <span class="text-amber-700 font-semibold">휴식중 {{ b.pause_summary.days_at_target ?? b.pause_summary.current_days ?? '?' }}일</span>
                         </template>
                         <template v-else-if="b.pause_summary && b.pause_summary.history_count > 0">
                           <span class="text-slate-400 tabular-nums">{{ b.pause_summary.history_count }}회 / 누적 {{ b.pause_summary.total_days }}일</span>

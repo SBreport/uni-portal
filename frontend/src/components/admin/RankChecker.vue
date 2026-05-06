@@ -956,66 +956,66 @@ onMounted(async () => {
     <!-- ═══ 체크 이력 탭 ═══ -->
     <template v-if="activeTab === 'history'">
       <!-- 스크롤 분리 컨테이너 -->
-      <div class="flex flex-col" style="height: calc(100dvh - 170px)">
+      <div class="flex flex-col" style="height: calc(100dvh - 145px)">
 
-        <!-- KPI 카드 행 (shrink-0) -->
-        <div class="shrink-0 mb-3">
-          <div class="grid grid-cols-4 gap-3">
-            <!-- 전체 -->
-            <div class="bg-white border border-slate-200 rounded p-3">
-              <p class="text-[11px] text-slate-500 mb-1">전체</p>
-              <p class="text-2xl font-bold tabular-nums text-slate-800">{{ snapshotSummary.total }}</p>
+        <!-- 헤더: KPI 4카드 + 측정일/새로고침 (정보 밀도 우선, 한 행) -->
+        <div class="shrink-0 mb-2 flex items-stretch gap-2">
+          <!-- 전체 -->
+          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-2 flex-1 min-w-0">
+            <span class="text-[11px] text-slate-500 shrink-0">전체</span>
+            <span class="text-lg font-bold tabular-nums text-slate-800 ml-auto">{{ snapshotSummary.total }}</span>
+          </div>
+          <!-- 노출 -->
+          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-2 flex-1 min-w-0">
+            <span class="text-[11px] text-slate-500 shrink-0">노출</span>
+            <div class="flex items-baseline gap-1 ml-auto">
+              <span class="text-lg font-bold tabular-nums text-emerald-600">{{ snapshotSummary.exposed }}</span>
+              <span class="text-[11px] text-emerald-500 tabular-nums">
+                {{ snapshotSummary.total > 0 ? Math.round(snapshotSummary.exposed / snapshotSummary.total * 100) : 0 }}%
+              </span>
             </div>
-            <!-- 노출 -->
-            <div class="bg-white border border-slate-200 rounded p-3">
-              <p class="text-[11px] text-slate-500 mb-1">노출</p>
-              <div class="flex items-baseline gap-1.5">
-                <p class="text-2xl font-bold tabular-nums text-emerald-600">{{ snapshotSummary.exposed }}</p>
-                <p class="text-xs text-emerald-500 tabular-nums">
-                  {{ snapshotSummary.total > 0 ? Math.round(snapshotSummary.exposed / snapshotSummary.total * 100) : 0 }}%
-                </p>
-              </div>
+          </div>
+          <!-- 미노출 -->
+          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-2 flex-1 min-w-0">
+            <span class="text-[11px] text-slate-500 shrink-0">미노출</span>
+            <div class="flex items-baseline gap-1 ml-auto">
+              <span class="text-lg font-bold tabular-nums text-red-500">
+                {{ snapshotSummary.total - snapshotSummary.exposed }}
+              </span>
+              <span class="text-[11px] text-red-400 tabular-nums">
+                {{ snapshotSummary.total > 0 ? Math.round((snapshotSummary.total - snapshotSummary.exposed) / snapshotSummary.total * 100) : 0 }}%
+              </span>
             </div>
-            <!-- 미노출 -->
-            <div class="bg-white border border-slate-200 rounded p-3">
-              <p class="text-[11px] text-slate-500 mb-1">미노출</p>
-              <div class="flex items-baseline gap-1.5">
-                <p class="text-2xl font-bold tabular-nums text-red-500">
-                  {{ snapshotSummary.total - snapshotSummary.exposed }}
-                </p>
-                <p class="text-xs text-red-400 tabular-nums">
-                  {{ snapshotSummary.total > 0 ? Math.round((snapshotSummary.total - snapshotSummary.exposed) / snapshotSummary.total * 100) : 0 }}%
-                </p>
-              </div>
-            </div>
-            <!-- 변동 -->
-            <div class="bg-white border border-slate-200 rounded p-3">
-              <p class="text-[11px] text-slate-500 mb-1">변동</p>
-              <div class="flex items-center gap-2 mt-0.5">
-                <span class="text-sm font-bold tabular-nums text-red-500">&#9660; {{ newlyDropped.length }}</span>
-                <span class="text-[11px] text-slate-400">신규이탈</span>
-              </div>
-              <div class="flex items-center gap-2 mt-0.5">
-                <span class="text-sm font-bold tabular-nums text-emerald-600">&#9650; {{ recovered.length }}</span>
-                <span class="text-[11px] text-slate-400">회복</span>
-              </div>
+          </div>
+          <!-- 변동 -->
+          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-3 flex-1 min-w-0">
+            <span class="text-[11px] text-slate-500 shrink-0">변동</span>
+            <div class="flex items-center gap-3 ml-auto">
+              <span class="flex items-baseline gap-1">
+                <span class="text-sm font-bold tabular-nums text-red-500">&#9660;{{ newlyDropped.length }}</span>
+                <span class="text-[10px] text-slate-400">이탈</span>
+              </span>
+              <span class="flex items-baseline gap-1">
+                <span class="text-sm font-bold tabular-nums text-emerald-600">&#9650;{{ recovered.length }}</span>
+                <span class="text-[10px] text-slate-400">회복</span>
+              </span>
             </div>
           </div>
           <!-- 측정일 + 새로고침 -->
-          <div class="flex items-center justify-between mt-2">
-            <p class="text-[11px] text-slate-400">
-              측정일: {{ snapshotDate || '아직 측정 데이터 없음' }}
-              <span v-if="prevDate" class="ml-1">(이전: {{ prevDate }})</span>
-            </p>
+          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-2 shrink-0">
+            <div class="text-[11px] text-slate-500 leading-tight">
+              <div>측정일</div>
+              <div class="text-slate-700 tabular-nums font-medium">{{ snapshotDate || '—' }}</div>
+            </div>
             <button @click="loadSnapshot" :disabled="snapshotLoading"
-                    class="px-3 py-1 text-xs font-medium border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50">
-              {{ snapshotLoading ? '로딩...' : '새로고침' }}
+                    class="ml-1 px-2 py-1 text-[11px] font-medium border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 shrink-0">
+              {{ snapshotLoading ? '...' : '새로고침' }}
             </button>
           </div>
         </div>
 
         <!-- 검색/필터 행 (shrink-0) -->
-        <div v-if="snapshotItems.length" class="shrink-0 mb-3 flex items-center gap-2 flex-wrap">
+        <div v-if="snapshotItems.length" class="shrink-0 mb-2 flex items-center gap-2 flex-wrap">
           <input type="text" v-model="searchQuery" placeholder="지점명·키워드 검색..."
                  class="flex-1 min-w-48 px-3 py-1.5 text-xs border border-slate-300 rounded" />
           <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
@@ -1024,7 +1024,9 @@ onMounted(async () => {
           <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
             <input type="checkbox" v-model="filterMissedOnly" /> 보장 미달만
           </label>
-          <span class="text-xs text-slate-400 ml-auto">{{ filteredItems.length }}건 표시</span>
+          <span class="text-xs text-slate-400 ml-auto">{{ filteredItems.length }}건 표시
+            <span v-if="prevDate" class="ml-2 text-slate-300">이전: {{ prevDate }}</span>
+          </span>
         </div>
 
         <!-- 측정 데이터 없음 -->
@@ -1049,8 +1051,8 @@ onMounted(async () => {
 
           <!-- 메인 테이블 자체 스크롤 -->
           <div class="flex-1 min-h-0 overflow-y-auto overflow-x-auto">
-            <div class="bg-white border border-slate-200 rounded-lg w-fit max-w-full">
-              <table class="text-xs">
+            <div class="bg-white border border-slate-200 rounded-lg w-full">
+              <table class="text-xs w-full">
                 <thead class="bg-slate-50 border-b border-slate-200 sticky top-0">
                   <tr class="text-slate-500">
                     <th class="text-left px-3 py-2 font-medium cursor-pointer hover:text-slate-700"
@@ -1108,8 +1110,8 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- 우측 패널 자체 스크롤 -->
-          <aside class="w-80 shrink-0 overflow-y-auto flex flex-col gap-3">
+          <!-- 우측 패널 자체 스크롤 (지점 선택 시 매트릭스 폭 확보) -->
+          <aside :class="['shrink-0 overflow-y-auto flex flex-col gap-3', expandedBranchId !== null ? 'w-[460px]' : 'w-72']">
 
             <!-- 지점 미선택: 3개 위젯 -->
             <template v-if="expandedBranchId === null">

@@ -1111,10 +1111,87 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- 우측 column: 대시보드(상단) + 지점 상세(하단) vertical stack -->
-          <div class="flex-1 min-w-0 min-h-0 overflow-y-auto flex flex-col gap-3">
+          <!-- 우측 영역: lg 이상 [가운데(상세) | 우측(대시)] 3분할,
+                          lg 미만 [대시 위 + 상세 아래] vertical stack -->
+          <div class="flex-1 min-w-0 min-h-0 flex flex-col lg:flex-row gap-3 overflow-y-auto lg:overflow-visible">
 
-            <!-- ── 대시보드 위젯 (항상 상단) ── -->
+            <!-- 가운데 영역: 지점 상세 (lg에서 좌측, 미만에서 하단) -->
+            <div class="lg:flex-1 lg:min-w-0 lg:min-h-0 lg:overflow-y-auto order-2 lg:order-1 flex flex-col gap-3">
+              <template v-if="expandedBranchId !== null">
+                <!-- 헤더 -->
+                <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-between shrink-0">
+                  <div class="min-w-0">
+                    <p class="text-[11px] text-slate-400">지점 측정 이력</p>
+                    <p class="text-sm font-bold text-slate-700 truncate">
+                      {{ snapshotItems.find(i => i.branch_id === expandedBranchId)?.branch_name || '' }}
+                      <span class="text-[11px] font-normal text-slate-400 ml-1">최근 30일</span>
+                    </p>
+                  </div>
+                  <button @click="onToggleExpand(expandedBranchId!)"
+                          class="text-slate-400 hover:text-slate-700 text-lg leading-none flex-shrink-0 ml-2">✕</button>
+                </div>
+
+                <p v-if="historyLoading" class="text-xs text-slate-400 text-center py-4">로딩 중...</p>
+
+                <template v-else-if="historyMatrix.dates.length">
+                  <!-- 미니 라인 차트 -->
+                  <div class="bg-white border border-slate-200 rounded p-3">
+                    <p class="text-[11px] font-medium text-slate-600 mb-1">순위 추이</p>
+                    <div style="height: 110px">
+                      <Line v-if="branchLineData" :data="branchLineData" :options="branchLineOptions" />
+                    </div>
+                  </div>
+
+                  <!-- 매트릭스 -->
+                  <div class="bg-white border border-slate-200 rounded p-3 overflow-x-auto">
+                    <table class="text-xs border border-slate-200 rounded">
+                      <thead class="bg-slate-50">
+                        <tr class="text-slate-500 border-b border-slate-200">
+                          <th class="text-left px-3 py-1.5 font-medium sticky left-0 bg-slate-50">날짜</th>
+                          <th v-for="kw in historyMatrix.keywords" :key="kw"
+                              class="text-center px-3 py-1.5 font-medium whitespace-nowrap">
+                            {{ kw }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="d in historyMatrix.dates" :key="d"
+                            class="border-b border-slate-100 last:border-0">
+                          <td class="px-3 py-1.5 text-slate-600 tabular-nums sticky left-0 bg-white">{{ d }}</td>
+                          <td v-for="kw in historyMatrix.keywords" :key="kw"
+                              class="text-center px-3 py-1.5 tabular-nums whitespace-nowrap">
+                            <template v-if="historyMatrix.cells[`${d}|${kw}`]">
+                              <span v-if="historyMatrix.cells[`${d}|${kw}`].rank"
+                                    :class="historyMatrix.cells[`${d}|${kw}`].is_exposed ? 'text-blue-600' : 'text-slate-400'">
+                                {{ historyMatrix.cells[`${d}|${kw}`].rank }}위
+                              </span>
+                              <span v-else class="text-slate-300">미노출</span>
+                            </template>
+                            <span v-else class="text-slate-300">—</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </template>
+
+                <p v-else class="text-xs text-slate-400 text-center py-4">측정 이력 없음</p>
+              </template>
+
+              <!-- 미선택 placeholder (lg에서 가운데 영역 차지) -->
+              <div v-else
+                   class="lg:flex-1 bg-slate-50/60 border border-dashed border-slate-200 rounded-lg flex items-center justify-center min-h-[200px]">
+                <div class="text-center px-6">
+                  <p class="text-sm text-slate-500 mb-1">왼쪽 테이블에서 지점을 클릭하세요</p>
+                  <p class="text-[11px] text-slate-400">선택한 지점의 30일 순위 추이와 측정 이력이 여기에 표시됩니다</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 우측 대시보드 영역 (lg에서 w-72, 미만에서 풀너비 상단) -->
+            <aside class="lg:w-72 lg:shrink-0 lg:min-h-0 lg:overflow-y-auto order-1 lg:order-2 flex flex-col gap-3">
+
+            <!-- ── 대시보드 위젯 ── -->
 
             <!-- (a) 노출 분포 도넛 -->
             <div class="bg-white border border-slate-200 rounded p-3">
@@ -1185,73 +1262,7 @@ onMounted(async () => {
               </div>
             </div>
 
-            <!-- ── 지점 상세 (선택 시 하단에 표시) ── -->
-            <template v-if="expandedBranchId !== null">
-              <!-- 헤더 -->
-              <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-between shrink-0">
-                <div class="min-w-0">
-                  <p class="text-[11px] text-slate-400">지점 측정 이력</p>
-                  <p class="text-sm font-bold text-slate-700 truncate">
-                    {{ snapshotItems.find(i => i.branch_id === expandedBranchId)?.branch_name || '' }}
-                    <span class="text-[11px] font-normal text-slate-400 ml-1">최근 30일</span>
-                  </p>
-                </div>
-                <button @click="onToggleExpand(expandedBranchId!)"
-                        class="text-slate-400 hover:text-slate-700 text-lg leading-none flex-shrink-0 ml-2">✕</button>
-              </div>
-
-              <p v-if="historyLoading" class="text-xs text-slate-400 text-center py-4">로딩 중...</p>
-
-              <template v-else-if="historyMatrix.dates.length">
-                <!-- 미니 라인 차트 -->
-                <div class="bg-white border border-slate-200 rounded p-3">
-                  <p class="text-[11px] font-medium text-slate-600 mb-1">순위 추이</p>
-                  <div style="height: 110px">
-                    <Line v-if="branchLineData" :data="branchLineData" :options="branchLineOptions" />
-                  </div>
-                </div>
-
-                <!-- 매트릭스 -->
-                <div class="bg-white border border-slate-200 rounded p-3 overflow-x-auto">
-                  <table class="text-xs border border-slate-200 rounded">
-                    <thead class="bg-slate-50">
-                      <tr class="text-slate-500 border-b border-slate-200">
-                        <th class="text-left px-3 py-1.5 font-medium sticky left-0 bg-slate-50">날짜</th>
-                        <th v-for="kw in historyMatrix.keywords" :key="kw"
-                            class="text-center px-3 py-1.5 font-medium whitespace-nowrap">
-                          {{ kw }}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="d in historyMatrix.dates" :key="d"
-                          class="border-b border-slate-100 last:border-0">
-                        <td class="px-3 py-1.5 text-slate-600 tabular-nums sticky left-0 bg-white">{{ d }}</td>
-                        <td v-for="kw in historyMatrix.keywords" :key="kw"
-                            class="text-center px-3 py-1.5 tabular-nums whitespace-nowrap">
-                          <template v-if="historyMatrix.cells[`${d}|${kw}`]">
-                            <span v-if="historyMatrix.cells[`${d}|${kw}`].rank"
-                                  :class="historyMatrix.cells[`${d}|${kw}`].is_exposed ? 'text-blue-600' : 'text-slate-400'">
-                              {{ historyMatrix.cells[`${d}|${kw}`].rank }}위
-                            </span>
-                            <span v-else class="text-slate-300">미노출</span>
-                          </template>
-                          <span v-else class="text-slate-300">—</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </template>
-
-              <p v-else class="text-xs text-slate-400 text-center py-4">측정 이력 없음</p>
-            </template>
-
-            <!-- 지점 미선택 시 작은 안내 (대시보드 아래쪽 한 줄) -->
-            <p v-else class="text-[11px] text-slate-400 text-center py-2 border border-dashed border-slate-200 rounded">
-              왼쪽 테이블의 지점을 클릭하면 30일 측정 이력이 여기에 표시됩니다
-            </p>
-
+            </aside>
           </div>
         </div>
 

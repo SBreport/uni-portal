@@ -13,6 +13,8 @@ router = APIRouter(prefix="/place", tags=["Place"])
 # 회복 이벤트 분석에서 "유의미한 결손"으로 인정할 최소 실패 일수
 # 결손 5일 초과(gap > 5) 시에만 회복 이벤트로 인정. /branch-detail과 /ranking-daily 녹색 원 모두 사용.
 RECOVERY_MIN_FAILURE_DAYS = 5
+# 끝난 회복 이벤트를 표시하기 위한 최소 유지일 (진행 중인 회복은 예외 — 1일이라도 표시)
+RECOVERY_MIN_MAINTAIN_DAYS = 3
 
 
 
@@ -133,8 +135,8 @@ async def get_ranking_daily(
     from shared.db import get_conn, EQUIPMENT_DB
 
     target = datetime.strptime(date, "%Y-%m-%d").date()
-    # 최근 5일 + streak 계산을 위해 30일치 로드
-    range_from = (target - timedelta(days=30)).isoformat()
+    # 최근 5일 + streak 계산을 위해 365일치 로드
+    range_from = (target - timedelta(days=365)).isoformat()
     range_to = target.isoformat()
 
     conn = get_conn(EQUIPMENT_DB)
@@ -212,6 +214,37 @@ async def get_ranking_daily(
                 _resolve_cache[bn] = resolve_evt_branch_id(conn, bn)
             return _resolve_cache[bn] in paused_ids
 
+        # 휴식 요약 맵 — 한 번에 모든 branch 조회 (N+1 방지)
+        from datetime import datetime as _dt2
+        _today_kst = _dt2.now().date()
+        pause_agg_rows = conn.execute("""
+            SELECT
+                branch_id,
+                COUNT(*) AS history_count,
+                SUM(CASE WHEN resumed_at IS NULL THEN 1 ELSE 0 END) AS paused_count,
+                MAX(CASE WHEN resumed_at IS NULL THEN paused_at END) AS current_paused_at
+            FROM place_branch_pause_history
+            GROUP BY branch_id
+        """).fetchall()
+        _pause_agg: dict[int, dict] = {}
+        for pr in pause_agg_rows:
+            bid = pr["branch_id"]
+            is_now = pr["paused_count"] > 0
+            cur_days = None
+            if is_now and pr["current_paused_at"]:
+                cur_start = _dt2.strptime(pr["current_paused_at"], "%Y-%m-%d").date()
+                cur_days = (_today_kst - cur_start).days + 1
+            _pause_agg[bid] = {
+                "is_paused_now": is_now,
+                "current_days": cur_days,
+                "history_count": pr["history_count"],
+            }
+
+        def _pause_summary_for(branch_id_val) -> dict:
+            if branch_id_val is None:
+                return {"is_paused_now": False, "current_days": None, "history_count": 0}
+            return _pause_agg.get(branch_id_val, {"is_paused_now": False, "current_days": None, "history_count": 0})
+
 
         # 지점별 그룹핑
         branches: dict = {}
@@ -260,7 +293,7 @@ async def get_ranking_daily(
 
             # 연속 노출일 (target부터 역방향)
             streak = 0
-            for i in range(0, 31):
+            for i in range(0, 365):
                 d = (target - timedelta(days=i)).isoformat()
                 h = hist.get(d)
                 if h and h["is_exposed"]:
@@ -292,6 +325,7 @@ async def get_ranking_daily(
                 "work_days": work_days_total.get(bname, month_days), # 총진행일
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "is_paused": _is_paused(bname),
+                "pause_summary": _pause_summary_for(bid),
                 "daily": recent,
                 "recovery_active": _calc_recovery_active(hist, target, streak),
             })
@@ -361,6 +395,12 @@ async def get_branch_detail(
                 "agency_history": [],
                 "work_start_date": None,
                 "pause_history": [],
+                "pause_summary": {
+                    "total_count": 0,
+                    "total_days": 0,
+                    "is_paused_now": False,
+                    "current_days": None,
+                },
             }
 
         def _is_success(rank) -> bool:
@@ -368,6 +408,8 @@ async def get_branch_detail(
 
         # ref 이하 데이터만 사용
         history = [(r["date"], _is_success(r["rank"])) for r in rows if r["date"] <= reference_date]
+        # 날짜별 rank 원본값 (recovery_rank 산출용)
+        rank_map = {r["date"]: r["rank"] for r in rows if r["date"] <= reference_date}
 
         total_all = len(history)
         success_all = sum(1 for _, ok in history if ok)
@@ -420,10 +462,10 @@ async def get_branch_detail(
             fail_to = None
 
         # 모든 회복 이벤트 탐색
-        def _all_recovery_events(history):
+        def _all_recovery_events(history, rank_map):
             """
             연속 성공 streak가 시작되는 모든 경계를 반환.
-            반환: [{"recovery_date", "gap_days", "is_first_success", "prev_success_date"}, ...]
+            반환: [{"recovery_date", "gap_days", "is_first_success", "prev_success_date", "recovery_rank"}, ...]
             """
             events = []
             n = len(history)
@@ -439,6 +481,8 @@ async def get_branch_detail(
                         streak_end_idx += 1
                     maintained_days = streak_end_idx - streak_start_idx
                     is_ongoing = streak_end_idx == n  # 마지막까지 도달 = 아직 진행 중
+                    # 회복일 당시 rank
+                    recovery_rank = rank_map.get(d)
                     # 이 streak의 직전이 실패이거나 첫 번째 항목이어야 회복 이벤트
                     if i == 0 or not history[i - 1][1]:
                         # 이전 성공일 탐색
@@ -448,6 +492,9 @@ async def get_branch_detail(
                                 prev_success_date = history[j][0]
                                 break
                         if prev_success_date is None:
+                            if maintained_days < RECOVERY_MIN_MAINTAIN_DAYS and not is_ongoing:
+                                i = streak_end_idx
+                                continue
                             events.append({
                                 "recovery_date": d,
                                 "gap_days": None,
@@ -455,11 +502,15 @@ async def get_branch_detail(
                                 "prev_success_date": None,
                                 "maintained_days": maintained_days,
                                 "is_ongoing": is_ongoing,
+                                "recovery_rank": recovery_rank,
                             })
                         else:
                             from datetime import datetime as _dt
                             gap = (_dt.strptime(d, "%Y-%m-%d") - _dt.strptime(prev_success_date, "%Y-%m-%d")).days
                             if gap - 1 < RECOVERY_MIN_FAILURE_DAYS:
+                                i = streak_end_idx
+                                continue
+                            if maintained_days < RECOVERY_MIN_MAINTAIN_DAYS and not is_ongoing:
                                 i = streak_end_idx
                                 continue
                             events.append({
@@ -469,6 +520,7 @@ async def get_branch_detail(
                                 "prev_success_date": prev_success_date,
                                 "maintained_days": maintained_days,
                                 "is_ongoing": is_ongoing,
+                                "recovery_rank": recovery_rank,
                             })
                     # streak 끝까지 건너뜀
                     i = streak_end_idx
@@ -476,7 +528,7 @@ async def get_branch_detail(
                     i += 1
             return events
 
-        recovery_events = _all_recovery_events(history)
+        recovery_events = _all_recovery_events(history, rank_map)
         # 최근 10건 (최신 순)
         recovery_history = list(reversed(recovery_events[-10:]))
 
@@ -497,19 +549,47 @@ async def get_branch_detail(
         """, (branch_name, keyword)).fetchone()
         work_start_date = work_start_row["start_date"] if work_start_row else None
 
-        # 휴식 이력 (최근 10건)
+        # 휴식 이력 (전체) + 요약
         branch_id = resolve_evt_branch_id(conn, branch_name)
         pause_history = []
+        pause_summary = {
+            "total_count": 0,
+            "total_days": 0,
+            "is_paused_now": False,
+            "current_days": None,
+        }
         if branch_id:
+            from datetime import datetime as _dt
+            today_kst = _dt.now().date()
             pause_rows = conn.execute("""
                 SELECT paused_at, resumed_at FROM place_branch_pause_history
                 WHERE branch_id = ?
-                ORDER BY paused_at DESC LIMIT 10
+                ORDER BY paused_at DESC
             """, (branch_id,)).fetchall()
-            pause_history = [
-                {"paused_at": r["paused_at"], "resumed_at": r["resumed_at"]}
-                for r in pause_rows
-            ]
+            total_days_acc = 0
+            is_paused_now = False
+            current_days = None
+            for r in pause_rows:
+                paused_at_date = _dt.strptime(r["paused_at"], "%Y-%m-%d").date()
+                if r["resumed_at"] is None:
+                    duration = (today_kst - paused_at_date).days + 1
+                    is_paused_now = True
+                    current_days = duration
+                else:
+                    resumed_at_date = _dt.strptime(r["resumed_at"], "%Y-%m-%d").date()
+                    duration = (resumed_at_date - paused_at_date).days + 1
+                total_days_acc += duration
+                pause_history.append({
+                    "paused_at": r["paused_at"],
+                    "resumed_at": r["resumed_at"],
+                    "duration_days": duration,
+                })
+            pause_summary = {
+                "total_count": len(pause_history),
+                "total_days": total_days_acc,
+                "is_paused_now": is_paused_now,
+                "current_days": current_days,
+            }
 
         # 실행사 변경 이력 (map_type='place') — admin/editor만 노출
         agency_history = []
@@ -546,6 +626,7 @@ async def get_branch_detail(
             "agency_history": agency_history,
             "work_start_date": work_start_date,
             "pause_history": pause_history,
+            "pause_summary": pause_summary,
         }
     finally:
         conn.close()

@@ -29,6 +29,7 @@ interface BranchRanking {
   streak: number
   status: 'active' | 'fail' | '미달' | 'stopped'
   work_days: number
+  recent_30d_rate?: number
   daily: DailyData[]
   recovery_active: boolean
   is_paused?: boolean
@@ -36,6 +37,7 @@ interface BranchRanking {
     is_paused_now: boolean
     current_days: number | null
     history_count: number
+    total_days: number
   }
 }
 
@@ -60,7 +62,7 @@ const showMonthPicker = ref(false)
 const pickerYear = ref(new Date().getFullYear())
 const pickerMonth = ref<number | null>(null)
 const lastSync = ref<string | null>(null)
-const graphMode = ref<'nosul' | 'streak'>('nosul')
+const graphMode = ref<'nosul' | 'streak' | 'rate30'>('nosul')
 
 // 날짜 선택 (기본: 오늘)
 const today = new Date()
@@ -194,15 +196,22 @@ const sortedByStreak = computed(() => {
     .sort((a, b) => b.streak - a.streak)
 })
 
-const sortedForGraph = computed(() =>
-  graphMode.value === 'streak' ? sortedByStreak.value : sortedByNosul.value
-)
+const sortedByRate30 = computed(() => {
+  if (!data.value) return []
+  return [...data.value.branches]
+    .filter(b => b.status !== '미달')
+    .sort((a, b) => (b.recent_30d_rate ?? 0) - (a.recent_30d_rate ?? 0))
+})
+
+const sortedForGraph = computed(() => {
+  if (graphMode.value === 'streak') return sortedByStreak.value
+  if (graphMode.value === 'rate30') return sortedByRate30.value
+  return sortedByNosul.value
+})
 
 const graphMax = computed(() => {
-  if (graphMode.value === 'streak') {
-    const max = Math.max(...sortedByStreak.value.map(b => b.streak), 1)
-    return Math.max(max, 7)
-  }
+  if (graphMode.value === 'streak') return 90   // cap 90일 (막대 표시용)
+  if (graphMode.value === 'rate30') return 100
   return 25
 })
 
@@ -281,24 +290,50 @@ function barColor(count: number): string {
 }
 
 function graphBarWidth(b: BranchRanking): number {
-  const v = graphMode.value === 'streak' ? b.streak : b.nosul_count
+  const v = graphValue(b)
   if (v <= 0) return 0
   return Math.min(100, (v / graphMax.value) * 100)
 }
 
 function graphBarColor(b: BranchRanking): string {
   if (graphMode.value === 'streak') {
+    if (b.streak >= 90) return 'bg-red-500'
     if (b.streak >= 30) return 'bg-red-400'
     if (b.streak >= 14) return 'bg-amber-400'
     if (b.streak >= 7) return 'bg-blue-400'
     if (b.streak >= 1) return 'bg-blue-300'
     return 'bg-slate-300'
   }
+  if (graphMode.value === 'rate30') {
+    const r = b.recent_30d_rate ?? 0
+    if (r >= 80) return 'bg-blue-400'
+    if (r >= 50) return 'bg-amber-400'
+    if (r >= 20) return 'bg-red-400'
+    return 'bg-slate-300'
+  }
   return barColor(b.nosul_count)
 }
 
 function graphValue(b: BranchRanking): number {
-  return graphMode.value === 'streak' ? b.streak : b.nosul_count
+  if (graphMode.value === 'streak') return b.streak
+  if (graphMode.value === 'rate30') return b.recent_30d_rate ?? 0
+  return b.nosul_count
+}
+
+function graphValueLabel(b: BranchRanking): string {
+  if (graphMode.value === 'rate30') return (b.recent_30d_rate ?? 0) + '%'
+  return String(graphValue(b))
+}
+
+function graphNumberClass(b: BranchRanking): string {
+  if (graphMode.value === 'rate30') {
+    const r = b.recent_30d_rate ?? 0
+    return r < 20 ? 'text-red-500' : 'text-slate-600'
+  }
+  if (graphMode.value === 'streak') {
+    return b.streak >= 90 ? 'text-red-500' : 'text-slate-600'
+  }
+  return b.nosul_count >= 23 ? 'text-red-500' : 'text-slate-600'
 }
 
 function rankClass(rank: number | null): string {
@@ -625,12 +660,13 @@ onMounted(async () => {
                     <th @click="toggleSort('total_exposed')" class="th-cell text-center w-[36px]" title="전체 이력 중 노출 성공한 총 일수">총노출 <span class="sort-icon">{{ sortIcon('total_exposed') }}</span></th>
                     <th @click="toggleSort('work_days')"   class="th-cell text-center w-[36px]" title="작업 시작일부터 현재까지 총 진행일수">총진행일 <span class="sort-icon">{{ sortIcon('work_days') }}</span></th>
                     <th @click="toggleSort('status')"      class="th-cell text-center w-[44px]" title="성공: 오늘 노출됨 / 이탈: 오늘 미노출 / 미점유: 데이터 없음 / ●: 휴식 중">상태 <span class="sort-icon">{{ sortIcon('status') }}</span></th>
-                    <th v-if="canSeeAgency" @click="toggleSort('agency')" class="th-cell text-center pr-3 w-[64px]" title="해당 지점 담당 실행사">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
+                    <th v-if="canSeeAgency" @click="toggleSort('agency')" class="th-cell text-center w-[64px]" title="해당 지점 담당 실행사">실행사 <span class="sort-icon">{{ sortIcon('agency') }}</span></th>
+                    <th class="th-cell px-2 py-1 text-center text-[11px] font-semibold text-slate-600 whitespace-nowrap pr-3">휴식</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="filteredBranches.length === 0">
-                    <td :colspan="canSeeAgency ? 10 : 9" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
+                    <td :colspan="canSeeAgency ? 11 : 10" class="px-3 py-6 text-center text-slate-400">검색 결과가 없습니다</td>
                   </tr>
                   <template v-for="b in filteredBranches" :key="b.branch">
                     <tr @click="canOpenDetailFor(b) && toggleBranch(b)"
@@ -644,15 +680,8 @@ onMounted(async () => {
                         {{ shortName(b) }}
                         <span v-if="b.recovery_active" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" title="최근 회복"></span>
                         <span v-if="b.pause_summary?.is_paused_now"
-                          class="inline-block ml-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 tabular-nums"
-                          :title="`휴식 중 ${b.pause_summary.current_days}일째`">
-                          휴식중 {{ b.pause_summary.current_days }}일
-                        </span>
-                        <span v-else-if="!b.pause_summary?.is_paused_now && b.pause_summary?.history_count > 0"
-                          class="inline-block ml-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 tabular-nums"
-                          :title="`휴식 이력 ${b.pause_summary.history_count}회`">
-                          휴식 {{ b.pause_summary.history_count }}회
-                        </span>
+                          class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 ml-1 align-middle"
+                          title="휴식 중"></span>
                       </td>
                       <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
                       <td class="py-[5px] text-center whitespace-nowrap" :class="rankClass(b.today_rank)">
@@ -678,11 +707,22 @@ onMounted(async () => {
                           {{ statusBadge(b.status).text }}
                         </span>
                       </td>
-                      <td v-if="canSeeAgency" class="pr-3 py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
+                      <td v-if="canSeeAgency" class="py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
+                      <td class="pr-3 py-[5px] text-center whitespace-nowrap text-[11px]">
+                        <template v-if="b.pause_summary?.is_paused_now">
+                          <span class="text-amber-700 font-semibold">휴식중 {{ b.pause_summary.current_days }}일</span>
+                        </template>
+                        <template v-else-if="b.pause_summary && b.pause_summary.history_count > 0">
+                          <span class="text-slate-400 tabular-nums">{{ b.pause_summary.history_count }}회 / 누적 {{ b.pause_summary.total_days }}일</span>
+                        </template>
+                        <template v-else>
+                          <span class="text-slate-300">-</span>
+                        </template>
+                      </td>
                     </tr>
                     <!-- 상세 분석 패널 -->
                     <tr v-if="expandedBranch === b.branch && canOpenDetailFor(b)" class="bg-slate-50/80">
-                      <td :colspan="canSeeAgency ? 10 : 9" class="px-6 py-3">
+                      <td :colspan="canSeeAgency ? 11 : 10" class="px-6 py-3">
                         <div v-if="b.is_paused" class="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700 flex items-center gap-1.5">
                           <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
                           <span>이 지점은 현재 휴식 중입니다.</span>
@@ -850,7 +890,11 @@ onMounted(async () => {
         <div class="flex flex-col min-h-0 flex-1 lg:flex-[2_1_0%]" style="min-width: 0">
           <div class="bg-white border border-slate-200 rounded-lg p-3 flex-1 min-h-0 flex flex-col overflow-hidden">
             <div class="flex items-center justify-between mb-2 shrink-0">
-              <h3 class="text-xs font-bold text-slate-600">{{ graphMode === 'streak' ? '연속 노출일' : '노출일수 현황' }}</h3>
+              <h3 class="text-xs font-bold text-slate-600">
+                <template v-if="graphMode === 'streak'">연속 노출일</template>
+                <template v-else-if="graphMode === 'rate30'">30일 노출률</template>
+                <template v-else>노출일수 현황</template>
+              </h3>
               <div class="flex items-center gap-2">
                 <div class="flex items-center gap-0.5 bg-slate-100 rounded p-0.5">
                   <button @click="graphMode = 'nosul'"
@@ -863,12 +907,23 @@ onMounted(async () => {
                     :class="graphMode === 'streak' ? 'bg-white text-slate-700 font-semibold shadow-sm' : 'text-slate-500'">
                     연속일수
                   </button>
+                  <button @click="graphMode = 'rate30'"
+                    class="text-[10px] px-2 py-0.5 rounded transition"
+                    :class="graphMode === 'rate30' ? 'bg-white text-slate-700 font-semibold shadow-sm' : 'text-slate-500'">
+                    30일률
+                  </button>
                 </div>
                 <div class="flex items-center gap-2 text-[10px] text-slate-400">
                   <template v-if="graphMode === 'streak'">
+                    <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-red-500"></span>90+</span>
                     <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-red-400"></span>30+</span>
                     <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-amber-400"></span>14+</span>
                     <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-blue-400"></span>7+</span>
+                  </template>
+                  <template v-else-if="graphMode === 'rate30'">
+                    <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-blue-400"></span>80+</span>
+                    <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-amber-400"></span>50+</span>
+                    <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-red-400"></span>20+</span>
                   </template>
                   <template v-else>
                     <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-red-400"></span>23+</span>
@@ -885,10 +940,8 @@ onMounted(async () => {
                   <div class="h-full rounded-sm transition-all duration-300" :class="graphBarColor(b)"
                     :style="{ width: graphBarWidth(b) + '%' }"></div>
                 </div>
-                <span class="w-6 text-[11px] text-right font-semibold tabular-nums shrink-0"
-                  :class="graphMode === 'streak'
-                    ? (b.streak >= 30 ? 'text-red-500' : 'text-slate-600')
-                    : (b.nosul_count >= 23 ? 'text-red-500' : 'text-slate-600')">{{ graphValue(b) }}</span>
+                <span class="w-8 text-[11px] text-right font-semibold tabular-nums shrink-0"
+                  :class="graphNumberClass(b)">{{ graphValueLabel(b) }}</span>
               </div>
             </div>
             <div v-if="midalBranches.length > 0" class="mt-2 pt-2 border-t border-slate-100 shrink-0">

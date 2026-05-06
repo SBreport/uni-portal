@@ -135,8 +135,8 @@ async def get_ranking_daily(
     from shared.db import get_conn, EQUIPMENT_DB
 
     target = datetime.strptime(date, "%Y-%m-%d").date()
-    # 최근 5일 + streak 계산을 위해 365일치 로드
-    range_from = (target - timedelta(days=365)).isoformat()
+    # 최근 5일 + streak(무제한) 계산을 위해 5000일치 로드
+    range_from = (target - timedelta(days=5000)).isoformat()
     range_to = target.isoformat()
 
     conn = get_conn(EQUIPMENT_DB)
@@ -168,6 +168,17 @@ async def get_ranking_daily(
             WHERE year = ? AND month = ?
         """, (target_year, target_month)).fetchall()
         nosul_db = {r["branch_name"]: r["nosul_count"] for r in nosul_rows}
+
+        # 최근 30일 노출률 — 단일 GROUP BY 쿼리 (N+1 방지)
+        range_30d_from = (target - timedelta(days=29)).isoformat()
+        rate30_rows = conn.execute("""
+            SELECT branch_name,
+                   SUM(CASE WHEN is_exposed = 1 THEN 1 ELSE 0 END) AS exposed_30d
+            FROM place_daily
+            WHERE date >= ? AND date <= ?
+            GROUP BY branch_name
+        """, (range_30d_from, range_to)).fetchall()
+        rate30_map = {r["branch_name"]: round((r["exposed_30d"] / 30) * 100) for r in rate30_rows}
 
         # short_name 맵 (evt_branches.id → short_name)
         short_name_map = {
@@ -217,33 +228,37 @@ async def get_ranking_daily(
         # 휴식 요약 맵 — 한 번에 모든 branch 조회 (N+1 방지)
         from datetime import datetime as _dt2
         _today_kst = _dt2.now().date()
-        pause_agg_rows = conn.execute("""
-            SELECT
-                branch_id,
-                COUNT(*) AS history_count,
-                SUM(CASE WHEN resumed_at IS NULL THEN 1 ELSE 0 END) AS paused_count,
-                MAX(CASE WHEN resumed_at IS NULL THEN paused_at END) AS current_paused_at
+        pause_detail_rows = conn.execute("""
+            SELECT branch_id, paused_at, resumed_at
             FROM place_branch_pause_history
-            GROUP BY branch_id
+            ORDER BY branch_id, paused_at
         """).fetchall()
         _pause_agg: dict[int, dict] = {}
-        for pr in pause_agg_rows:
+        for pr in pause_detail_rows:
             bid = pr["branch_id"]
-            is_now = pr["paused_count"] > 0
-            cur_days = None
-            if is_now and pr["current_paused_at"]:
-                cur_start = _dt2.strptime(pr["current_paused_at"], "%Y-%m-%d").date()
-                cur_days = (_today_kst - cur_start).days + 1
-            _pause_agg[bid] = {
-                "is_paused_now": is_now,
-                "current_days": cur_days,
-                "history_count": pr["history_count"],
-            }
+            if bid not in _pause_agg:
+                _pause_agg[bid] = {
+                    "is_paused_now": False,
+                    "current_days": None,
+                    "history_count": 0,
+                    "total_days": 0,
+                }
+            agg = _pause_agg[bid]
+            agg["history_count"] += 1
+            paused_at_d = _dt2.strptime(pr["paused_at"], "%Y-%m-%d").date()
+            if pr["resumed_at"] is None:
+                dur = (_today_kst - paused_at_d).days + 1
+                agg["is_paused_now"] = True
+                agg["current_days"] = dur
+            else:
+                resumed_at_d = _dt2.strptime(pr["resumed_at"], "%Y-%m-%d").date()
+                dur = (resumed_at_d - paused_at_d).days + 1
+            agg["total_days"] += dur
 
         def _pause_summary_for(branch_id_val) -> dict:
             if branch_id_val is None:
-                return {"is_paused_now": False, "current_days": None, "history_count": 0}
-            return _pause_agg.get(branch_id_val, {"is_paused_now": False, "current_days": None, "history_count": 0})
+                return {"is_paused_now": False, "current_days": None, "history_count": 0, "total_days": 0}
+            return _pause_agg.get(branch_id_val, {"is_paused_now": False, "current_days": None, "history_count": 0, "total_days": 0})
 
 
         # 지점별 그룹핑
@@ -291,15 +306,18 @@ async def get_ranking_daily(
                     "rank": h["rank"] if h else None,
                 })
 
-            # 연속 노출일 (target부터 역방향)
+            # 연속 노출일 (target부터 역방향, 무제한)
             streak = 0
-            for i in range(0, 365):
+            i = 0
+            while True:
                 d = (target - timedelta(days=i)).isoformat()
                 h = hist.get(d)
-                if h and h["is_exposed"]:
-                    streak += 1
-                else:
-                    break
+                if not h:
+                    break  # 데이터 없으면 종료 (work_start_date 이전)
+                if not h["is_exposed"]:
+                    break  # 미노출이면 종료
+                streak += 1
+                i += 1
 
             # 해당 월 누적 노출일
             month_prefix = date[:7]  # "2026-04"
@@ -323,6 +341,7 @@ async def get_ranking_daily(
                 "nosul_count": nosul_db.get(bname, month_exposed),   # 노출일수 (AF열)
                 "total_exposed": total_exposed_map.get(bname, 0),    # 총노출 (전체 이력)
                 "work_days": work_days_total.get(bname, month_days), # 총진행일
+                "recent_30d_rate": rate30_map.get(bname, 0),         # 최근 30일 노출률 (0~100)
                 "status": "active" if today_exposed else ("fail" if today_data else "미달"),
                 "is_paused": _is_paused(bname),
                 "pause_summary": _pause_summary_for(bid),

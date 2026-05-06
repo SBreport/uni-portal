@@ -171,7 +171,7 @@ const filteredBranches = computed(() => {
   let list = [...data.value.branches]
 
   if (hidePaused.value) {
-    list = list.filter(b => !b.is_paused)
+    list = list.filter(b => !b.pause_summary?.was_paused_on_target)
   }
 
   if (searchQuery.value.trim()) {
@@ -263,7 +263,7 @@ const agencyStats = computed<AgencyStat[]>(() => {
   return names.map(name => {
     const branches = data.value!.branches.filter(b => getAgency(b.branch) === name)
     const total = branches.length
-    const paused = branches.filter(b => b.is_paused).length
+    const paused = branches.filter(b => b.pause_summary?.was_paused_on_target).length
     const success = branches.filter(b => b.status === 'active').length
     const midal = branches.filter(b => b.status === '미달').length
     const fail = total - success - midal
@@ -683,9 +683,9 @@ onMounted(async () => {
                         <span v-if="canOpenDetailFor(b)" class="text-[10px] text-slate-300 mr-1">{{ expandedBranch === b.branch ? '▼' : '▶' }}</span>
                         {{ shortName(b) }}
                         <span v-if="b.recovery_active" class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1 align-middle" title="최근 회복"></span>
-                        <span v-if="b.pause_summary?.is_paused_now"
+                        <span v-if="b.pause_summary?.was_paused_on_target"
                           class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 ml-1 align-middle"
-                          title="휴식 중"></span>
+                          title="이 시점 휴식"></span>
                       </td>
                       <td class="px-2 py-[5px] text-slate-500 whitespace-nowrap">{{ b.keyword }}</td>
                       <td class="py-[5px] text-center whitespace-nowrap" :class="rankClass(b.today_rank)">
@@ -713,7 +713,7 @@ onMounted(async () => {
                       </td>
                       <td v-if="canSeeAgency" class="py-[5px] text-center text-[11px] text-slate-400 whitespace-nowrap">{{ getAgency(b.branch) }}</td>
                       <td class="px-2 py-[5px] text-center whitespace-nowrap text-[11px] w-[110px] min-w-[110px]">
-                        <template v-if="b.pause_summary?.is_paused_now">
+                        <template v-if="b.pause_summary?.was_paused_on_target">
                           <span class="text-amber-700 font-semibold">휴식중 {{ b.pause_summary.current_days }}일</span>
                         </template>
                         <template v-else-if="b.pause_summary && b.pause_summary.history_count > 0">
@@ -727,9 +727,9 @@ onMounted(async () => {
                     <!-- 상세 분석 패널 -->
                     <tr v-if="expandedBranch === b.branch && canOpenDetailFor(b)" class="bg-slate-50/80">
                       <td :colspan="canSeeAgency ? 11 : 10" class="px-6 py-3">
-                        <div v-if="b.is_paused" class="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700 flex items-center gap-1.5">
+                        <div v-if="b.pause_summary?.was_paused_on_target" class="mb-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700 flex items-center gap-1.5">
                           <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                          <span>이 지점은 현재 휴식 중입니다.</span>
+                          <span>이 지점은 {{ displayDate }} 시점에 휴식 중이었습니다.</span>
                         </div>
                         <div v-if="detailLoading" class="text-xs text-slate-400">불러오는 중...</div>
                         <div v-else-if="detailError" class="text-xs text-red-500">{{ detailError }}</div>

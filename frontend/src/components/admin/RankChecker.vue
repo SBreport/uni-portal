@@ -959,57 +959,57 @@ onMounted(async () => {
       <!-- 스크롤 분리 컨테이너 (부모 height 체인에서 받기 — magic number 제거) -->
       <div class="flex-1 min-h-0 flex flex-col">
 
-        <!-- 헤더: KPI 4카드 + 측정일/새로고침 (정보 밀도 우선, 한 행) -->
+        <!-- 헤더: KPI 4카드 + 측정일/새로고침 (위계 강화: 메인 24px / 라벨 12px = 2배) -->
         <div class="shrink-0 mb-2 flex items-stretch gap-2">
           <!-- 전체 -->
           <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-center gap-2 flex-1 min-w-0">
-            <span class="text-[11px] text-slate-500 shrink-0">전체</span>
-            <span class="text-lg font-bold tabular-nums text-slate-800">{{ snapshotSummary.total }}</span>
+            <span class="text-xs text-slate-500 shrink-0">전체</span>
+            <span class="text-2xl font-bold tabular-nums text-slate-800">{{ snapshotSummary.total }}</span>
           </div>
           <!-- 노출 -->
           <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-center gap-2 flex-1 min-w-0">
-            <span class="text-[11px] text-slate-500 shrink-0">노출</span>
+            <span class="text-xs text-slate-500 shrink-0">노출</span>
             <div class="flex items-baseline gap-1">
-              <span class="text-lg font-bold tabular-nums text-emerald-600">{{ snapshotSummary.exposed }}</span>
-              <span class="text-[11px] text-emerald-500 tabular-nums">
+              <span class="text-2xl font-bold tabular-nums text-emerald-600">{{ snapshotSummary.exposed }}</span>
+              <span class="text-xs text-emerald-500 tabular-nums">
                 {{ snapshotSummary.total > 0 ? Math.round(snapshotSummary.exposed / snapshotSummary.total * 100) : 0 }}%
               </span>
             </div>
           </div>
           <!-- 미노출 -->
           <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-center gap-2 flex-1 min-w-0">
-            <span class="text-[11px] text-slate-500 shrink-0">미노출</span>
+            <span class="text-xs text-slate-500 shrink-0">미노출</span>
             <div class="flex items-baseline gap-1">
-              <span class="text-lg font-bold tabular-nums text-red-500">
+              <span class="text-2xl font-bold tabular-nums text-red-500">
                 {{ snapshotSummary.total - snapshotSummary.exposed }}
               </span>
-              <span class="text-[11px] text-red-400 tabular-nums">
+              <span class="text-xs text-red-400 tabular-nums">
                 {{ snapshotSummary.total > 0 ? Math.round((snapshotSummary.total - snapshotSummary.exposed) / snapshotSummary.total * 100) : 0 }}%
               </span>
             </div>
           </div>
           <!-- 변동 -->
           <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-center gap-3 flex-1 min-w-0">
-            <span class="text-[11px] text-slate-500 shrink-0">변동</span>
+            <span class="text-xs text-slate-500 shrink-0">변동</span>
             <div class="flex items-center gap-3">
               <span class="flex items-baseline gap-1">
-                <span class="text-sm font-bold tabular-nums text-red-500">&#9660;{{ newlyDropped.length }}</span>
-                <span class="text-[10px] text-slate-400">이탈</span>
+                <span class="text-xl font-bold tabular-nums text-red-500">&#9660;{{ newlyDropped.length }}</span>
+                <span class="text-[11px] text-slate-400">이탈</span>
               </span>
               <span class="flex items-baseline gap-1">
-                <span class="text-sm font-bold tabular-nums text-emerald-600">&#9650;{{ recovered.length }}</span>
-                <span class="text-[10px] text-slate-400">회복</span>
+                <span class="text-xl font-bold tabular-nums text-emerald-600">&#9650;{{ recovered.length }}</span>
+                <span class="text-[11px] text-slate-400">회복</span>
               </span>
             </div>
           </div>
           <!-- 측정일 + 새로고침 -->
           <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-2 shrink-0">
-            <div class="text-[11px] text-slate-500 leading-tight">
+            <div class="text-xs text-slate-500 leading-tight">
               <div>측정일</div>
-              <div class="text-slate-700 tabular-nums font-medium">{{ snapshotDate || '—' }}</div>
+              <div class="text-sm text-slate-700 tabular-nums font-medium">{{ snapshotDate || '—' }}</div>
             </div>
             <button @click="loadSnapshot" :disabled="snapshotLoading"
-                    class="ml-1 px-2 py-1 text-[11px] font-medium border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 shrink-0">
+                    class="ml-1 px-2 py-1 text-xs font-medium border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 shrink-0">
               {{ snapshotLoading ? '...' : '새로고침' }}
             </button>
           </div>

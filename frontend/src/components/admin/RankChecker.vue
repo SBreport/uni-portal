@@ -962,14 +962,14 @@ onMounted(async () => {
         <!-- 헤더: KPI 4카드 + 측정일/새로고침 (정보 밀도 우선, 한 행) -->
         <div class="shrink-0 mb-2 flex items-stretch gap-2">
           <!-- 전체 -->
-          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-2 flex-1 min-w-0">
+          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-center gap-2 flex-1 min-w-0">
             <span class="text-[11px] text-slate-500 shrink-0">전체</span>
-            <span class="text-lg font-bold tabular-nums text-slate-800 ml-auto">{{ snapshotSummary.total }}</span>
+            <span class="text-lg font-bold tabular-nums text-slate-800">{{ snapshotSummary.total }}</span>
           </div>
           <!-- 노출 -->
-          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-2 flex-1 min-w-0">
+          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-center gap-2 flex-1 min-w-0">
             <span class="text-[11px] text-slate-500 shrink-0">노출</span>
-            <div class="flex items-baseline gap-1 ml-auto">
+            <div class="flex items-baseline gap-1">
               <span class="text-lg font-bold tabular-nums text-emerald-600">{{ snapshotSummary.exposed }}</span>
               <span class="text-[11px] text-emerald-500 tabular-nums">
                 {{ snapshotSummary.total > 0 ? Math.round(snapshotSummary.exposed / snapshotSummary.total * 100) : 0 }}%
@@ -977,9 +977,9 @@ onMounted(async () => {
             </div>
           </div>
           <!-- 미노출 -->
-          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-2 flex-1 min-w-0">
+          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-center gap-2 flex-1 min-w-0">
             <span class="text-[11px] text-slate-500 shrink-0">미노출</span>
-            <div class="flex items-baseline gap-1 ml-auto">
+            <div class="flex items-baseline gap-1">
               <span class="text-lg font-bold tabular-nums text-red-500">
                 {{ snapshotSummary.total - snapshotSummary.exposed }}
               </span>
@@ -989,9 +989,9 @@ onMounted(async () => {
             </div>
           </div>
           <!-- 변동 -->
-          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center gap-3 flex-1 min-w-0">
+          <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-center gap-3 flex-1 min-w-0">
             <span class="text-[11px] text-slate-500 shrink-0">변동</span>
-            <div class="flex items-center gap-3 ml-auto">
+            <div class="flex items-center gap-3">
               <span class="flex items-baseline gap-1">
                 <span class="text-sm font-bold tabular-nums text-red-500">&#9660;{{ newlyDropped.length }}</span>
                 <span class="text-[10px] text-slate-400">이탈</span>
@@ -1111,8 +1111,81 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- 가운데: 지점 상세 (지점 클릭 시 표시, 미선택 시 안내) -->
+          <!-- 우측 column: 대시보드(상단) + 지점 상세(하단) vertical stack -->
           <div class="flex-1 min-w-0 min-h-0 overflow-y-auto flex flex-col gap-3">
+
+            <!-- ── 대시보드 위젯 (항상 상단) ── -->
+
+            <!-- (a) 노출 분포 도넛 -->
+            <div class="bg-white border border-slate-200 rounded p-3">
+              <p class="text-[11px] font-medium text-slate-600 mb-2">노출 분포</p>
+              <div class="flex items-center gap-3">
+                <div style="height: 80px; width: 80px; flex-shrink: 0">
+                  <Doughnut :data="doughnutData" :options="doughnutOptions" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span class="text-xs text-slate-600">노출 {{ snapshotSummary.exposed }}건</span>
+                    <span class="text-[11px] text-slate-400 tabular-nums">
+                      ({{ snapshotSummary.total > 0 ? Math.round(snapshotSummary.exposed / snapshotSummary.total * 100) : 0 }}%)
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-red-400"></span>
+                    <span class="text-xs text-slate-600">미노출 {{ snapshotSummary.total - snapshotSummary.exposed }}건</span>
+                    <span class="text-[11px] text-slate-400 tabular-nums">
+                      ({{ snapshotSummary.total > 0 ? Math.round((snapshotSummary.total - snapshotSummary.exposed) / snapshotSummary.total * 100) : 0 }}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- (b) 순위 분포 막대 -->
+            <div class="bg-white border border-slate-200 rounded p-3">
+              <p class="text-[11px] font-medium text-slate-600 mb-2">순위 분포</p>
+              <div style="height: 100px">
+                <Bar :data="rankDistData" :options="rankDistOptions" />
+              </div>
+            </div>
+
+            <!-- (c) 변동 요약 -->
+            <div class="bg-white border border-slate-200 rounded p-3">
+              <p class="text-[11px] font-medium text-slate-600 mb-2">변동 요약</p>
+              <!-- 신규이탈 -->
+              <div class="mb-2">
+                <p class="text-[11px] text-red-500 font-medium mb-1">신규이탈 ({{ newlyDropped.length }}건)</p>
+                <div v-if="newlyDroppedList.length" class="flex flex-col gap-0.5">
+                  <div v-for="item in newlyDroppedList" :key="item.keyword_id"
+                       class="flex items-center justify-between text-xs">
+                    <span class="text-slate-600 truncate max-w-[120px]">{{ shortName(item.branch_name) }}</span>
+                    <span class="text-slate-700 truncate max-w-[100px] mx-2">{{ item.keyword }}</span>
+                    <span class="text-red-500 tabular-nums shrink-0">
+                      {{ item.prev_rank }}위 → 이탈
+                    </span>
+                  </div>
+                </div>
+                <p v-else class="text-[11px] text-slate-400">없음</p>
+              </div>
+              <!-- 회복 -->
+              <div>
+                <p class="text-[11px] text-emerald-600 font-medium mb-1">회복 ({{ recovered.length }}건)</p>
+                <div v-if="recoveredList.length" class="flex flex-col gap-0.5">
+                  <div v-for="item in recoveredList" :key="item.keyword_id"
+                       class="flex items-center justify-between text-xs">
+                    <span class="text-slate-600 truncate max-w-[120px]">{{ shortName(item.branch_name) }}</span>
+                    <span class="text-slate-700 truncate max-w-[100px] mx-2">{{ item.keyword }}</span>
+                    <span class="text-emerald-600 tabular-nums shrink-0">
+                      → {{ item.rank }}위
+                    </span>
+                  </div>
+                </div>
+                <p v-else class="text-[11px] text-slate-400">없음</p>
+              </div>
+            </div>
+
+            <!-- ── 지점 상세 (선택 시 하단에 표시) ── -->
             <template v-if="expandedBranchId !== null">
               <!-- 헤더 -->
               <div class="bg-white border border-slate-200 rounded px-3 py-2 flex items-center justify-between shrink-0">
@@ -1174,89 +1247,12 @@ onMounted(async () => {
               <p v-else class="text-xs text-slate-400 text-center py-4">측정 이력 없음</p>
             </template>
 
-            <!-- 미선택 안내 placeholder -->
-            <div v-else
-                 class="flex-1 bg-slate-50/60 border border-dashed border-slate-200 rounded-lg flex items-center justify-center">
-              <div class="text-center px-6">
-                <p class="text-sm text-slate-500 mb-1">왼쪽 테이블에서 지점을 클릭하세요</p>
-                <p class="text-[11px] text-slate-400">선택한 지점의 30일 순위 추이와 측정 이력이 여기에 표시됩니다</p>
-              </div>
-            </div>
+            <!-- 지점 미선택 시 작은 안내 (대시보드 아래쪽 한 줄) -->
+            <p v-else class="text-[11px] text-slate-400 text-center py-2 border border-dashed border-slate-200 rounded">
+              왼쪽 테이블의 지점을 클릭하면 30일 측정 이력이 여기에 표시됩니다
+            </p>
+
           </div>
-
-          <!-- 우측: 대시보드 (항상 표시) -->
-          <aside class="w-72 shrink-0 overflow-y-auto flex flex-col gap-3">
-
-            <!-- (a) 노출 분포 도넛 -->
-            <div class="bg-white border border-slate-200 rounded p-3">
-              <p class="text-[11px] font-medium text-slate-600 mb-2">노출 분포</p>
-              <div class="flex items-center gap-3">
-                <div style="height: 80px; width: 80px; flex-shrink: 0">
-                  <Doughnut :data="doughnutData" :options="doughnutOptions" />
-                </div>
-                <div class="flex flex-col gap-1">
-                  <div class="flex items-center gap-1.5">
-                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span class="text-xs text-slate-600">노출 {{ snapshotSummary.exposed }}건</span>
-                    <span class="text-[11px] text-slate-400 tabular-nums">
-                      ({{ snapshotSummary.total > 0 ? Math.round(snapshotSummary.exposed / snapshotSummary.total * 100) : 0 }}%)
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="inline-block w-2 h-2 rounded-full bg-red-400"></span>
-                    <span class="text-xs text-slate-600">미노출 {{ snapshotSummary.total - snapshotSummary.exposed }}건</span>
-                    <span class="text-[11px] text-slate-400 tabular-nums">
-                      ({{ snapshotSummary.total > 0 ? Math.round((snapshotSummary.total - snapshotSummary.exposed) / snapshotSummary.total * 100) : 0 }}%)
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- (b) 순위 분포 막대 -->
-            <div class="bg-white border border-slate-200 rounded p-3">
-              <p class="text-[11px] font-medium text-slate-600 mb-2">순위 분포</p>
-              <div style="height: 100px">
-                <Bar :data="rankDistData" :options="rankDistOptions" />
-              </div>
-            </div>
-
-            <!-- (c) 변동 요약 -->
-            <div class="bg-white border border-slate-200 rounded p-3">
-              <p class="text-[11px] font-medium text-slate-600 mb-2">변동 요약</p>
-              <!-- 신규이탈 -->
-              <div class="mb-2">
-                <p class="text-[11px] text-red-500 font-medium mb-1">신규이탈 ({{ newlyDropped.length }}건)</p>
-                <div v-if="newlyDroppedList.length" class="flex flex-col gap-0.5">
-                  <div v-for="item in newlyDroppedList" :key="item.keyword_id"
-                       class="flex items-center justify-between text-xs">
-                    <span class="text-slate-600 truncate max-w-[100px]">{{ shortName(item.branch_name) }}</span>
-                    <span class="text-slate-700 truncate max-w-[70px] mx-1">{{ item.keyword }}</span>
-                    <span class="text-red-500 tabular-nums shrink-0">
-                      {{ item.prev_rank }}위→이탈
-                    </span>
-                  </div>
-                </div>
-                <p v-else class="text-[11px] text-slate-400">없음</p>
-              </div>
-              <!-- 회복 -->
-              <div>
-                <p class="text-[11px] text-emerald-600 font-medium mb-1">회복 ({{ recovered.length }}건)</p>
-                <div v-if="recoveredList.length" class="flex flex-col gap-0.5">
-                  <div v-for="item in recoveredList" :key="item.keyword_id"
-                       class="flex items-center justify-between text-xs">
-                    <span class="text-slate-600 truncate max-w-[100px]">{{ shortName(item.branch_name) }}</span>
-                    <span class="text-slate-700 truncate max-w-[70px] mx-1">{{ item.keyword }}</span>
-                    <span class="text-emerald-600 tabular-nums shrink-0">
-                      → {{ item.rank }}위
-                    </span>
-                  </div>
-                </div>
-                <p v-else class="text-[11px] text-slate-400">없음</p>
-              </div>
-            </div>
-
-          </aside>
         </div>
 
       </div>

@@ -395,15 +395,18 @@ def parse_branch_sheet(
     return events
 
 
+_MIN_REALISTIC_PRICE = 100  # 100원 미만은 입력 오류로 의심 (점 제거 개당 등 실제 저렴한 가격 수용)
+
+
 def validate_parsed_events(events: list[ParsedEvent]) -> list[dict]:
     """임포트 결과 검증. 이상치 목록을 반환."""
     issues = []
     for e in events:
-        if e.regular_price and e.regular_price < 1000:
+        if e.regular_price and e.regular_price < _MIN_REALISTIC_PRICE:
             issues.append({"event": e.display_name, "issue": f"정상가 이상 ({e.regular_price}원)"})
         if e.regular_price and e.event_price and e.event_price > e.regular_price:
             issues.append({"event": e.display_name, "issue": f"이벤트가({e.event_price}) > 정상가({e.regular_price})"})
-        if e.event_price and e.event_price < 1000:
+        if e.event_price and e.event_price < _MIN_REALISTIC_PRICE:
             issues.append({"event": e.display_name, "issue": f"이벤트가 이상 ({e.event_price}원)"})
         # 가격 정보 없음 — 카테고리 행으로 오분류됐을 수 있음 (케이스 8)
         if e.regular_price is None and e.event_price is None:

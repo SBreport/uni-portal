@@ -237,9 +237,9 @@ function formatDate(iso: string) {
             <p class="text-xs font-medium text-slate-500 mb-3">최근 동기화</p>
             <div v-if="data.recent_syncs && data.recent_syncs.length" class="flex flex-col gap-1.5">
               <div v-for="(s, i) in data.recent_syncs" :key="i"
-                   class="grid grid-cols-[max-content_36px_1fr_auto] items-center gap-2 text-xs"
+                   class="flex items-center gap-2 text-xs"
                    :class="s.is_failed ? 'bg-red-50 border-l-2 border-red-300 pl-2 py-1' : 'py-1'">
-                <span class="text-xs font-medium px-2 py-0.5 rounded text-center whitespace-nowrap"
+                <span class="text-xs font-medium px-2 py-0.5 rounded text-center whitespace-nowrap shrink-0 w-28"
                   :class="{
                     'bg-blue-50 text-blue-600': s.sync_type === 'equipment_sync' || s.sync_type === 'equipment',
                     'bg-amber-50 text-amber-600': s.sync_type === 'event_sync' || s.sync_type === 'events',
@@ -263,12 +263,18 @@ function formatDate(iso: string) {
                     s.sync_type
                   }}
                 </span>
-                <span class="text-xs px-1 py-0.5 rounded text-center"
+                <span class="text-xs px-1 py-0.5 rounded text-center shrink-0 w-10"
                   :class="s.triggered_by === 'auto' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'">
                   {{ s.triggered_by === 'auto' ? '자동' : '수동' }}
                 </span>
-                <span class="text-xs text-slate-400 tabular-nums">+{{ s.added }} / ={{ s.skipped }}</span>
-                <span class="text-xs text-slate-400 tabular-nums">{{ formatDate(s.synced_at) }}</span>
+                <span class="flex-1 min-w-0 tabular-nums whitespace-nowrap"
+                      :title="`신규 ${s.added}건 / 동일 ${s.skipped}건${s.conflicts ? ' / 충돌 ' + s.conflicts + '건' : ''}`">
+                  <span class="text-emerald-600 font-medium">+{{ s.added }}</span>
+                  <span class="text-slate-400 ml-0.5">신규</span>
+                  <span v-if="s.skipped > 0" class="text-slate-400 ml-2">·{{ s.skipped }} 동일</span>
+                  <span v-if="s.conflicts > 0" class="text-amber-600 ml-2">·{{ s.conflicts }} 충돌</span>
+                </span>
+                <span class="text-xs text-slate-400 tabular-nums shrink-0">{{ formatDate(s.synced_at) }}</span>
               </div>
             </div>
             <p v-else class="text-xs text-slate-400">동기화 이력 없음</p>

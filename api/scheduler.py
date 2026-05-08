@@ -1,7 +1,8 @@
 """백그라운드 스케줄러 — APScheduler 기반.
 
 - 블로그 노션 동기화: 매일 06:00 KST
-- 블로그 제목 스크래핑 (06:00 직후)
+- 블로그 제목 스크래핑(블로그): 매일 06:30 KST
+- 블로그 제목 스크래핑(카페): 매일 07:00 KST
 - 플레이스 오늘 동기화: 매일 10:30, 18:30 KST (2회)
 - 웹페이지 오늘 동기화: 매일 11:00, 19:00 KST (2회)
 - 플레이스/웹페이지 일별 스냅샷: 매일 23:00 KST
@@ -18,7 +19,7 @@ scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
 
 
 async def _run_blog_sync():
-    """노션 → DB 블로그 동기화 + 제목 스크래핑 (매일 06:00)."""
+    """노션 → DB 블로그 동기화 (매일 06:00). 제목 스크래핑은 별도 잡(06:30/07:00)에서 진행."""
     logger.info("[scheduler] 블로그 동기화 시작")
     try:
         from blog.sync_notion import incremental_sync, NOTION_BLOG_DB_ID
@@ -34,16 +35,32 @@ async def _run_blog_sync():
         logger.info(f"[scheduler] 블로그 동기화 완료: {result}")
     except Exception as e:
         logger.error(f"[scheduler] 블로그 동기화 실패: {e}", exc_info=True)
-        return  # 노션 동기화 실패 시 제목 스크래핑도 의미 없음
 
-    # 노션 동기화 직후 — 새 글의 빈 제목을 스크래핑으로 보충
+
+async def _run_blog_title_scrape():
+    """블로그 제목 스크래핑 (매일 06:30). 카페 제외 — 카페는 07:00 잡에서."""
+    logger.info("[scheduler] 블로그 제목 스크래핑 시작 (블로그)")
     try:
         import asyncio
         from blog.scrape_titles import scrape_missing_titles
-        scrape_result = await asyncio.to_thread(scrape_missing_titles, 50, 0.2)
-        logger.info(f"[scheduler] 블로그 제목 스크래핑: {scrape_result}")
+        result = await asyncio.to_thread(scrape_missing_titles, 0, 0.2, False)
+        logger.info(f"[scheduler] 블로그 제목 스크래핑 완료: {result}")
     except Exception as e:
         logger.error(f"[scheduler] 블로그 제목 스크래핑 실패: {e}", exc_info=True)
+
+
+async def _run_cafe_title_scrape():
+    """카페 제목 수집 (매일 07:00). HTTP 요청 없이 URL 파싱만 — 빠름."""
+    logger.info("[scheduler] 카페 제목 수집 시작")
+    try:
+        import asyncio
+        from blog.scrape_titles import scrape_missing_titles
+        # include_cafe=True로 호출하면 블로그+카페 모두 처리하지만,
+        # 06:30 잡에서 이미 블로그를 처리했으니 남은 건 카페뿐
+        result = await asyncio.to_thread(scrape_missing_titles, 0, 0.2, True)
+        logger.info(f"[scheduler] 카페 제목 수집 완료: {result}")
+    except Exception as e:
+        logger.error(f"[scheduler] 카페 제목 수집 실패: {e}", exc_info=True)
 
 
 async def _run_place_today_sync():
@@ -112,6 +129,18 @@ def setup_scheduler():
         replace_existing=True,
     )
     scheduler.add_job(
+        _run_blog_title_scrape,
+        CronTrigger(hour=6, minute=30),
+        id="blog_title_scrape",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_cafe_title_scrape,
+        CronTrigger(hour=7, minute=0),
+        id="cafe_title_scrape",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         _run_place_today_sync,
         CronTrigger(hour=10, minute=30),
         id="place_morning_auto_sync",
@@ -148,12 +177,14 @@ def setup_scheduler():
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("[scheduler] 스케줄러 시작 — 7개 잡 등록 완료")
+    logger.info("[scheduler] 스케줄러 시작 — 9개 잡 등록 완료")
 
 
 # 잡 ID → 사람이 읽는 라벨. 백엔드가 단일 source — 프론트는 그대로 표시만.
 _JOB_LABELS = {
     "blog_daily_sync": "블로그 노션",
+    "blog_title_scrape": "블로그 제목 수집",
+    "cafe_title_scrape": "카페 제목 수집",
     "place_morning_auto_sync": "플레이스 (오전)",
     "place_today_auto_sync": "플레이스 (오후)",
     "webpage_morning_auto_sync": "웹페이지 (오전)",

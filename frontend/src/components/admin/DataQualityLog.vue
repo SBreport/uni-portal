@@ -96,10 +96,10 @@ async function syncNotion() {
   finally { notionSyncing.value = false }
 }
 
-async function runScrape(includeCafe: boolean) {
+async function runScrape() {
   scraping.value = true
   try {
-    const { data } = await blogApi.scrapeTitles({ limit: 0, delay: 0.3, include_cafe: includeCafe })
+    const { data } = await blogApi.scrapeTitles({ limit: 0, delay: 0.3, include_cafe: true })
     showMsg(`수집 ${data.scraped}건 완료 (${data.scraped}수집 / ${data.failed}실패 / ${data.deleted}삭제)`)
     loadBlogStatus()
     loadSummary()
@@ -196,10 +196,10 @@ onMounted(() => {
             </p>
           </div>
           <div class="flex gap-2">
-            <button @click="runScrape(false)" :disabled="scraping"
-              class="px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:opacity-50">블로그만</button>
-            <button @click="runScrape(true)" :disabled="scraping"
-              class="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 disabled:opacity-50">카페 포함</button>
+            <button @click="runScrape" :disabled="scraping"
+              class="px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:opacity-50">
+              {{ scraping ? '수집 중...' : '제목 수집 (블로그+카페)' }}
+            </button>
           </div>
         </div>
         <!-- 데이터 임포트 -->

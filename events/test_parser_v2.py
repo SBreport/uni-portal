@@ -309,6 +309,45 @@ def test_case9_notes_multiline_flatten():
     _pass(label)
 
 
+# ── 케이스 11: 지점명 prefix가 붙은 긴 헤더 (부평 케이스) ─────────────────────
+
+def test_case11_branch_prefixed_header():
+    label = "케이스11 지점명 prefix 헤더 '부평점 정상가(*49%)' (부평)"
+
+    # 부평 시트 라인 7 헤더 재현:
+    #   col 2 = "부평점 정상가(*49%)" — 13자 (기존 12자 한도 초과)
+    #   col 3 = "부평점 이벤트가"
+    rows = [
+        ["■ 5-6월 단독이벤트"],
+        ["", "이벤트명", "부평점 정상가(*49%)", "부평점 이벤트가", "비고"],
+        ["", "[늘어지는 모공 잡아라] 모공 잡는 스킨보톡스 2cc", "130,000", "69,000", ""],
+        ["", "[끌어올려~ 실리프팅 패키지] 무제한 민트실리프팅 20줄", "2,920,000", "1,490,000", ""],
+    ]
+    events = parse_branch_sheet(rows, "부평")
+
+    if len(events) != 2:
+        _fail(label, f"이벤트 2건 기대, 실제 {len(events)}")
+        return
+
+    e1 = events[0]
+    if e1.regular_price != 130000 or e1.event_price != 69000:
+        _fail(label, f"스킨보톡스 가격 오류: regular={e1.regular_price}, event={e1.event_price}")
+        return
+
+    e2 = events[1]
+    if e2.regular_price != 2920000 or e2.event_price != 1490000:
+        _fail(label, f"민트실리프팅 가격 오류: regular={e2.regular_price}, event={e2.event_price}")
+        return
+
+    # validator: 이름 안의 '2cc', '20줄' 같은 숫자가 정상가로 잘못 들어가지 않아야 함
+    issues = validate_parsed_events(events)
+    if any("정상가 이상" in i["issue"] for i in issues):
+        _fail(label, f"'정상가 이상' 거짓 양성 (이름 안 숫자가 가격으로 파싱됨): {issues}")
+        return
+
+    _pass(label)
+
+
 # ── 케이스 10: 비고 셀에 "이벤트" 단어 포함된 헤더 (여의도 케이스) ───────────
 
 def test_case10_long_notes_cell_in_header():
@@ -375,6 +414,7 @@ def main():
         test_case8_validate_no_price,
         test_case9_notes_multiline_flatten,
         test_case10_long_notes_cell_in_header,
+        test_case11_branch_prefixed_header,
     ]
     passed = 0
     failed = 0

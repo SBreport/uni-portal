@@ -96,9 +96,9 @@ def find_category_marker(row_text: str) -> str | None:
 _NAME_KEYWORDS = {"이벤트명", "시술명", "상품명", "항목", "메뉴명"}
 _NOTES_KEYWORDS = {"비고", "참고", "메모", "설명", "특이사항", "관리 순서"}
 
-# 헤더 셀 길이 상한 — 정상 헤더는 짧음("정상가"=3, "최종 제안가"=6).
-# 12자 초과는 안내문/비고 문장으로 판단해 가격 컬럼 매칭에서 제외.
-_HEADER_CELL_MAX_LEN = 12
+# 헤더 셀 길이 상한 — 정상 헤더는 짧음("정상가"=3, "최종 제안가"=6, "부평점 정상가(*49%)"=13).
+# 20자 초과는 안내문/비고 문장으로 판단해 가격 컬럼 매칭에서 제외.
+_HEADER_CELL_MAX_LEN = 20
 
 
 def _classify_price_header(cell_text: str) -> str | None:
@@ -110,12 +110,14 @@ def _classify_price_header(cell_text: str) -> str | None:
         None      — 가격 헤더 아님 (이름/비고/안내문 등)
 
     룰:
-    - 너무 긴 셀(>12자)은 안내문이라 헤더 후보 아님
+    - 너무 긴 셀(>20자)은 안내문이라 헤더 후보 아님
+    - 콜론(:/：) 포함 셀은 안내문이라 헤더 후보 아님 (예: "10회 결제 고객 대상 이벤트: ...")
     - "정상"이 포함되면 regular
     - "이벤트", "최종", "제안"이 포함되고 "가" 또는 "price" 같이 가격 단위 표시가 있으면 event
-    - 단순 "이벤트"(예: '...이벤트:...' 같은 안내문)는 길이 컷에서 걸러짐
     """
     if not cell_text or len(cell_text) > _HEADER_CELL_MAX_LEN:
+        return None
+    if ":" in cell_text or "：" in cell_text:
         return None
     lower = cell_text.lower()
     if "정상" in cell_text:

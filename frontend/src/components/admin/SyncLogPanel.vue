@@ -453,8 +453,8 @@ onUnmounted(() => {
                       placeholder="실패 항목 필터..."
                       class="w-full text-[10px] px-1.5 py-0.5 border border-slate-200 rounded bg-white text-slate-600 placeholder-slate-300 mb-1 focus:outline-none focus:border-slate-400"
                     />
-                    <!-- 필터링된 항목 -->
-                    <template v-if="getFilteredErrors(entry.id, evtDetailData.get(entry.id)!.error_log) as filtered">
+                    <!-- 필터링된 항목 — v-for로 단일 객체 alias 만들기 (Vue는 v-if as 미지원) -->
+                    <template v-for="filtered in [getFilteredErrors(entry.id, evtDetailData.get(entry.id)!.error_log)]" :key="'errlist'">
                       <div
                         v-for="(item, idx) in filtered.items"
                         :key="idx"

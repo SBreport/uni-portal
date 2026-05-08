@@ -309,6 +309,57 @@ def test_case9_notes_multiline_flatten():
     _pass(label)
 
 
+# ── 케이스 10: 비고 셀에 "이벤트" 단어 포함된 헤더 (여의도 케이스) ───────────
+
+def test_case10_long_notes_cell_in_header():
+    label = "케이스10 비고 셀에 '이벤트' 포함된 헤더 (여의도)"
+
+    # 여의도 시트 라인 637 헤더 재현:
+    #   col 4 = "최종 제안가" (가격 헤더)
+    #   col 5 = "10회 결제 고객 대상 이벤트: 지인 소개 시 진정관리 1회 서비스 (홈페이지 노출 X)"
+    #     ← 비고 안내문이지만 "이벤트" 단어 포함
+    # 기존 룰에선 col 5를 col_event로 잘못 잡아서 데이터 행의 비고 셀을 가격으로 파싱.
+    rows = [
+        ["■ 남성 제모(젠틀맥스 프로플러스)"],
+        ["", "카테고리", "이벤트명", "", "최종 제안가",
+         "10회 결제 고객 대상 이벤트: 지인 소개 시 진정관리 1회 서비스 (홈페이지 노출 X)"],
+        ["", "남성 패키지", "男) 인기 패키지 1회", "", "43,000", ""],
+        ["", "", "男) 인기 패키지 10회", "", "250,000",
+         "10회 결제 고객 대상 이벤트: 지인 소개 시 진정관리 1회 서비스 (홈페이지 노출 X)"],
+    ]
+    events = parse_branch_sheet(rows, "여의도")
+
+    if len(events) != 2:
+        _fail(label, f"이벤트 2건 기대, 실제 {len(events)}")
+        return
+
+    # "최종 제안가" 컬럼이 event_price로 매핑돼야 함
+    e1 = next((e for e in events if "1회" in e.display_name), None)
+    if e1 is None:
+        _fail(label, "1회 항목 누락")
+        return
+    if e1.event_price != 43000:
+        _fail(label, f"1회 이벤트가 오류: {e1.event_price} (43000 기대)")
+        return
+
+    # 10회: 비고 셀에 "10회 결제..." 텍스트 있어도 event_price에 영향 없어야 함
+    e2 = next((e for e in events if "10회" in e.display_name), None)
+    if e2 is None:
+        _fail(label, "10회 항목 누락")
+        return
+    if e2.event_price != 250000:
+        _fail(label, f"10회 이벤트가 오류: {e2.event_price} (250000 기대, 비고 '10' 잘못 파싱하면 10원)")
+        return
+
+    # validator도 실패 안 해야 함 (가격 정상 인식됐으니)
+    issues = validate_parsed_events(events)
+    if any("가격 정보 없음" in i["issue"] for i in issues):
+        _fail(label, f"'가격 정보 없음' 거짓 양성: {issues}")
+        return
+
+    _pass(label)
+
+
 def main():
     print("=" * 50)
     print("parser.py v2 케이스 검증")
@@ -323,6 +374,7 @@ def main():
         test_case7_implicit_category,
         test_case8_validate_no_price,
         test_case9_notes_multiline_flatten,
+        test_case10_long_notes_cell_in_header,
     ]
     passed = 0
     failed = 0

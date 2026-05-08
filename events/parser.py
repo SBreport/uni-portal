@@ -94,9 +94,36 @@ def find_category_marker(row_text: str) -> str | None:
 
 
 _NAME_KEYWORDS = {"이벤트명", "시술명", "상품명", "항목", "메뉴명"}
-_REGULAR_KEYWORDS = {"정상"}    # "정상가", "정상 가격" etc.
-_EVENT_PRICE_KEYWORDS = {"이벤트"}  # "이벤트가", "이벤트 제안가", "최종 이벤트가" etc.
 _NOTES_KEYWORDS = {"비고", "참고", "메모", "설명", "특이사항", "관리 순서"}
+
+# 헤더 셀 길이 상한 — 정상 헤더는 짧음("정상가"=3, "최종 제안가"=6).
+# 12자 초과는 안내문/비고 문장으로 판단해 가격 컬럼 매칭에서 제외.
+_HEADER_CELL_MAX_LEN = 12
+
+
+def _classify_price_header(cell_text: str) -> str | None:
+    """헤더 셀이 가격 컬럼인지 판정.
+
+    Returns:
+        "regular" — 정상가 컬럼
+        "event"   — 이벤트가 / 최종 제안가 / 제안가 등 할인가 컬럼
+        None      — 가격 헤더 아님 (이름/비고/안내문 등)
+
+    룰:
+    - 너무 긴 셀(>12자)은 안내문이라 헤더 후보 아님
+    - "정상"이 포함되면 regular
+    - "이벤트", "최종", "제안"이 포함되고 "가" 또는 "price" 같이 가격 단위 표시가 있으면 event
+    - 단순 "이벤트"(예: '...이벤트:...' 같은 안내문)는 길이 컷에서 걸러짐
+    """
+    if not cell_text or len(cell_text) > _HEADER_CELL_MAX_LEN:
+        return None
+    lower = cell_text.lower()
+    if "정상" in cell_text:
+        return "regular"
+    has_price_unit = ("가" in cell_text) or ("price" in lower) or ("원" in cell_text)
+    if has_price_unit and ("이벤트" in cell_text or "최종" in cell_text or "제안" in cell_text):
+        return "event"
+    return None
 
 
 def is_header_row(cells: list[str]) -> bool:
@@ -110,13 +137,10 @@ def is_header_row(cells: list[str]) -> bool:
         ct = _normalize_cell(cell)
         if not ct:
             continue
-        # 이름 컬럼 체크 (우선순위 높음)
         if any(kw in ct for kw in _NAME_KEYWORDS):
             found_name = True
-        elif "정상" in ct:
-            found_price = True
-        elif "이벤트" in ct:
-            # "이벤트"가 포함되지만 이름 키워드가 아닌 셀 → 가격 컬럼
+            continue
+        if _classify_price_header(ct) is not None:
             found_price = True
     return found_name and found_price
 
@@ -277,9 +301,11 @@ def parse_branch_sheet(
                 cell_text = _normalize_cell(cell)
                 if any(kw in cell_text for kw in _NAME_KEYWORDS):
                     name_col_candidates.append(i)
-                elif "정상" in cell_text:
+                    continue
+                price_kind = _classify_price_header(cell_text)
+                if price_kind == "regular":
                     col_regular_new = i
-                elif "이벤트" in cell_text:
+                elif price_kind == "event":
                     col_event_new = i
                 elif any(kw in cell_text for kw in _NOTES_KEYWORDS):
                     col_notes_new = i

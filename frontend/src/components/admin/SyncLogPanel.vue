@@ -86,6 +86,33 @@ function setErrorFilter(entryId: number, val: string) {
   evtErrorFilter.value = m
 }
 
+function downloadErrors(entryId: number) {
+  const data = evtDetailData.value.get(entryId)
+  if (!data) return
+  const lines: string[] = []
+  lines.push(`# 이벤트 동기화 실패 항목`)
+  lines.push(`# 기간: ${data.period_label}`)
+  lines.push(`# 지점 수: ${data.total_branches}, 총 항목: ${data.total_items}`)
+  lines.push(`# 실패 건수: ${data.error_log.length}`)
+  lines.push(`# 완료 시각: ${data.completed_at}`)
+  lines.push('')
+  lines.push('지점\t항목\t사유')
+  for (const item of data.error_log) {
+    lines.push(`${item.branch ?? ''}\t${item.event ?? ''}\t${item.error}`)
+  }
+  // BOM 포함 — 엑셀에서 한글 깨짐 방지
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const ts = (data.completed_at || new Date().toISOString()).slice(0, 10)
+  a.href = url
+  a.download = `event-sync-errors-${ts}.txt`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // 스크롤 컨테이너 ref
 const scrollContainer = ref<HTMLElement | null>(null)
 
@@ -442,8 +469,15 @@ onUnmounted(() => {
                   </div>
                   <!-- 실패 항목 (검색 + 최대 30건) -->
                   <div v-if="evtDetailData.get(entry.id)!.error_log.length > 0">
-                    <div class="text-[10px] font-medium text-slate-500 mt-1 mb-0.5">
-                      실패 항목 (전체 {{ evtDetailData.get(entry.id)!.error_log.length }}건)
+                    <div class="flex items-center justify-between mt-1 mb-0.5">
+                      <div class="text-[10px] font-medium text-slate-500">
+                        실패 항목 (전체 {{ evtDetailData.get(entry.id)!.error_log.length }}건)
+                      </div>
+                      <button
+                        @click="downloadErrors(entry.id)"
+                        class="text-[10px] px-1.5 py-0.5 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded border border-violet-200"
+                        title="전체 실패 항목을 TXT로 다운로드 (탭 구분, 엑셀 호환)"
+                      >전체 다운로드</button>
                     </div>
                     <!-- 검색 박스 -->
                     <input

@@ -108,7 +108,7 @@ def run_event_sync(year: int, start_month: int, end_month: int) -> dict:
             # "강남점" → "강남" 매핑 시도
             branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", resolved_name))
         if branch_id is None:
-            errors.append(f"{tab_name}: DB에 지점 없음")
+            errors.append({"branch": tab_name, "event": "", "error": "DB에 지점 없음"})
             continue
 
         try:
@@ -120,7 +120,7 @@ def run_event_sync(year: int, start_month: int, end_month: int) -> dict:
             parse_issues = validate_parsed_events(events)
             if parse_issues:
                 for issue in parse_issues:
-                    errors.append(f"{tab_name}: {issue['event']} — {issue['issue']}")
+                    errors.append({"branch": tab_name, "event": issue['event'], "error": issue['issue']})
 
             count = insert_events(
                 conn, events, period_id, branch_id,
@@ -133,7 +133,7 @@ def run_event_sync(year: int, start_month: int, end_month: int) -> dict:
             print(f"  {tab_name}: {count}건 저장")
 
         except Exception as e:
-            errors.append(f"{tab_name}: {e}")
+            errors.append({"branch": tab_name, "event": "", "error": str(e)})
             print(f"  {tab_name}: 오류 - {e}")
 
     # 5. 미매핑 카테고리 저장
@@ -144,7 +144,7 @@ def run_event_sync(year: int, start_month: int, end_month: int) -> dict:
 
     # 6. 수집 로그 업데이트
     status = "completed" if not errors else "completed_with_errors"
-    error_log = [{"error": e} for e in errors] if errors else None
+    error_log = errors if errors else None
     update_ingestion_log(conn, log_id, status, processed, total_items, error_log)
 
     conn.close()
@@ -191,7 +191,7 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
             if branch_id is None:
                 branch_id = get_evt_branch_id(conn, re.sub(r"점$", "", resolved_name))
             if branch_id is None:
-                errors.append(f"{tab_name}: DB에 지점 없음")
+                errors.append({"branch": tab_name, "event": "", "error": "DB에 지점 없음"})
                 continue
 
             try:
@@ -202,7 +202,7 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
                 parse_issues = validate_parsed_events(events)
                 if parse_issues:
                     for issue in parse_issues:
-                        errors.append(f"{tab_name}: {issue['event']} — {issue['issue']}")
+                        errors.append({"branch": tab_name, "event": issue['event'], "error": issue['issue']})
 
                 count = insert_events(
                     conn, events, period_id, branch_id,
@@ -213,7 +213,7 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
                 processed += 1
                 print(f"  {tab_name}: {count}건 저장")
             except Exception as e:
-                errors.append(f"{tab_name}: {e}")
+                errors.append({"branch": tab_name, "event": "", "error": str(e)})
                 print(f"  {tab_name}: 오류 - {e}")
 
         unmapped = cat_normalizer.get_unmapped()
@@ -222,7 +222,7 @@ def _process_branch_data(branch_data: dict, year: int, start_month: int, end_mon
             print(f"  미매핑 카테고리 {len(unmapped)}건 → review_queue.json 저장")
 
         status = "completed" if not errors else "completed_with_errors"
-        error_log = [{"error": e} for e in errors] if errors else None
+        error_log = errors if errors else None
         update_ingestion_log(conn, log_id, status, processed, total_items, error_log)
 
         conn.close()

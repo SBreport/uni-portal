@@ -494,7 +494,10 @@ onUnmounted(() => {
                         :key="idx"
                         class="text-[11px] text-slate-600 pl-2 truncate"
                       >
-                        - {{ item.branch ?? '?' }}: {{ item.error }}
+                        -
+                        <span v-if="item.branch" class="font-medium text-slate-700">{{ item.branch }}</span>
+                        <span v-if="item.event"> / <span class="text-slate-500">{{ item.event }}</span></span>
+                        <span v-if="item.branch || item.event"> — </span>{{ item.error }}
                       </div>
                       <div v-if="filtered.overflow > 0" class="text-[10px] text-slate-400 pl-2 mt-0.5">
                         외 {{ filtered.overflow }}건 더 있음

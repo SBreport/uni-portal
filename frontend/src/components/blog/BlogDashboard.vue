@@ -451,11 +451,11 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Row 3: grid-cols-4 (도넛 col-span-1 | 지점별 col-span-3) -->
-      <div class="grid grid-cols-4 gap-3">
+      <!-- Row 3: grid-cols-7 (도넛 col-span-2 | 지점별 col-span-5) -->
+      <div class="grid grid-cols-7 gap-3">
 
-        <!-- 도넛 + 범례 (col-span-1) -->
-        <div class="bg-white border border-slate-200 rounded-lg p-3 flex flex-col">
+        <!-- 도넛 + 범례 (col-span-2) -->
+        <div class="col-span-2 bg-white border border-slate-200 rounded-lg p-3 flex flex-col">
           <div class="flex items-center justify-between mb-2">
             <h4 class="text-sm font-semibold text-slate-700">원고 종류별 분포</h4>
             <div class="flex items-center gap-1">
@@ -506,8 +506,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- 지점별 게시글 수 (col-span-3) -->
-        <div class="col-span-3 bg-white border border-slate-200 rounded-lg p-3">
+        <!-- 지점별 게시글 수 (col-span-5) -->
+        <div class="col-span-5 bg-white border border-slate-200 rounded-lg p-3">
           <div class="flex items-center gap-2 mb-3">
             <h3 class="text-sm font-semibold text-slate-700">
               지점별 게시글 수
@@ -545,11 +545,8 @@ onMounted(() => {
           <div v-if="branchMonthlyLoading && branchMonthMode === 'monthly'" class="text-center py-4 text-slate-400 text-xs">로딩...</div>
           <div v-else-if="displayBranchData.length === 0" class="text-xs text-slate-400 text-center py-3">데이터 없음</div>
           <div v-else
-               class="grid grid-cols-3 gap-x-4 gap-y-0"
-               :style="{
-                 gridAutoFlow: 'column',
-                 gridTemplateRows: 'repeat(' + Math.ceil(displayBranches.length / 3) + ', minmax(0, 1fr))'
-               }">
+               class="grid gap-x-4 gap-y-0"
+               style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));">
             <div v-for="b in displayBranches" :key="b.branch_name"
                  class="flex items-center justify-between gap-2 py-1 cursor-pointer hover:bg-slate-50 px-2 rounded transition-colors"
                  @click="goToList({ project_branch: b.branch_name })">

@@ -40,6 +40,9 @@ const TYPE_LABEL: Record<string, string> = {
   blog_notion_sync: '블로그',
   place_sheets_to_db: '플레이스',
   webpage_sheets_to_db: '웹페이지',
+  place_daily_snapshot: '플레이스(스냅)',
+  webpage_daily_snapshot: '웹페이지(스냅)',
+  rank_check_auto: 'SB체커',
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -49,6 +52,9 @@ const TYPE_COLOR: Record<string, string> = {
   blog_notion_sync: 'bg-indigo-100 text-indigo-700',
   place_sheets_to_db: 'bg-blue-100 text-blue-700',
   webpage_sheets_to_db: 'bg-green-100 text-green-700',
+  place_daily_snapshot: 'bg-rose-100 text-rose-700',
+  webpage_daily_snapshot: 'bg-emerald-100 text-emerald-700',
+  rank_check_auto: 'bg-amber-100 text-amber-700',
 }
 
 // ── 상태 ──

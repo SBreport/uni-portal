@@ -3,12 +3,12 @@
 import logging
 from datetime import date, timedelta
 
-from shared.db import get_conn, EQUIPMENT_DB
+from shared.db import get_conn, EQUIPMENT_DB, log_sync
 
 logger = logging.getLogger(__name__)
 
 
-def take_snapshot():
+def take_snapshot(triggered_by: str = "auto"):
     """마지막 동기화 이후 빈 날짜만 실행사별 시트에서 읽어 DB에 저장."""
     try:
         from place.sheets import get_ranking_by_agency, list_months_from_agency, _parse_sheet_name
@@ -125,16 +125,15 @@ def take_snapshot():
                     inserted += 1
 
         conn.commit()
+        conn.close()
 
-        # 동기화 로그 기록
-        from datetime import datetime
-        conn.execute("""
-            INSERT INTO sync_log (sync_type, added, skipped, conflicts, detail, synced_at)
-            VALUES (?, ?, 0, 0, ?, ?)
-        """, ("place_daily_snapshot", inserted,
-              f"{len(missing_days)}일 증분 갱신 (실행사별)",
-              datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-        conn.commit()
+        # 동기화 로그 기록 (헬퍼 사용 — triggered_by 명시 + KST 시각)
+        log_sync(
+            "place_daily_snapshot",
+            added=inserted,
+            detail=f"{len(missing_days)}일 증분 갱신 (실행사별)",
+            triggered_by=triggered_by,
+        )
 
         logger.info(f"[place_snapshot] {inserted}건 저장 완료 ({start_date} ~ {today})")
         return {

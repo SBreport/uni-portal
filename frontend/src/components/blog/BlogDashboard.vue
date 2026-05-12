@@ -395,7 +395,7 @@ onMounted(() => {
                 <col style="width:48px" />
               </colgroup>
               <tbody>
-                <tr v-for="r in (dashboard.this_week || [])" :key="r.id"
+                <tr v-for="r in (dashboard.this_week || []).slice(0, 10)" :key="r.id"
                     class="border-b border-slate-50 hover:bg-slate-50/50">
                   <td class="py-1 pr-1">
                     <span class="text-[10px] px-1 py-0.5 rounded-full" :class="channelColor(r.blog_channel)">{{ channelLabel(r.blog_channel) }}</span>
@@ -430,7 +430,7 @@ onMounted(() => {
                 <col style="width:48px" />
               </colgroup>
               <tbody>
-                <tr v-for="r in (dashboard.last_week || [])" :key="r.id"
+                <tr v-for="r in (dashboard.last_week || []).slice(0, 10)" :key="r.id"
                     class="border-b border-slate-50 hover:bg-slate-50/50">
                   <td class="py-1 pr-1">
                     <span class="text-[10px] px-1 py-0.5 rounded-full" :class="channelColor(r.blog_channel)">{{ channelLabel(r.blog_channel) }}</span>

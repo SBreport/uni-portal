@@ -50,6 +50,7 @@ def _get_current_cafe_period_id(conn) -> Optional[int]:
 async def explore_by_branch(
     user: Annotated[dict, Depends(get_current_user)],
     branch_id: int = Query(..., description="evt_branches.id"),
+    period_id: Optional[int] = Query(None, description="이벤트 기간 ID (미지정 시 현재 기간 자동 선택)"),
 ):
     """지점 ID 기준으로 장비·이벤트·순위·블로그·카페·민원 통합 조회."""
     conn = get_conn(EQUIPMENT_DB)
@@ -92,7 +93,7 @@ async def explore_by_branch(
 
         # ── 현재 기간 이벤트 — 카테고리별 그룹 ──
         events_by_category: dict[str, list] = {}
-        period_id = _get_current_period_id(conn)
+        period_id = period_id if period_id is not None else _get_current_period_id(conn)
         if period_id:
             evt_rows = conn.execute("""
                 SELECT ec.display_name AS category,
@@ -409,6 +410,7 @@ async def explore_by_branch(
 async def explore_by_category(
     user: Annotated[dict, Depends(get_current_user)],
     category_id: int = Query(..., description="evt_categories.id"),
+    period_id: Optional[int] = Query(None, description="이벤트 기간 ID (미지정 시 현재 기간 자동 선택)"),
 ):
     """카테고리 ID 기준으로 시술·이벤트·장비·논문 통합 조회."""
     conn = get_conn(EQUIPMENT_DB)
@@ -424,7 +426,7 @@ async def explore_by_category(
 
         # 현재 기간 이벤트 — 지점별 그룹
         events_by_branch: list[dict] = []
-        period_id = _get_current_period_id(conn)
+        period_id = period_id if period_id is not None else _get_current_period_id(conn)
         if period_id:
             rows = conn.execute("""
                 SELECT eb.name AS branch_name,
@@ -518,11 +520,12 @@ async def explore_by_category(
 @router.get("/category-summary")
 async def category_summary(
     user: Annotated[dict, Depends(get_current_user)],
+    period_id: Optional[int] = Query(None, description="이벤트 기간 ID (미지정 시 현재 기간 자동 선택)"),
 ):
     """카테고리별 이벤트 건수 포함 요약 카드 (현재 기간 기준)."""
     conn = get_conn(EQUIPMENT_DB)
     try:
-        period_id = _get_current_period_id(conn)
+        period_id = period_id if period_id is not None else _get_current_period_id(conn)
 
         if period_id:
             rows = conn.execute("""
@@ -558,6 +561,7 @@ async def category_summary(
 async def explore_by_device(
     user: Annotated[dict, Depends(get_current_user)],
     device_id: int = Query(..., description="device_info.id"),
+    period_id: Optional[int] = Query(None, description="이벤트 기간 ID (미지정 시 현재 기간 자동 선택)"),
 ):
     """장비(device_info) ID 기준으로 지점·이벤트·논문·블로그·시술 통합 조회."""
     conn = get_conn(EQUIPMENT_DB)
@@ -615,7 +619,7 @@ async def explore_by_device(
             owning_branches_list = [dict(r) for r in owning_branches_rows]
 
         # ── 관련 이벤트 — evt_treatments.device_info_id → components → items (현재 기간) ──
-        period_id = _get_current_period_id(conn)
+        period_id = period_id if period_id is not None else _get_current_period_id(conn)
         events_list: list[dict] = []
         if period_id:
             events_rows = conn.execute("""

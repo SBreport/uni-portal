@@ -7,7 +7,7 @@ from api.deps import get_current_user, require_role
 from api.models import TreatmentUpdate, TreatmentCreate, EventSyncRequest
 
 from events.db import (
-    load_current_events, load_evt_branches, load_evt_categories, load_evt_periods,
+    load_current_events, load_events, load_evt_branches, load_evt_categories, load_evt_periods,
     load_price_history, search_by_treatment, load_event_summary,
     load_treatment_dictionary, update_treatment_info, add_treatment_entry,
     create_event_item, update_event_item, delete_event_item,
@@ -18,8 +18,11 @@ _editor = require_role("editor")
 
 
 @router.get("")
-async def get_events(user: Annotated[dict, Depends(get_current_user)]):
-    rows, is_fallback = load_current_events()
+async def get_events(
+    user: Annotated[dict, Depends(get_current_user)],
+    period_id: Optional[int] = Query(None, description="이벤트 기간 ID (미지정 시 현재 기간 자동 선택)"),
+):
+    rows, is_fallback = load_events(period_id)
     return {"data": rows or [], "is_fallback": is_fallback}
 
 

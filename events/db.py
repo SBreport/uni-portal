@@ -391,6 +391,29 @@ def load_current_events() -> tuple:
         conn.close()
 
 
+def load_events(period_id: int | None = None) -> tuple:
+    """period_id 지정 시 해당 기간, 없으면 load_current_events() 동일 동작.
+
+    Returns:
+        (list[dict], is_fallback: bool)
+    """
+    if period_id is None:
+        return load_current_events()
+
+    conn = _get_conn()
+    try:
+        base = _event_query()
+        order = " ORDER BY er.sort_order, eb.name, ec.sort_order, ei.row_order"
+        rows = _query_rows(
+            conn,
+            base + " WHERE ep.id = ? AND ei.is_active = 1" + order,
+            (period_id,),
+        )
+        return rows, False
+    finally:
+        conn.close()
+
+
 def load_evt_branches() -> list[dict]:
     """이벤트 지점 목록 (ㄱㄴㄷ 순)."""
     conn = _get_conn()

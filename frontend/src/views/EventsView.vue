@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useEventsStore } from '@/stores/events'
 import { stripBrand } from '@/utils/branchName'
 import DataTable from '@/components/common/DataTable.vue'
 import FilterSelect from '@/components/common/FilterSelect.vue'
+import PeriodSelector from '@/components/common/PeriodSelector.vue'
 import { createColumnHelper, type CellContext } from '@tanstack/vue-table'
 import { h } from 'vue'
 
 const route = useRoute()
 const store = useEventsStore()
 const col = createColumnHelper<any>()
+
+const selectedPeriodId = ref<number | null>(null)
+
+watch(selectedPeriodId, (id) => {
+  if (id != null) {
+    store.loadAll(id).catch(e => console.error('[EventsView] 기간 변경 로드 실패:', e))
+  }
+})
 
 async function applyQueryFilters() {
   const branchQ = route.query.branch as string | undefined
@@ -29,7 +38,8 @@ async function applyQueryFilters() {
 }
 
 onMounted(async () => {
-  try { await store.loadAll() } catch (e) { console.error('[EventsView] 로드 실패:', e) }
+  // 초기 로드는 PeriodSelector가 현재 기간을 selectedPeriodId에 emit한 뒤 watch가 처리.
+  // query 필터는 브랜치 목록이 준비된 뒤 적용.
   await applyQueryFilters()
 })
 watch(() => route.query, () => { applyQueryFilters() })
@@ -86,10 +96,13 @@ const categoryOptions = computed(() => store.categories.map((c: any) => ({ value
 
 <template>
   <div class="p-5 h-full flex flex-col">
-    <h2 class="text-xl font-bold text-slate-800 mb-4 shrink-0">
-      이벤트
-      <span v-if="store.isFallback" class="text-xs text-amber-500 font-normal ml-2">(이전 기간 데이터)</span>
-    </h2>
+    <div class="flex items-center gap-3 mb-4 shrink-0">
+      <h2 class="text-xl font-bold text-slate-800">
+        이벤트
+        <span v-if="store.isFallback" class="text-xs text-amber-500 font-normal ml-2">(이전 기간 데이터)</span>
+      </h2>
+      <PeriodSelector v-model:periodId="selectedPeriodId" />
+    </div>
 
     <!-- 필터 바 -->
     <div class="flex items-center gap-2.5 mb-4 flex-wrap shrink-0">

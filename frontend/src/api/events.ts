@@ -1,6 +1,7 @@
 import api from './client'
 
-export const getEvents = () => api.get('/events')
+export const getEvents = (periodId?: number) =>
+  api.get('/events', { params: periodId != null ? { period_id: periodId } : undefined })
 export const getBranches = () => api.get('/events/branches')
 export const getCategories = () => api.get('/events/categories')
 export const getPeriods = () => api.get('/events/periods')

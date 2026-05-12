@@ -58,11 +58,11 @@ export const useEventsStore = defineStore('events', () => {
     return result
   })
 
-  async function loadAll() {
+  async function loadAll(periodId?: number) {
     loading.value = true
     try {
       const [evtRes, catRes] = await Promise.all([
-        eventsApi.getEvents(), eventsApi.getCategories(),
+        eventsApi.getEvents(periodId), eventsApi.getCategories(),
         branchStore.loadBranches(),
       ])
       events.value = evtRes.data.data || []

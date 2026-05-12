@@ -9,12 +9,41 @@ import FilterSelect from '@/components/common/FilterSelect.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ExplorerDeviceInline from '@/components/explorer/ExplorerDeviceInline.vue'
+import PeriodSelector from '@/components/common/PeriodSelector.vue'
 
 // ── 스토어 ──────────────────────────────────────────────────────────────────
 const router = useRouter()
 const branchStore = useBranchStore()
 const auth = useAuthStore()
 const canSeeAuthor = computed(() => ['admin', 'editor'].includes(auth.effectiveRole))
+
+// ── 기간 선택 ────────────────────────────────────────────────────────────────
+const selectedPeriodId = ref<number | null>(null)
+
+// 기간이 변경되면 이벤트가 포함된 탭들 데이터 갱신
+watch(selectedPeriodId, (id) => {
+  if (id == null) return
+  // 지점별: 현재 선택된 지점이 있으면 재로드
+  if (selectedBranchId.value) {
+    branchLoading.value = true
+    branchData.value = null
+    explorerApi.getByBranch(Number(selectedBranchId.value), id)
+      .then(d => { branchData.value = d })
+      .catch(e => console.error('[Explorer] 지점 재로드 실패:', e))
+      .finally(() => { branchLoading.value = false })
+  }
+  // 시술별: 현재 선택된 카테고리가 있으면 재로드
+  if (selectedCategoryId.value) {
+    categoryLoading.value = true
+    categoryData.value = null
+    explorerApi.getByCategory(selectedCategoryId.value, id)
+      .then(d => { categoryData.value = d })
+      .catch(e => console.error('[Explorer] 카테고리 재로드 실패:', e))
+      .finally(() => { categoryLoading.value = false })
+  }
+  // 카테고리 요약 새로고침
+  loadCategories(id)
+})
 
 // ── 블로그 페이지 이동 ──────────────────────────────────────────────────────
 function goToBrandBlog() {
@@ -35,6 +64,8 @@ onMounted(async () => {
   await branchStore.loadBranches()
   loadDeviceList()
   loadDevicesSummary()
+  // loadCategories는 PeriodSelector가 현재 기간 id를 emit하면 watch(selectedPeriodId)에서 호출됨.
+  // selectedPeriodId가 null인 채로 탭이 열릴 경우를 위해 폴백으로 초기 로드.
   loadCategories()
 })
 
@@ -184,7 +215,7 @@ watch(selectedBranchId, async (id) => {
   if (!id) return
   branchLoading.value = true
   try {
-    branchData.value = await explorerApi.getByBranch(Number(id))
+    branchData.value = await explorerApi.getByBranch(Number(id), selectedPeriodId.value ?? undefined)
   } catch (e) {
     console.error('[Explorer] 지점 로드 실패:', e)
   } finally {
@@ -249,10 +280,10 @@ const eventCount = computed(() => {
 const categories = ref<Array<{ id: number; name: string; display_name: string; event_count: number }>>([])
 const categoriesLoading = ref(false)
 
-async function loadCategories() {
+async function loadCategories(periodId?: number) {
   categoriesLoading.value = true
   try {
-    categories.value = await explorerApi.getCategorySummary()
+    categories.value = await explorerApi.getCategorySummary(periodId ?? selectedPeriodId.value ?? undefined)
   } catch (e) {
     console.error('[Explorer] 카테고리 로드 실패:', e)
     categories.value = []
@@ -279,7 +310,7 @@ async function selectCategory(catId: number) {
   selectedTag.value = null
   tagDetailData.value = null
   try {
-    categoryData.value = await explorerApi.getByCategory(catId)
+    categoryData.value = await explorerApi.getByCategory(catId, selectedPeriodId.value ?? undefined)
   } catch (e) {
     console.error('[Explorer] 카테고리 로드 실패:', e)
   } finally {
@@ -422,7 +453,10 @@ function togglePaper(id: number) {
 
     <!-- 헤더 -->
     <div class="mb-5">
-      <h2 class="text-xl font-bold text-slate-800">탐색기</h2>
+      <div class="flex items-center gap-3">
+        <h2 class="text-xl font-bold text-slate-800">탐색기</h2>
+        <PeriodSelector v-model:periodId="selectedPeriodId" />
+      </div>
       <p class="text-sm text-slate-400 mt-1">지점 · 시술 · 장비 · 논문을 중심으로 연결된 정보를 탐색합니다</p>
     </div>
 

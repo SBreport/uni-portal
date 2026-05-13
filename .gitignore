@@ -22,6 +22,9 @@ credentials.json
 
 # 임시 보관 (삭제 대기)
 _temp/
+# 진단 산출물은 커밋 대상 (검수용)
+!docs/_temp/
+!docs/_temp/**
 
 # 논문 분석 임시 결과
 papers/temp_*.json

@@ -122,6 +122,30 @@ def get_or_create_category(cursor, name):
     return cursor.lastrowid
 
 
+def _map_unlinked_equipment(cursor, device_list) -> tuple[int, int]:
+    """device_info_id가 NULL인 기존 equipment row에 대해 자동 매핑 재시도.
+
+    Args:
+        cursor: 활성 DB 커서 (트랜잭션 안에서 호출)
+        device_list: 미리 로드된 device_info 목록
+
+    Returns:
+        (매핑 성공 건수, 전체 미연결 건수)
+    """
+    from equipment.matcher import match_single
+    cursor.execute("SELECT id, name FROM equipment WHERE device_info_id IS NULL")
+    rows = cursor.fetchall()
+    matched = 0
+    for eq_id, name in rows:
+        di_id, _ = match_single(name, device_list)
+        if di_id:
+            cursor.execute(
+                "UPDATE equipment SET device_info_id = ? WHERE id = ?", (di_id, eq_id)
+            )
+            matched += 1
+    return matched, len(rows)
+
+
 def sync_from_sheets(triggered_by: str = "manual"):
     """Google Sheets → SQLite 동기화 실행"""
     try:
@@ -143,12 +167,17 @@ def sync_from_sheets(triggered_by: str = "manual"):
         added = 0
         updated = 0
         skipped = 0
+        mapped = 0      # 신규 중 device_info 자동 매핑 성공
         conflict_details = []
+
+        # device_info 전체 목록을 미리 로드 (루프 안에서 반복 쿼리 방지)
+        from equipment.matcher import match_single, _load_device_list
+        from equipment.db import normalize_device_name
+        device_list = _load_device_list()
 
         for _, row in df.iterrows():
             branch_name = str(row["지점명"]).strip()
             category_name = str(row.get("카테고리", "")).strip()
-            from equipment.db import normalize_device_name
             device_name = normalize_device_name(str(row.get("기기명", "")))
             quantity = int(row.get("수량", 1))
             note = str(row.get("비고", "")).strip()
@@ -171,12 +200,16 @@ def sync_from_sheets(triggered_by: str = "manual"):
             existing = c.fetchone()
 
             if existing is None:
-                # 신규 행 → 추가
+                # 신규 행 → device_info 자동 매핑 시도
+                di_id, _ = match_single(device_name, device_list)
+                if di_id:
+                    mapped += 1
+                # 추가
                 c.execute("""
                     INSERT INTO equipment
-                        (branch_id, category_id, name, name_original, quantity, photo_status, note, source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'sheets')
-                """, (branch_id, category_id, device_name, device_name, quantity, photo_status, note))
+                        (branch_id, category_id, name, name_original, quantity, photo_status, note, source, device_info_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'sheets', ?)
+                """, (branch_id, category_id, device_name, device_name, quantity, photo_status, note, di_id))
                 added += 1
             else:
                 # 기존 행 → 내용 비교
@@ -204,14 +237,24 @@ def sync_from_sheets(triggered_by: str = "manual"):
                         f"수량({db_qty}->{quantity}), 비고({db_note}->{note}){photo_note}"
                     )
 
+        # 기존 미연결 row 일괄 매핑 (device_info_id IS NULL인 row 재시도)
+        bulk_matched, bulk_total = _map_unlinked_equipment(c, device_list)
+
         conn.commit()
         conn.close()
 
         # 4. 동기화 로그 기록 (conn close 후에 헬퍼 호출 — 같은 DB 파일 락 충돌 방지)
         from shared.db import log_sync
         detail_text = f"보유장비 시트 / {added + skipped + updated}건 처리"
+        if added:
+            detail_text += f" (신규 {added}건 중 {mapped}건 매핑"
+            if added - mapped:
+                detail_text += f", {added - mapped}건 미연결"
+            detail_text += ")"
         if updated:
-            detail_text += f" (업데이트 {updated}건)"
+            detail_text += f" / 업데이트 {updated}건"
+        if bulk_total > 0:
+            detail_text += f" / 기존 미연결 {bulk_total}건 중 {bulk_matched}건 일괄 매핑"
         log_sync("equipment_sync", added=added, skipped=skipped, conflicts=updated,
                  detail=detail_text, triggered_by=triggered_by)
 

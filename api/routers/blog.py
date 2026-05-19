@@ -74,7 +74,9 @@ def export_keywords_csv(
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["순번", "키워드", "블로그계정", "글번호", "발행일", "제목"])
-    writer.writerows(rows)
+    # 글번호는 12자리 숫자라 Excel이 지수표기로 변환함 — ="..." 로 wrap하면 텍스트로 강제됨
+    for seq, kw, bid, pn, pub, ttl in rows:
+        writer.writerow([seq, kw, bid, f'="{pn}"' if pn else "", pub, ttl])
 
     today = datetime.now().strftime("%Y%m%d")
     csv_bytes = "﻿" + buf.getvalue()

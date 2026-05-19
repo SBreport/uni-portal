@@ -465,7 +465,7 @@ def get_last_sync_status() -> dict | None:
 def export_keywords(date_from: str | None = None, date_to: str | None = None) -> list[tuple]:
     """키워드 추적 대상 게시글 목록 반환.
 
-    반환: list of (순번, keyword, blog_id, post_number, published_at, title)
+    반환: list of (순번, keyword, channel, branch, blog_id, post_number, published_at, title)
     """
     conn = _conn()
     try:
@@ -490,6 +490,12 @@ def export_keywords(date_from: str | None = None, date_to: str | None = None) ->
         rows = conn.execute(
             f"""SELECT
                     keyword,
+                    CASE
+                        WHEN blog_channel = 'br' THEN '브랜드'
+                        WHEN blog_channel = 'opt' THEN '최적'
+                        ELSE ''
+                    END AS channel,
+                    COALESCE(branch_name, '') AS branch,
                     blog_id,
                     post_number,
                     published_at,
@@ -500,7 +506,7 @@ def export_keywords(date_from: str | None = None, date_to: str | None = None) ->
             params,
         ).fetchall()
 
-        return [(i + 1, r[0], r[1], r[2], r[3][:10] if r[3] else "", r[4]) for i, r in enumerate(rows)]
+        return [(i + 1, r[0], r[1], r[2], r[3], r[4], r[5][:10] if r[5] else "", r[6]) for i, r in enumerate(rows)]
     finally:
         conn.close()
 

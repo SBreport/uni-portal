@@ -460,6 +460,51 @@ def get_last_sync_status() -> dict | None:
         conn.close()
 
 
+# ── 키워드 추적용 내보내기 ──
+
+def export_keywords(date_from: str | None = None, date_to: str | None = None) -> list[tuple]:
+    """키워드 추적 대상 게시글 목록 반환.
+
+    반환: list of (순번, keyword, blog_id, post_number, published_at, title)
+    """
+    conn = _conn()
+    try:
+        conditions = [
+            "keyword IS NOT NULL AND keyword <> ''",
+            "blog_id IS NOT NULL AND blog_id <> ''",
+            "post_number IS NOT NULL AND post_number <> ''",
+            "published_at IS NOT NULL AND published_at <> ''",
+            "(platform IS NULL OR platform <> 'cafe')",
+            "COALESCE(NULLIF(clean_title,''), NULLIF(title,''), NULLIF(scraped_title,'')) IS NOT NULL",
+        ]
+        params = []
+
+        if date_from:
+            conditions.append("published_at >= ?")
+            params.append(date_from)
+        if date_to:
+            conditions.append("published_at <= ?")
+            params.append(date_to)
+
+        where = "WHERE " + " AND ".join(conditions)
+        rows = conn.execute(
+            f"""SELECT
+                    keyword,
+                    blog_id,
+                    post_number,
+                    published_at,
+                    COALESCE(NULLIF(clean_title,''), NULLIF(title,''), NULLIF(scraped_title,'')) AS title
+                FROM blog_posts
+                {where}
+                ORDER BY published_at DESC, id DESC""",
+            params,
+        ).fetchall()
+
+        return [(i + 1, r[0], r[1], r[2], r[3][:10] if r[3] else "", r[4]) for i, r in enumerate(rows)]
+    finally:
+        conn.close()
+
+
 # ── HOME 대시보드 (전체 현황) ──
 
 def get_home_dashboard() -> dict:

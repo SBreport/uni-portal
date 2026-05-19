@@ -60,6 +60,32 @@ def list_posts_api(
     )
 
 
+# ── 키워드 추적용 CSV 다운로드 (관리자 전용) ──
+# {post_id} 라우터보다 먼저 등록되어야 "export-keywords.csv"가 int로 파싱되어 422가 나는 것을 피함
+@router.get("/posts/export-keywords.csv")
+def export_keywords_csv(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    user: dict = Depends(require_role("admin")),
+):
+    """발행 완료 게시글의 (키워드 × 블로그ID) 조합을 CSV로 내보내기."""
+    rows = export_keywords(date_from=date_from, date_to=date_to)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["순번", "키워드", "블로그계정", "글번호", "발행일", "제목"])
+    writer.writerows(rows)
+
+    today = datetime.now().strftime("%Y%m%d")
+    csv_bytes = "﻿" + buf.getvalue()
+
+    return Response(
+        content=csv_bytes.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="blog_keywords_{today}.csv"'},
+    )
+
+
 # ── 게시글 상세 ──
 @router.get("/posts/{post_id}")
 def get_post_api(post_id: int):
@@ -361,31 +387,6 @@ def get_active_accounts(
         return {"branches": branches}
     finally:
         conn.close()
-
-
-# ── 키워드 추적용 CSV 다운로드 (관리자 전용) ──
-@router.get("/posts/export-keywords.csv")
-def export_keywords_csv(
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    user: dict = Depends(require_role("admin")),
-):
-    """발행 완료 게시글의 (키워드 × 블로그ID) 조합을 CSV로 내보내기."""
-    rows = export_keywords(date_from=date_from, date_to=date_to)
-
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["순번", "키워드", "블로그계정", "글번호", "발행일", "제목"])
-    writer.writerows(rows)
-
-    today = datetime.now().strftime("%Y%m%d")
-    csv_bytes = "﻿" + buf.getvalue()
-
-    return Response(
-        content=csv_bytes.encode("utf-8"),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="blog_keywords_{today}.csv"'},
-    )
 
 
 # ── 스케줄러 상태/트리거 ──

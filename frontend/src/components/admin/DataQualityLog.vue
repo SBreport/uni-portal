@@ -66,6 +66,7 @@ const notionSyncing = ref(false)
 const scrapeStatus = ref<any>(null)
 const scraping = ref(false)
 const importingData = ref(false)
+const downloadingCsv = ref(false)
 const blogActionMsg = ref('')
 const blogActionError = ref(false)
 
@@ -115,6 +116,30 @@ async function importData() {
     loadBlogStatus()
   } catch (e: any) { showMsg(e.response?.data?.detail || '실패', true) }
   finally { importingData.value = false }
+}
+
+async function downloadKeywordsCsv() {
+  downloadingCsv.value = true
+  try {
+    const response = await blogApi.exportKeywordsCsv()
+    const blob = response.data as Blob
+    const disposition: string = response.headers['content-disposition'] || ''
+    let filename = ''
+    const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i)
+    if (match) filename = decodeURIComponent(match[1].replace(/"/g, ''))
+    if (!filename) {
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      filename = `blog_keywords_${today}.csv`
+    }
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    showMsg('키워드 CSV 다운로드 완료')
+  } catch (e: any) { showMsg(e.response?.data?.detail || 'CSV 다운로드 실패', true) }
+  finally { downloadingCsv.value = false }
 }
 
 async function uploadCsv(e: Event) {
@@ -223,6 +248,17 @@ onMounted(() => {
             CSV 파일 선택
             <input type="file" accept=".csv" class="hidden" @change="uploadCsv" />
           </label>
+        </div>
+        <!-- 키워드 CSV 다운로드 -->
+        <div class="flex items-center justify-between py-2 px-3 bg-slate-50 rounded">
+          <div>
+            <p class="text-xs font-medium text-slate-700">키워드 추적용 CSV 다운로드</p>
+            <p class="text-[10px] text-slate-400">발행된 모든 블로그 글을 키워드별로 추출 (카페 제외)</p>
+          </div>
+          <button @click="downloadKeywordsCsv" :disabled="downloadingCsv"
+            class="px-3 py-1 bg-teal-600 text-white text-xs rounded hover:bg-teal-700 disabled:opacity-50">
+            {{ downloadingCsv ? '다운로드 중...' : 'CSV 다운로드' }}
+          </button>
         </div>
         <!-- Result message -->
         <div v-if="blogActionMsg" class="text-xs px-3 py-1 rounded"

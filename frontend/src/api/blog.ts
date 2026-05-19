@@ -88,3 +88,6 @@ export const getDataQualityDetails = (category: string, limit = 50) =>
 
 export const getActiveAccounts = (params?: { branch_filter?: string }) =>
   api.get('/blog/active-accounts', { params })
+
+export const exportKeywordsCsv = () =>
+  api.get('/blog/posts/export-keywords.csv', { responseType: 'blob', headers: { Accept: 'text/csv' } })

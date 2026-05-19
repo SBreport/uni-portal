@@ -1,0 +1,114 @@
+﻿device_info_id,device_info_name,device_info_category,di_mapped_user8_id,di_mapped_user8,eq_category_id,eq_category,eq_count,mismatch,권장_정정_방향
+86,하이드라페이셜,관리기기(필링),4,여드름 치료,7,기타,42,device_info→여드름 치료 vs equipment등록→기타,사용자 검수 필요
+19,LDM,관리기기(초음파),1,리프팅,7,기타,41,device_info→리프팅 vs equipment등록→기타,사용자 검수 필요
+64,아포지,레이저(제모/색소/혈관),2,색소,8,제모,39,device_info→색소 vs equipment등록→제모,사용자 검수 필요
+126,셀르디엠,바디,6,비만,3,주사 시술,22,device_info→비만 vs equipment등록→주사 시술,사용자 검수 필요
+90,밀크필,필링,4,여드름 치료,7,기타,20,device_info→여드름 치료 vs equipment등록→기타,사용자 검수 필요
+62,CO2 레이저,레이저(재생/흉터),5,여드름 흉터,2,색소,19,device_info→여드름 흉터 vs equipment등록→색소,사용자 검수 필요
+15,포텐자,RF 마이크로니들,1,리프팅,5,여드름 흉터,17,device_info→리프팅 vs equipment등록→여드름 흉터,사용자 검수 필요
+17,소노,관리기기(초음파),1,리프팅,7,기타,16,device_info→리프팅 vs equipment등록→기타,사용자 검수 필요
+33,온다리프팅,리프팅/바디,1,리프팅,6,비만,14,device_info→리프팅 vs equipment등록→비만,사용자 검수 필요
+13,피코프락셀,레이저(색소/재생),2,색소,5,여드름 흉터,13,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요
+127,레티젠,스킨케어/필링,4,여드름 치료,3,주사 시술,12,device_info→여드름 치료 vs equipment등록→주사 시술,사용자 검수 필요
+50,젠틀맥스 프로 플러스,레이저(제모/색소/혈관),2,색소,8,제모,11,device_info→색소 vs equipment등록→제모,사용자 검수 필요
+34,클라리티2,레이저(색소/혈관/제모),2,색소,8,제모,10,device_info→색소 vs equipment등록→제모,사용자 검수 필요
+59,티타늄,레이저(리프팅/제모),8,제모,1,리프팅,10,device_info→제모 vs equipment등록→리프팅,사용자 검수 필요
+45,피코슈어,레이저(색소),2,색소,5,여드름 흉터,9,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요
+112,에어샤인,관리기기,7,기타,5,여드름 흉터,8,device_info→기타 vs equipment등록→여드름 흉터,사용자 검수 필요
+128,라셈드,관리기기(RF/LED),7,기타,5,여드름 흉터,8,device_info→기타 vs equipment등록→여드름 흉터,사용자 검수 필요
+69,FCR필링,필링,4,여드름 치료,7,기타,7,device_info→여드름 치료 vs equipment등록→기타,사용자 검수 필요
+15,포텐자,RF 마이크로니들,1,리프팅,4,여드름 치료,6,device_info→리프팅 vs equipment등록→여드름 치료,사용자 검수 필요
+73,아쎄라,리프팅,1,리프팅,6,비만,6,device_info→리프팅 vs equipment등록→비만,사용자 검수 필요
+117,악센토,레이저(색소/혈관),2,색소,8,제모,6,device_info→색소 vs equipment등록→제모,사용자 검수 필요
+178,미라젯,여드름,4,여드름 치료,5,여드름 흉터,6,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+22,HPL,레이저(제모/색소),2,색소,6,비만,5,device_info→색소 vs equipment등록→비만,사용자 검수 필요
+73,아쎄라,리프팅,1,리프팅,3,주사 시술,5,device_info→리프팅 vs equipment등록→주사 시술,사용자 검수 필요
+94,더마샤인,시술기기(주입),3,주사 시술,7,기타,5,device_info→주사 시술 vs equipment등록→기타,사용자 검수 필요
+99,카복시,주사 시술,3,주사 시술,6,비만,5,device_info→주사 시술 vs equipment등록→비만,사용자 검수 필요
+107,트리필,RF 마이크로니들,1,리프팅,5,여드름 흉터,5,device_info→리프팅 vs equipment등록→여드름 흉터,사용자 검수 필요
+124,인소닉,관리기기(초음파),1,리프팅,7,기타,5,device_info→리프팅 vs equipment등록→기타,사용자 검수 필요
+211,하이쿡스,주사/부스터,3,주사 시술,7,기타,5,device_info→주사 시술 vs equipment등록→기타,사용자 검수 필요
+4,인모드,리프팅,1,리프팅,6,비만,4,device_info→리프팅 vs equipment등록→비만,사용자 검수 필요
+46,피코플러스,레이저(색소),2,색소,5,여드름 흉터,4,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요
+52,시크릿RF,RF 마이크로니들,1,리프팅,5,여드름 흉터,4,device_info→리프팅 vs equipment등록→여드름 흉터,사용자 검수 필요
+53,버츄RF,RF 마이크로니들,1,리프팅,5,여드름 흉터,4,device_info→리프팅 vs equipment등록→여드름 흉터,사용자 검수 필요
+53,버츄RF,RF 마이크로니들,1,리프팅,4,여드름 치료,4,device_info→리프팅 vs equipment등록→여드름 치료,사용자 검수 필요
+62,CO2 레이저,레이저(재생/흉터),5,여드름 흉터,7,기타,4,device_info→여드름 흉터 vs equipment등록→기타,사용자 검수 필요
+72,실리프팅,리프팅(실),1,리프팅,3,주사 시술,4,device_info→리프팅 vs equipment등록→주사 시술,사용자 검수 필요
+83,피코하이,레이저(색소),2,색소,5,여드름 흉터,4,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요
+135,이브시너지,리프팅,1,리프팅,7,기타,4,device_info→리프팅 vs equipment등록→기타,사용자 검수 필요
+231,에토좀,스킨부스터,3,주사 시술,5,여드름 흉터,4,device_info→주사 시술 vs equipment등록→여드름 흉터,사용자 검수 필요
+48,헐리우드 스펙트라,레이저(색소/토닝),2,색소,5,여드름 흉터,3,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요
+51,실펌X,RF 마이크로니들,1,리프팅,5,여드름 흉터,3,device_info→리프팅 vs equipment등록→여드름 흉터,사용자 검수 필요
+51,실펌X,RF 마이크로니들,1,리프팅,2,색소,3,device_info→리프팅 vs equipment등록→색소,사용자 검수 필요
+94,더마샤인,시술기기(주입),3,주사 시술,5,여드름 흉터,3,device_info→주사 시술 vs equipment등록→여드름 흉터,사용자 검수 필요
+130,스케일링,시술,7,기타,4,여드름 치료,3,device_info→기타 vs equipment등록→여드름 치료,사용자 검수 필요
+179,미모레이저,여드름,4,여드름 치료,5,여드름 흉터,3,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+7,아그네스,여드름/피지,4,여드름 치료,7,기타,2,device_info→여드름 치료 vs equipment등록→기타,사용자 검수 필요
+35,클라리티 프로,레이저(색소/혈관/제모),2,색소,8,제모,2,device_info→색소 vs equipment등록→제모,사용자 검수 필요
+52,시크릿RF,RF 마이크로니들,1,리프팅,4,여드름 치료,2,device_info→리프팅 vs equipment등록→여드름 치료,사용자 검수 필요
+53,버츄RF,RF 마이크로니들,1,리프팅,2,색소,2,device_info→리프팅 vs equipment등록→색소,사용자 검수 필요
+57,엑소좀,스킨부스터,3,주사 시술,7,기타,2,device_info→주사 시술 vs equipment등록→기타,사용자 검수 필요
+89,백옥주사,주사 시술,3,주사 시술,7,기타,2,device_info→주사 시술 vs equipment등록→기타,사용자 검수 필요
+90,밀크필,필링,4,여드름 치료,5,여드름 흉터,2,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+90,밀크필,필링,4,여드름 치료,2,색소,2,device_info→여드름 치료 vs equipment등록→색소,사용자 검수 필요
+92,비타민,관리기기/시술,7,기타,3,주사 시술,2,device_info→기타 vs equipment등록→주사 시술,사용자 검수 필요
+113,피팅레이저,레이저(색소/피부결),2,색소,1,리프팅,2,device_info→색소 vs equipment등록→리프팅,사용자 검수 필요
+128,라셈드,관리기기(RF/LED),7,기타,2,색소,2,device_info→기타 vs equipment등록→색소,사용자 검수 필요
+129,코스젯,관리기기(플라즈마),4,여드름 치료,2,색소,2,device_info→여드름 치료 vs equipment등록→색소,사용자 검수 필요
+131,컴포트듀얼,리프팅,1,리프팅,6,비만,2,device_info→리프팅 vs equipment등록→비만,사용자 검수 필요
+169,더블타이트,여드름,4,여드름 치료,5,여드름 흉터,2,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+175,로투스2,여드름,4,여드름 치료,5,여드름 흉터,2,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+176,로투스3,여드름,4,여드름 치료,7,기타,2,device_info→여드름 치료 vs equipment등록→기타,사용자 검수 필요
+2,브이로,리프팅,1,리프팅,5,여드름 흉터,1,device_info→리프팅 vs equipment등록→여드름 흉터,사용자 검수 필요
+7,아그네스,여드름/피지,4,여드름 치료,5,여드름 흉터,1,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+9,노블린혈관,색소,2,색소,8,제모,1,device_info→색소 vs equipment등록→제모,사용자 검수 필요
+11,피코,색소,2,색소,5,여드름 흉터,1,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요
+12,CO2,색소,2,색소,4,여드름 치료,1,device_info→색소 vs equipment등록→여드름 치료,사용자 검수 필요
+14,브이로RF,모공,4,여드름 치료,5,여드름 흉터,1,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+15,포텐자,RF 마이크로니들,1,리프팅,3,주사 시술,1,device_info→리프팅 vs equipment등록→주사 시술,사용자 검수 필요
+35,클라리티 프로,레이저(색소/혈관/제모),2,색소,7,기타,1,device_info→색소 vs equipment등록→기타,사용자 검수 필요
+45,피코슈어,레이저(색소),2,색소,7,기타,1,device_info→색소 vs equipment등록→기타,사용자 검수 필요
+46,피코플러스,레이저(색소),2,색소,7,기타,1,device_info→색소 vs equipment등록→기타,사용자 검수 필요
+49,더마브이,레이저(색소/혈관),2,색소,8,제모,1,device_info→색소 vs equipment등록→제모,사용자 검수 필요
+49,더마브이,레이저(색소/혈관),2,색소,5,여드름 흉터,1,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요
+49,더마브이,레이저(색소/혈관),2,색소,4,여드름 치료,1,device_info→색소 vs equipment등록→여드름 치료,사용자 검수 필요
+53,버츄RF,RF 마이크로니들,1,리프팅,7,기타,1,device_info→리프팅 vs equipment등록→기타,사용자 검수 필요
+55,플래티넘PTT,여드름/피지,4,여드름 치료,7,기타,1,device_info→여드름 치료 vs equipment등록→기타,사용자 검수 필요
+55,플래티넘PTT,여드름/피지,4,여드름 치료,5,여드름 흉터,1,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+58,물광주사,스킨부스터,3,주사 시술,7,기타,1,device_info→주사 시술 vs equipment등록→기타,사용자 검수 필요
+64,아포지,레이저(제모/색소/혈관),2,색소,4,여드름 치료,1,device_info→색소 vs equipment등록→여드름 치료,사용자 검수 필요
+75,포토나,레이저(색소/재생),2,색소,5,여드름 흉터,1,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요
+77,인트라셀,RF 마이크로니들,1,리프팅,5,여드름 흉터,1,device_info→리프팅 vs equipment등록→여드름 흉터,사용자 검수 필요
+97,윤곽주사,주사 시술,3,주사 시술,6,비만,1,device_info→주사 시술 vs equipment등록→비만,사용자 검수 필요
+101,플라즈마,관리기기/시술,7,기타,4,여드름 치료,1,device_info→기타 vs equipment등록→여드름 치료,사용자 검수 필요
+102,필로가,스킨부스터,3,주사 시술,7,기타,1,device_info→주사 시술 vs equipment등록→기타,사용자 검수 필요
+103,하이코,리프팅(실),1,리프팅,3,주사 시술,1,device_info→리프팅 vs equipment등록→주사 시술,사용자 검수 필요
+104,서브시전,시술,7,기타,5,여드름 흉터,1,device_info→기타 vs equipment등록→여드름 흉터,사용자 검수 필요
+104,서브시전,시술,7,기타,4,여드름 치료,1,device_info→기타 vs equipment등록→여드름 치료,사용자 검수 필요
+106,리니어지,리프팅(HIFU),1,리프팅,6,비만,1,device_info→리프팅 vs equipment등록→비만,사용자 검수 필요
+107,트리필,RF 마이크로니들,1,리프팅,4,여드름 치료,1,device_info→리프팅 vs equipment등록→여드름 치료,사용자 검수 필요
+110,복합기,관리기기,7,기타,5,여드름 흉터,1,device_info→기타 vs equipment등록→여드름 흉터,사용자 검수 필요
+111,포트라 콰트로,레이저(색소/재생),2,색소,1,리프팅,1,device_info→색소 vs equipment등록→리프팅,사용자 검수 필요
+118,블루토닝,레이저(색소/토닝),2,색소,7,기타,1,device_info→색소 vs equipment등록→기타,사용자 검수 필요
+119,바스큐,레이저(혈관),2,색소,3,주사 시술,1,device_info→색소 vs equipment등록→주사 시술,사용자 검수 필요
+120,오로라레이저,레이저(색소/혈관),2,색소,7,기타,1,device_info→색소 vs equipment등록→기타,사용자 검수 필요
+120,오로라레이저,레이저(색소/혈관),2,색소,1,리프팅,1,device_info→색소 vs equipment등록→리프팅,사용자 검수 필요
+123,엠페이스,바디/리프팅(EMS),6,비만,1,리프팅,1,device_info→비만 vs equipment등록→리프팅,사용자 검수 필요
+125,울트라펄스 앙코르,레이저(CO2/재생),5,여드름 흉터,2,색소,1,device_info→여드름 흉터 vs equipment등록→색소,사용자 검수 필요
+132,D리프팅,리프팅,1,리프팅,6,비만,1,device_info→리프팅 vs equipment등록→비만,사용자 검수 필요
+159,디오레듀얼,색소,2,색소,5,여드름 흉터,1,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요
+163,브이레이저,색소,2,색소,8,제모,1,device_info→색소 vs equipment등록→제모,사용자 검수 필요
+169,더블타이트,여드름,4,여드름 치료,7,기타,1,device_info→여드름 치료 vs equipment등록→기타,사용자 검수 필요
+177,라비앙,여드름,4,여드름 치료,5,여드름 흉터,1,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+180,뷰레인,여드름,4,여드름 치료,5,여드름 흉터,1,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+181,아이콘레이저,여드름,4,여드름 치료,5,여드름 흉터,1,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+182,에어다이섹터,여드름,4,여드름 치료,5,여드름 흉터,1,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+183,큐어젯,여드름,4,여드름 치료,5,여드름 흉터,1,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+184,플로라셀,여드름,4,여드름 치료,5,여드름 흉터,1,device_info→여드름 치료 vs equipment등록→여드름 흉터,사용자 검수 필요
+190,브이올렛,주사/부스터,3,주사 시술,6,비만,1,device_info→주사 시술 vs equipment등록→비만,사용자 검수 필요
+210,플라비셀 방탄주사,주사/부스터,3,주사 시술,7,기타,1,device_info→주사 시술 vs equipment등록→기타,사용자 검수 필요
+210,플라비셀 방탄주사,주사/부스터,3,주사 시술,4,여드름 치료,1,device_info→주사 시술 vs equipment등록→여드름 치료,사용자 검수 필요
+215,인바디,기타,7,기타,6,비만,1,device_info→기타 vs equipment등록→비만,사용자 검수 필요
+231,에토좀,스킨부스터,3,주사 시술,4,여드름 치료,1,device_info→주사 시술 vs equipment등록→여드름 치료,사용자 검수 필요
+233,어븀,색소,2,색소,5,여드름 흉터,1,device_info→색소 vs equipment등록→여드름 흉터,사용자 검수 필요

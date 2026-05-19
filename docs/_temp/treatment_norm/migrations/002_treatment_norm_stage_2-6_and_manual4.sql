@@ -356,3 +356,6 @@ COMMIT;
 -- SELECT id, name, aliases FROM device_info WHERE name = 'LPL';
 -- SELECT id, name, aliases FROM device_info WHERE id = 72;  -- 실리프팅 aliases 확장 확인
 -- SELECT id, name, aliases FROM device_info WHERE id = 31;  -- 올리지오X aliases 확장 확인
+
+-- LPL(id=235) primary_category_id 보정 (eq.id=690 category_id=7 기타)
+UPDATE device_info SET primary_category_id = 7, updated_at = datetime('now','+9 hours') WHERE id = 235;

@@ -114,7 +114,7 @@ os.makedirs(_UPLOAD_ROOT, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=_UPLOAD_ROOT), name="uploads")
 
 # 라우터 등록
-from api.routers import auth, users, cafe, equipment, events, papers, blog, place, webpage, treatment_catalog, complaints, reports, branch_info, rank_checker, encyclopedia, branches, config, explorer, migrations
+from api.routers import auth, users, cafe, equipment, events, papers, blog, place, webpage, treatment_catalog, complaints, reports, branch_info, rank_checker, encyclopedia, branches, config, explorer, migrations, equipment_cleanup
 
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
@@ -135,6 +135,7 @@ app.include_router(branches.router)
 app.include_router(config.router)
 app.include_router(explorer.router, prefix="/explorer", tags=["Explorer"])
 app.include_router(migrations.router)
+app.include_router(equipment_cleanup.router)
 
 
 @app.get("/health")

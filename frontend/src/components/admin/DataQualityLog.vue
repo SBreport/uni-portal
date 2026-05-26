@@ -2,13 +2,15 @@
 import { ref } from 'vue'
 import DataQualityContent from '@/components/admin/DataQualityContent.vue'
 import MigrationPanel from '@/components/admin/MigrationPanel.vue'
+import EquipmentCleanupPanel from '@/components/admin/EquipmentCleanupPanel.vue'
 
-type QualitySubTab = 'quality' | 'migration'
+type QualitySubTab = 'quality' | 'migration' | 'equipment-cleanup'
 const activeSubTab = ref<QualitySubTab>('quality')
 
 const subTabs = [
   { key: 'quality', label: '데이터 품질' },
   { key: 'migration', label: 'DB 마이그레이션' },
+  { key: 'equipment-cleanup', label: 'Equipment 정리' },
 ]
 </script>
 
@@ -35,6 +37,7 @@ const subTabs = [
     <div class="flex-1 min-h-0 overflow-y-auto">
       <DataQualityContent v-if="activeSubTab === 'quality'" />
       <MigrationPanel v-if="activeSubTab === 'migration'" class="h-full" />
+      <EquipmentCleanupPanel v-if="activeSubTab === 'equipment-cleanup'" class="h-full" />
     </div>
   </div>
 </template>

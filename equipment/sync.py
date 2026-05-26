@@ -200,6 +200,13 @@ def sync_from_sheets(triggered_by: str = "manual"):
             existing = c.fetchone()
 
             if existing is None:
+                # 신규 INSERT 시 category_id 필수 (DB NOT NULL 제약)
+                # 시트에 카테고리 누락된 신규 row는 스킵하고 사용자에게 알림
+                if category_id is None:
+                    conflict_details.append(
+                        f"{branch_name}/{device_name}: 시트 카테고리 누락으로 신규 추가 스킵 (시트 정리 필요)"
+                    )
+                    continue
                 # 신규 행 → device_info 자동 매핑 시도
                 di_id, _ = match_single(device_name, device_list)
                 if di_id:

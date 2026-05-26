@@ -53,8 +53,9 @@ export const uploadBlogCsv = (file: File) => {
   })
 }
 
+// 동기화 — Notion sync / 스크래핑은 대량 처리 가능, 5분 timeout
 export const syncNotion = (token?: string, full: boolean = false) =>
-  api.post('/blog/sync-notion', { token: token || null, full })
+  api.post('/blog/sync-notion', { token: token || null, full }, { timeout: 300000 })
 
 export const getNotionSyncStatus = () =>
   api.get('/blog/sync-notion/status')
@@ -69,10 +70,10 @@ export const getScrapeTitlesStatus = () =>
   api.get('/blog/scrape-titles/status')
 
 export const scrapeTitles = (params?: { limit?: number; delay?: number; include_cafe?: boolean }) =>
-  api.post('/blog/scrape-titles', params || {})
+  api.post('/blog/scrape-titles', params || {}, { timeout: 300000 })
 
 export const scrapeNicknames = () =>
-  api.post('/blog/scrape-nicknames')
+  api.post('/blog/scrape-nicknames', undefined, { timeout: 300000 })
 
 export const fixUrlTitles = () =>
   api.post('/blog/fix-url-titles')

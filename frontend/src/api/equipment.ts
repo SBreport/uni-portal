@@ -27,10 +27,10 @@ export const getEquipmentContext = (branchName: string, equipmentName: string) =
 export const searchEvents = (q: string) =>
   api.get('/events/search', { params: { q } })
 
-// 동기화
-export const syncFromSheets = () => api.post('/equipment/sync')
-export const updateDeviceCounts = () => api.post('/equipment/device-info/update-counts')
-export const syncDeviceJson = () => api.post('/equipment/device-info/sync-json')
+// 동기화 — 자동 매핑 포함으로 처리 시간 길어질 수 있음, 5분 timeout
+export const syncFromSheets = () => api.post('/equipment/sync', undefined, { timeout: 300000 })
+export const updateDeviceCounts = () => api.post('/equipment/device-info/update-counts', undefined, { timeout: 300000 })
+export const syncDeviceJson = () => api.post('/equipment/device-info/sync-json', undefined, { timeout: 300000 })
 
 // DB 파일 관리
 export const uploadDb = (formData: FormData) =>

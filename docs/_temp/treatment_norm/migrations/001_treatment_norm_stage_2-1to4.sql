@@ -58,9 +58,9 @@ SET device_info_id = 62,
     updated_at = datetime('now','+9 hours')
 WHERE device_info_id = 12;
 
+-- evt_treatments에는 updated_at 컬럼이 없음 → device_info_id만 UPDATE
 UPDATE evt_treatments
-SET device_info_id = 62,
-    updated_at = datetime('now','+9 hours')
+SET device_info_id = 62
 WHERE device_info_id = 12;
 
 DELETE FROM device_info WHERE id = 12;
@@ -71,9 +71,9 @@ SET device_info_id = 73,
     updated_at = datetime('now','+9 hours')
 WHERE device_info_id = 24;
 
+-- evt_treatments에는 updated_at 컬럼이 없음 → device_info_id만 UPDATE
 UPDATE evt_treatments
-SET device_info_id = 73,
-    updated_at = datetime('now','+9 hours')
+SET device_info_id = 73
 WHERE device_info_id = 24;
 
 DELETE FROM device_info WHERE id = 24;

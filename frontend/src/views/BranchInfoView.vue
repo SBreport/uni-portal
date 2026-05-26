@@ -1,22 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api/client'
+import BranchDashboard from '@/components/branch/BranchDashboard.vue'
 
 const props = withDefaults(defineProps<{
   embedded?: boolean
 }>(), { embedded: false })
 
-const router = useRouter()
 const auth = useAuthStore()
 const isBranch = computed(() => auth.role === 'branch')
 
 // State
 const branches = ref<any[]>([])
-const selectedBranchId = ref<number | null>(null)
-const branchData = ref<any>(null)
-const loading = ref(false)
+const selectedBranch = ref<{ id: number; name: string } | null>(null)
+const loadingBranches = ref(false)
 const searchQuery = ref('')
 
 // Filtered branches
@@ -28,84 +26,67 @@ const filteredBranches = computed(() => {
 })
 
 async function loadBranches() {
+  loadingBranches.value = true
   try {
     const { data } = await api.get('/branch-info/all/summary')
     branches.value = data
     // branch 역할은 자동 선택
     if (isBranch.value && auth.branchId) {
-      selectBranch(auth.branchId)
+      const found = data.find((b: any) => b.branch_id === auth.branchId)
+      if (found) selectBranch(found.branch_id, found.branch_name)
     }
-  } catch { /* ignore */ }
-}
-
-async function selectBranch(branchId: number) {
-  selectedBranchId.value = branchId
-  loading.value = true
-  try {
-    const { data } = await api.get(`/branch-info/${branchId}`)
-    branchData.value = data
-  } finally {
-    loading.value = false
+  } catch { /* ignore */ } finally {
+    loadingBranches.value = false
   }
 }
 
-function goToEquipment(name: string) {
-  if (!name) return
-  router.push({ path: '/treatment-info', query: { tab: 'encyclopedia', eq: name } })
-}
-function goToEvent(eventName: string) {
-  if (!eventName || !branchData.value?.branch_name) return
-  router.push({ path: '/events', query: { branch: branchData.value.branch_name, search: eventName } })
+function selectBranch(branchId: number, branchName: string) {
+  selectedBranch.value = { id: branchId, name: branchName }
 }
 
-function formatPrice(p: number | null) {
-  if (!p) return '-'
-  return (p / 10000).toFixed(0) + '만원'
-}
-
-function formatDate(d: string) {
-  if (!d) return '-'
-  return d.slice(0, 10)
-}
-
-const statusLabels: Record<string, { label: string; color: string }> = {
-  received: { label: '접수', color: 'bg-yellow-100 text-yellow-700' },
-  processing: { label: '처리중', color: 'bg-blue-100 text-blue-700' },
-  resolved: { label: '처리완료', color: 'bg-green-100 text-green-700' },
-  closed: { label: '종결', color: 'bg-slate-100 text-slate-500' },
+function clearBranch() {
+  selectedBranch.value = null
 }
 
 onMounted(loadBranches)
 </script>
 
 <template>
-  <div class="h-full flex flex-col overflow-hidden px-6 py-6">
-    <h2 v-if="!embedded" class="text-xl font-bold text-slate-800 mb-2 shrink-0">지점 정보</h2>
-    <p v-if="!branchData" class="text-sm text-slate-400 mb-6 shrink-0">지점을 선택하면 보유장비, 이벤트, 민원을 한눈에 확인합니다.</p>
+  <div class="h-full flex flex-col overflow-hidden">
+    <h2 v-if="!embedded && !selectedBranch" class="shrink-0 text-xl font-bold text-slate-800 px-6 pt-5 pb-2">지점 정보</h2>
 
-    <!-- Branch selector (when no branch selected) -->
-    <div v-if="!branchData" class="flex-1 min-h-0 overflow-auto">
+    <!-- ── 지점 선택 화면 ────────────────────────────────────────── -->
+    <div v-if="!selectedBranch" class="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+      <p class="text-sm text-slate-400 mb-4">지점을 선택하면 카테고리별 보유장비·이벤트를 확인합니다.</p>
+
       <!-- 검색 -->
-      <div class="relative mb-5">
+      <div class="relative mb-4">
         <input
           v-model="searchQuery"
           type="text"
           placeholder="지점명 검색..."
-          class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 pl-10"
+          class="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 pl-9"
         />
-        <svg class="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="absolute left-3 top-3 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
         </svg>
-        <span v-if="searchQuery" class="absolute right-3.5 top-3 text-xs text-slate-400">
-          {{ filteredBranches.length }}개 지점
+        <span v-if="searchQuery" class="absolute right-3 top-2.5 text-xs text-slate-400">
+          {{ filteredBranches.length }}개
         </span>
       </div>
 
+      <!-- 로딩 -->
+      <div v-if="loadingBranches" class="text-center py-8 text-sm text-slate-400">불러오는 중...</div>
+
       <!-- 카드 그리드 -->
-      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-2">
+      <div
+        v-else
+        class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-2"
+      >
         <div
-          v-for="b in filteredBranches" :key="b.branch_id"
-          @click="selectBranch(b.branch_id)"
+          v-for="b in filteredBranches"
+          :key="b.branch_id"
+          @click="selectBranch(b.branch_id, b.branch_name)"
           class="p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-blue-400 hover:shadow-sm transition group"
         >
           <p class="text-sm font-semibold text-slate-700 group-hover:text-blue-600 transition truncate mb-1">
@@ -119,104 +100,18 @@ onMounted(loadBranches)
         </div>
       </div>
 
-      <p v-if="!filteredBranches.length && searchQuery" class="text-center text-sm text-slate-400 py-8">
+      <p v-if="!loadingBranches && !filteredBranches.length && searchQuery" class="text-center text-sm text-slate-400 py-8">
         '{{ searchQuery }}' 검색 결과가 없습니다.
       </p>
     </div>
 
-    <!-- Branch detail -->
-    <div v-if="branchData && !loading" class="flex-1 min-h-0 overflow-auto">
-      <!-- Header -->
-      <div class="flex items-center gap-3 mb-5">
-        <button
-          v-if="!isBranch"
-          @click="branchData = null; selectedBranchId = null"
-          class="text-sm text-blue-600 hover:underline"
-        >&larr; 전체 지점</button>
-        <h3 class="text-lg font-bold text-slate-800">{{ branchData.branch_name }}</h3>
-      </div>
-
-      <!-- Summary bar -->
-      <div class="flex items-center gap-5 mb-5 px-4 py-2.5 bg-slate-50 rounded-lg border border-slate-200 text-sm">
-        <div class="flex items-baseline gap-1.5">
-          <span class="text-slate-500">보유장비</span>
-          <span class="font-bold text-blue-600">{{ branchData.summary?.equipment_count || 0 }}</span>
-        </div>
-        <span class="text-slate-300">·</span>
-        <div class="flex items-baseline gap-1.5">
-          <span class="text-slate-500">이벤트</span>
-          <span class="font-bold text-purple-600">{{ branchData.summary?.event_count || 0 }}</span>
-        </div>
-        <span class="text-slate-300">·</span>
-        <div class="flex items-baseline gap-1.5">
-          <span class="text-slate-500">진행 민원</span>
-          <span class="font-bold text-orange-600">{{ branchData.summary?.complaint_open || 0 }}</span>
-        </div>
-      </div>
-
-      <!-- 2열 레이아웃: 좌=장비, 우=이벤트 -->
-      <div class="grid grid-cols-2 gap-4 mb-4">
-        <!-- 좌: 보유장비 -->
-        <div class="p-4 bg-white rounded-xl border border-slate-200">
-          <h4 class="text-sm font-semibold text-slate-700 mb-3">
-            보유장비 ({{ branchData.equipment?.length || 0 }}건)
-          </h4>
-          <div class="space-y-1.5">
-            <div
-              v-for="eq in branchData.equipment" :key="eq.id"
-              class="flex items-center gap-2.5 text-sm group min-w-0"
-            >
-              <span @click="goToEquipment(eq.name)" class="text-slate-700 hover:text-blue-600 cursor-pointer hover:underline truncate min-w-0 flex-shrink">{{ eq.name }}</span>
-              <span class="text-xs text-slate-400 shrink-0">{{ eq.category }}</span>
-              <span class="text-xs text-slate-400 shrink-0">{{ eq.quantity || 1 }}대</span>
-              <span class="text-xs shrink-0" :class="eq.photo_status === '있음' || eq.photo_status === 'O' || eq.photo_status === 1 ? 'text-green-500' : 'text-slate-300'">
-                {{ eq.photo_status === '있음' || eq.photo_status === 'O' || eq.photo_status === 1 ? 'O' : 'X' }}
-              </span>
-            </div>
-            <p v-if="!branchData.equipment?.length" class="text-xs text-slate-400">보유장비 정보 없음</p>
-          </div>
-        </div>
-
-        <!-- 우: 이벤트 -->
-        <div class="p-4 bg-white rounded-xl border border-slate-200">
-          <h4 class="text-sm font-semibold text-slate-700 mb-3">
-            이벤트 ({{ branchData.events?.length || 0 }}건)
-          </h4>
-          <div class="space-y-1.5">
-            <div
-              v-for="ev in branchData.events" :key="ev.id"
-              class="flex items-center gap-2.5 text-sm min-w-0"
-            >
-              <span @click="goToEvent(ev.display_name || ev.raw_event_name)" class="text-slate-700 hover:text-blue-600 cursor-pointer hover:underline truncate min-w-0">{{ ev.display_name || ev.raw_event_name }}</span>
-              <span class="text-xs text-slate-400 shrink-0">{{ ev.category }}</span>
-              <span class="text-sm font-medium text-blue-600 shrink-0 ml-auto">{{ formatPrice(ev.event_price) }}</span>
-            </div>
-            <p v-if="!branchData.events?.length" class="text-xs text-slate-400">등록된 이벤트 없음</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- 민원 (2열 아래 전체 너비) -->
-      <div v-if="branchData.complaints?.length" class="p-4 bg-white rounded-xl border border-slate-200 mb-4">
-        <h4 class="text-sm font-semibold text-slate-700 mb-3">
-          민원 ({{ branchData.complaints?.length || 0 }}건)
-        </h4>
-        <div class="space-y-1.5">
-          <div
-            v-for="c in branchData.complaints" :key="c.id"
-            class="flex items-center gap-2.5 text-sm min-w-0"
-          >
-            <span :class="['text-xs px-1.5 py-0.5 rounded-full shrink-0', statusLabels[c.status]?.color]">
-              {{ statusLabels[c.status]?.label }}
-            </span>
-            <span class="text-slate-700 truncate min-w-0">{{ c.title }}</span>
-            <span class="text-xs text-slate-400 shrink-0 ml-auto">{{ formatDate(c.created_at) }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Loading -->
-    <div v-if="loading" class="text-center py-12 text-sm text-slate-400">로딩 중...</div>
+    <!-- ── 지점 대시보드 ─────────────────────────────────────────── -->
+    <BranchDashboard
+      v-else
+      :branch-id="selectedBranch.id"
+      :branch-name="selectedBranch.name"
+      class="flex-1 min-h-0"
+      @back="clearBranch"
+    />
   </div>
 </template>

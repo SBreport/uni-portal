@@ -142,16 +142,18 @@ async def get_duplicates(
         branch_filter = "AND e.branch_id = :branch_id" if branch_id else ""
 
         # 중복 그룹 키 목록 (페이지네이션)
+        # 카테고리는 시트 권위 (categories 8종, primary_category_id 경유)
         group_rows = conn.execute(f"""
             SELECT e.branch_id, b.name AS branch_name,
                    e.device_info_id,
                    di.name AS device_info_name,
-                   di.category AS category_name,
+                   pc.name AS category_name,
                    COUNT(*) AS row_count,
                    SUM(e.quantity) AS total_qty
             FROM equipment e
             JOIN branches b ON e.branch_id = b.id
             LEFT JOIN device_info di ON e.device_info_id = di.id
+            LEFT JOIN categories pc ON di.primary_category_id = pc.id
             WHERE e.device_info_id IS NOT NULL
             {branch_filter}
             GROUP BY e.branch_id, e.device_info_id

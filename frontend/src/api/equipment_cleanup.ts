@@ -13,6 +13,17 @@ export interface EquipmentRow {
   source: string
   note: string
   created_at: string
+  variant: string | null
+}
+
+export interface VariantSummaryItem {
+  variant: string
+  count: number
+}
+
+export interface VariantSummary {
+  distinct_count: number
+  items: VariantSummaryItem[]
 }
 
 export interface DuplicateGroup {
@@ -23,6 +34,7 @@ export interface DuplicateGroup {
   category_name: string
   row_count: number
   total_qty: number
+  variant_summary: VariantSummary
   rows: EquipmentRow[]
 }
 

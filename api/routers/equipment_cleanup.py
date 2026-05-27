@@ -6,6 +6,7 @@
 - POST /admin/equipment-cleanup/remap       : device_info_id 재매핑
 """
 
+import re
 import sqlite3
 from datetime import datetime
 from typing import Annotated, Optional
@@ -24,6 +25,41 @@ _admin = require_role("admin")
 
 def _conn() -> sqlite3.Connection:
     return get_conn(EQUIPMENT_DB)
+
+
+def extract_variant(name: str) -> Optional[str]:
+    """equipment.name에서 괄호 안 변형 정보 추출.
+
+    - 앞 괄호: '(나보타)보톡스' → '나보타'
+    - 뒤 괄호: '보톡스(메디톡신)' → '메디톡신'
+    - prefix 숫자 무시: '2. 보톡스(메디톡신)' → '메디톡신'
+    - 슬래시 포함 (묶음): '케어7(비타/소노/크라)' → '비타/소노/크라' (그대로 반환)
+    - 괄호 없으면 None
+    """
+    if not name:
+        return None
+    matches = re.findall(r'\(([^)]+)\)', name)
+    if matches:
+        return matches[-1].strip()
+    return None
+
+
+def _build_variant_summary(variants: list[Optional[str]]) -> dict:
+    """variant 목록에서 요약 정보 생성."""
+    counts: dict[str, int] = {}
+    for v in variants:
+        key = v if v is not None else "미명시"
+        counts[key] = counts.get(key, 0) + 1
+    distinct = len(counts)
+    # 표시: "메디톡신 ×2 · 제오민 · 미명시" 형식 리스트
+    items = [
+        {"variant": k, "count": c}
+        for k, c in sorted(counts.items(), key=lambda x: -x[1])
+    ]
+    return {
+        "distinct_count": distinct,
+        "items": items,
+    }
 
 
 # ── GET /summary ─────────────────────────────────────────────────────────────
@@ -128,6 +164,22 @@ async def get_duplicates(
                 ORDER BY e.id
             """, (g["branch_id"], g["device_info_id"])).fetchall()
 
+            serialized_rows = [
+                {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "qty": r["quantity"],
+                    "source": r["source"] or "sheets",
+                    "note": r["note"] or "",
+                    "created_at": r["created_at"],
+                    "variant": extract_variant(r["name"] or ""),
+                }
+                for r in rows
+            ]
+            variant_summary = _build_variant_summary(
+                [row["variant"] for row in serialized_rows]
+            )
+
             result.append({
                 "branch_id": g["branch_id"],
                 "branch_name": g["branch_name"],
@@ -136,17 +188,8 @@ async def get_duplicates(
                 "category_name": g["category_name"],
                 "row_count": g["row_count"],
                 "total_qty": g["total_qty"],
-                "rows": [
-                    {
-                        "id": r["id"],
-                        "name": r["name"],
-                        "qty": r["quantity"],
-                        "source": r["source"] or "sheets",
-                        "note": r["note"] or "",
-                        "created_at": r["created_at"],
-                    }
-                    for r in rows
-                ],
+                "variant_summary": variant_summary,
+                "rows": serialized_rows,
             })
 
         return {

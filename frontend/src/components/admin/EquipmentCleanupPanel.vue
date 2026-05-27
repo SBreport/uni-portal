@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import * as cleanupApi from '@/api/equipment_cleanup'
 import type {
   CleanupSummary,
@@ -7,6 +7,26 @@ import type {
   EquipmentRow,
 } from '@/api/equipment_cleanup'
 import { getBranches } from '@/api/equipment'
+
+// ── variant 유틸 ─────────────────────────────────────────────────────────
+
+const VARIANT_COLORS = [
+  { bg: 'bg-blue-100', text: 'text-blue-700' },
+  { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  { bg: 'bg-purple-100', text: 'text-purple-700' },
+  { bg: 'bg-amber-100', text: 'text-amber-700' },
+  { bg: 'bg-rose-100', text: 'text-rose-700' },
+  { bg: 'bg-cyan-100', text: 'text-cyan-700' },
+]
+
+function variantColor(variant: string | null): { bg: string; text: string } {
+  if (!variant) return { bg: 'bg-slate-100', text: 'text-slate-500' }
+  let hash = 0
+  for (let i = 0; i < variant.length; i++) {
+    hash = (hash * 31 + variant.charCodeAt(i)) & 0xffffffff
+  }
+  return VARIANT_COLORS[Math.abs(hash) % VARIANT_COLORS.length]
+}
 
 // ── 요약 통계 ────────────────────────────────────────────────────────────
 const summary = ref<CleanupSummary | null>(null)
@@ -126,6 +146,11 @@ function toggleAll(g: DuplicateGroup) {
 const confirmGroup = ref<DuplicateGroup | null>(null)
 const confirmVisible = ref(false)
 
+// variant 경고 모달
+const variantWarnGroup = ref<DuplicateGroup | null>(null)
+const variantWarnRows = ref<EquipmentRow[]>([])
+const variantWarnVisible = ref(false)
+
 function askMerge(g: DuplicateGroup) {
   const s = getState(g)
   const selectedRows = g.rows.filter(r => s.selected.has(r.id))
@@ -135,8 +160,28 @@ function askMerge(g: DuplicateGroup) {
   }
   // target은 선택된 중 첫 번째
   s.targetId = selectedRows[0].id
+
+  // 다른 variant가 섞여 있는지 확인
+  const variants = new Set(selectedRows.map(r => r.variant ?? null))
+  if (variants.size > 1) {
+    // 경고 모달 먼저
+    variantWarnGroup.value = g
+    variantWarnRows.value = selectedRows
+    variantWarnVisible.value = true
+    return
+  }
+
   confirmGroup.value = g
   confirmVisible.value = true
+}
+
+function proceedAfterVariantWarn() {
+  variantWarnVisible.value = false
+  if (!variantWarnGroup.value) return
+  confirmGroup.value = variantWarnGroup.value
+  confirmVisible.value = true
+  variantWarnGroup.value = null
+  variantWarnRows.value = []
 }
 
 async function confirmMerge() {
@@ -172,6 +217,35 @@ async function confirmMerge() {
   } finally {
     s.merging = false
   }
+}
+
+// ── variant 자동 선택 ────────────────────────────────────────────────────
+
+/** 가장 많은 variant 그룹만 자동 선택 (null은 "미명시" 취급) */
+function autoSelectByVariant(g: DuplicateGroup) {
+  const s = getState(g)
+  // variant별 row 목록 집계
+  const buckets = new Map<string, number[]>()
+  for (const row of g.rows) {
+    const key = row.variant ?? '__미명시__'
+    if (!buckets.has(key)) buckets.set(key, [])
+    buckets.get(key)!.push(row.id)
+  }
+  // 가장 많은 bucket 선택
+  let bestKey = ''
+  let bestCount = 0
+  for (const [k, ids] of buckets) {
+    if (ids.length > bestCount) {
+      bestCount = ids.length
+      bestKey = k
+    }
+  }
+  if (!bestKey) return
+  s.selected.clear()
+  for (const id of buckets.get(bestKey)!) {
+    s.selected.add(id)
+  }
+  s.targetId = buckets.get(bestKey)![0]
 }
 
 // ── 재매핑 ───────────────────────────────────────────────────────────────
@@ -340,19 +414,36 @@ onMounted(() => {
           class="border border-slate-200 rounded bg-white"
         >
           <!-- 그룹 헤더 -->
-          <div class="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200 rounded-t">
-            <div class="flex items-center gap-2 text-xs">
-              <span class="font-semibold text-slate-700">{{ g.branch_name }}</span>
-              <span class="text-slate-400">/</span>
-              <span class="font-medium text-slate-700">{{ g.device_info_name }}</span>
-              <span
-                v-if="g.category_name"
-                class="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500"
-              >{{ g.category_name }}</span>
+          <div class="px-3 py-2 bg-slate-50 border-b border-slate-200 rounded-t">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 text-xs">
+                <span class="font-semibold text-slate-700">{{ g.branch_name }}</span>
+                <span class="text-slate-400">/</span>
+                <span class="font-medium text-slate-700">{{ g.device_info_name }}</span>
+                <span
+                  v-if="g.category_name"
+                  class="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500"
+                >{{ g.category_name }}</span>
+              </div>
+              <div class="text-xs text-slate-500">
+                총 <span class="font-semibold text-slate-700">{{ g.total_qty }}대</span>
+                <span class="ml-1 text-slate-400">({{ g.row_count }}개 row)</span>
+              </div>
             </div>
-            <div class="text-xs text-slate-500">
-              총 <span class="font-semibold text-slate-700">{{ g.total_qty }}대</span>
-              <span class="ml-1 text-slate-400">({{ g.row_count }}개 row)</span>
+            <!-- variant 요약 -->
+            <div
+              v-if="g.variant_summary && g.variant_summary.distinct_count > 0"
+              class="flex items-center flex-wrap gap-1 mt-1.5"
+            >
+              <span class="text-[10px] text-slate-400">변형:</span>
+              <template v-for="item in g.variant_summary.items" :key="item.variant">
+                <span
+                  class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                  :class="[variantColor(item.variant === '미명시' ? null : item.variant).bg, variantColor(item.variant === '미명시' ? null : item.variant).text]"
+                >
+                  {{ item.variant }}<span v-if="item.count > 1" class="opacity-70"> ×{{ item.count }}</span>
+                </span>
+              </template>
             </div>
           </div>
 
@@ -390,6 +481,11 @@ onMounted(() => {
                 />
                 <span class="text-[11px] text-slate-400 font-mono shrink-0">id={{ row.id }}</span>
                 <span class="text-xs font-medium text-slate-700 flex-1 truncate">{{ row.name }}</span>
+                <!-- variant 뱃지 -->
+                <span
+                  class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                  :class="[variantColor(row.variant).bg, variantColor(row.variant).text]"
+                >{{ row.variant ?? '미명시' }}</span>
                 <span class="text-[11px] text-slate-500 shrink-0">{{ row.qty }}대</span>
                 <span
                   class="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500"
@@ -401,7 +497,7 @@ onMounted(() => {
             </div>
 
             <!-- 통합할 이름 + 버튼 -->
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <span class="text-[11px] text-slate-500 shrink-0">통합 이름:</span>
               <input
                 :value="getState(g).newName"
@@ -410,6 +506,15 @@ onMounted(() => {
                 class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0"
                 :placeholder="g.device_info_name"
               />
+              <!-- 같은 variant 자동 선택 버튼 (variant 2종 이상일 때만 표시) -->
+              <button
+                v-if="g.variant_summary && g.variant_summary.distinct_count > 1"
+                @click="autoSelectByVariant(g)"
+                class="shrink-0 px-2.5 py-1 text-xs rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                title="가장 많은 variant 그룹만 자동 선택"
+              >
+                같은 변형만 선택
+              </button>
               <button
                 @click="askMerge(g)"
                 :disabled="getState(g).merging || selectedCount(g) < 2"
@@ -455,6 +560,58 @@ onMounted(() => {
       </div>
     </div>
   </div>
+
+  <!-- variant 다름 경고 모달 -->
+  <Teleport to="body">
+    <div
+      v-if="variantWarnVisible && variantWarnGroup"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="variantWarnVisible = false"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-[420px] p-5">
+        <h3 class="text-sm font-semibold text-amber-700 mb-3">서로 다른 변형 정보 경고</h3>
+
+        <p class="text-xs text-slate-600 mb-3">
+          선택한 row들이 서로 다른 변형(브랜드/기술/묶음) 정보를 가지고 있습니다.
+          통합하면 변형 정보 구분이 손실됩니다.
+        </p>
+
+        <div class="mb-4 flex flex-col gap-1">
+          <div
+            v-for="row in variantWarnRows"
+            :key="row.id"
+            class="flex items-center gap-2 px-2 py-1 rounded bg-slate-50 text-xs"
+          >
+            <span class="text-slate-500 font-mono">id={{ row.id }}</span>
+            <span class="flex-1 truncate text-slate-700">{{ row.name }}</span>
+            <span
+              class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium"
+              :class="[variantColor(row.variant).bg, variantColor(row.variant).text]"
+            >{{ row.variant ?? '미명시' }}</span>
+          </div>
+        </div>
+
+        <p class="text-xs text-amber-600 mb-4">
+          정말 이 row들을 하나로 합치시겠습니까?
+        </p>
+
+        <div class="flex justify-end gap-2">
+          <button
+            @click="variantWarnVisible = false"
+            class="px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+          >
+            취소
+          </button>
+          <button
+            @click="proceedAfterVariantWarn"
+            class="px-3 py-1.5 text-xs rounded bg-amber-600 text-white hover:bg-amber-700"
+          >
+            그래도 통합
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 
   <!-- 통합 확인 모달 -->
   <Teleport to="body">

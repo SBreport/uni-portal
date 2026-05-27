@@ -1,11 +1,13 @@
 """Equipment 정리 도구 라우터 (admin only).
 
-- GET  /admin/equipment-cleanup/duplicates          : 중복 그룹 목록
-- GET  /admin/equipment-cleanup/summary             : 요약 통계
-- POST /admin/equipment-cleanup/merge               : 중복 row 통합
-- POST /admin/equipment-cleanup/remap               : device_info_id 재매핑
-- GET  /admin/equipment-cleanup/auto-merge-preview  : 자동 통합 가능 그룹 미리보기
-- POST /admin/equipment-cleanup/auto-merge-execute  : 자동 통합 일괄 실행
+- GET  /admin/equipment-cleanup/duplicates              : 중복 그룹 목록
+- GET  /admin/equipment-cleanup/summary                 : 요약 통계
+- POST /admin/equipment-cleanup/merge                   : 중복 row 통합
+- POST /admin/equipment-cleanup/remap                   : device_info_id 재매핑
+- GET  /admin/equipment-cleanup/auto-merge-preview      : 자동 통합 가능 그룹 미리보기
+- POST /admin/equipment-cleanup/auto-merge-execute      : 자동 통합 일괄 실행
+- GET  /admin/equipment-cleanup/new-master-candidates   : 신규 마스터 후보 발굴
+- POST /admin/equipment-cleanup/register-new-masters    : 신규 마스터 일괄 등록
 """
 
 import re
@@ -669,5 +671,290 @@ async def auto_merge_execute(
         except Exception:
             pass
         raise HTTPException(500, f"자동 통합 실패: {str(e)}")
+    finally:
+        conn.close()
+
+
+# ── 신규 마스터 후보 발굴 헬퍼 ───────────────────────────────────────────────
+
+def _strip_variant(name: str) -> str:
+    """괄호(변형 정보) 제거 후 base name 반환."""
+    return re.sub(r'\([^)]+\)', '', name).strip()
+
+
+def _find_misplaced_in_groups(conn: sqlite3.Connection) -> list[dict]:
+    """Tier 1: 같은 device_info 그룹 안에서 이름이 매핑 마스터와 관계 없는 outlier 검출.
+
+    조건:
+    - base_name(변형 제거 + 정규화)이 device_info.name과 substring 관계 없음
+    - 같은 그룹의 다른 row 이름과도 substring 관계 없음
+    """
+    from collections import defaultdict
+
+    # 전체 device_info 이름 맵
+    di_map: dict[int, dict] = {
+        r["id"]: dict(r)
+        for r in conn.execute("SELECT * FROM device_info").fetchall()
+    }
+
+    # categories 맵
+    cat_map: dict[int, str] = {
+        r["id"]: r["name"]
+        for r in conn.execute("SELECT id, name FROM categories").fetchall()
+    }
+
+    rows = conn.execute("""
+        SELECT e.id, e.name, e.quantity, e.device_info_id, e.branch_id,
+               b.name AS branch_name
+        FROM equipment e
+        JOIN branches b ON e.branch_id = b.id
+        WHERE e.device_info_id IS NOT NULL
+        ORDER BY e.device_info_id, e.branch_id
+    """).fetchall()
+
+    # (device_info_id, branch_id) → list
+    bucket: dict = defaultdict(list)
+    for r in rows:
+        bucket[(r["device_info_id"], r["branch_id"])].append(dict(r))
+
+    # name → candidate 축적 (중복 방지: 같은 이름은 하나로)
+    candidates: dict[str, dict] = {}
+
+    for (di_id, branch_id), group in bucket.items():
+        di = di_map.get(di_id)
+        if not di:
+            continue
+        di_name = di["name"] or ""
+        di_name_lower = di_name.lower().replace(" ", "")
+
+        for row in group:
+            raw = row["name"] or ""
+            norm = normalize_name(raw)
+            base = _strip_variant(norm).lower().replace(" ", "")
+
+            if not base or not di_name_lower:
+                continue
+
+            # substring 관계 확인
+            if di_name_lower in base or base in di_name_lower:
+                continue
+
+            # 이 이름이 이미 후보에 있으면 지점/row 정보만 추가
+            key = norm
+            if key not in candidates:
+                # 추천 카테고리: di의 primary_category_id 사용
+                suggested_cat_id = di.get("primary_category_id")
+                suggested_cat = cat_map.get(suggested_cat_id, "") if suggested_cat_id else ""
+
+                candidates[key] = {
+                    "name": norm,
+                    "normalized_name": norm,
+                    "current_di_id": di_id,
+                    "current_di_name": di_name,
+                    "branches": [],
+                    "row_ids": [],
+                    "total_qty": 0,
+                    "suggested_category": suggested_cat,
+                    "suggested_primary_category_id": suggested_cat_id,
+                }
+
+            c = candidates[key]
+            branch_name = row["branch_name"]
+            if branch_name not in c["branches"]:
+                c["branches"].append(branch_name)
+            c["row_ids"].append(row["id"])
+            c["total_qty"] += row["quantity"]
+
+    return list(candidates.values())
+
+
+def _find_unmapped_frequent(conn: sqlite3.Connection, min_count: int = 2) -> list[dict]:
+    """Tier 2: device_info_id IS NULL이면서 min_count회 이상 등장하는 이름."""
+    cat_map: dict[int, str] = {
+        r["id"]: r["name"]
+        for r in conn.execute("SELECT id, name FROM categories").fetchall()
+    }
+
+    rows = conn.execute("""
+        SELECT e.name, e.id, e.quantity, e.branch_id, e.category_id,
+               b.name AS branch_name
+        FROM equipment e
+        JOIN branches b ON e.branch_id = b.id
+        WHERE e.device_info_id IS NULL
+        ORDER BY e.name
+    """).fetchall()
+
+    from collections import defaultdict
+    name_bucket: dict[str, list] = defaultdict(list)
+    for r in rows:
+        norm = normalize_name(r["name"] or "")
+        if norm:
+            name_bucket[norm].append(dict(r))
+
+    candidates = []
+    for norm_name, group in name_bucket.items():
+        if len(group) < min_count:
+            continue
+
+        # 추천 카테고리: equipment.category_id 다수결
+        cat_votes: dict[int, int] = defaultdict(int)
+        for row in group:
+            if row.get("category_id"):
+                cat_votes[row["category_id"]] += 1
+        suggested_cat_id = max(cat_votes, key=cat_votes.get) if cat_votes else None
+        suggested_cat = cat_map.get(suggested_cat_id, "") if suggested_cat_id else ""
+
+        branches = list({row["branch_name"] for row in group})
+        candidates.append({
+            "name": norm_name,
+            "normalized_name": norm_name,
+            "current_di_id": None,
+            "current_di_name": None,
+            "branches": branches,
+            "row_ids": [row["id"] for row in group],
+            "total_qty": sum(row["quantity"] for row in group),
+            "suggested_category": suggested_cat,
+            "suggested_primary_category_id": suggested_cat_id,
+        })
+
+    # 등장 빈도 내림차순
+    candidates.sort(key=lambda c: -len(c["row_ids"]))
+    return candidates
+
+
+# ── GET /new-master-candidates ────────────────────────────────────────────────
+
+@router.get("/new-master-candidates")
+async def get_new_master_candidates(
+    user: Annotated[dict, Depends(_admin)],
+):
+    """신규 마스터 후보 발굴.
+
+    - Tier 1: 잘못 매핑된 outlier (같은 device_info 그룹 안에서 이름이 다른 row)
+    - Tier 2: device_info_id NULL 중 2회 이상 등장하는 이름
+    """
+    conn = _conn()
+    try:
+        tier1 = _find_misplaced_in_groups(conn)
+        tier2 = _find_unmapped_frequent(conn, min_count=2)
+        return {
+            "tier1_candidates": tier1,
+            "tier2_candidates": tier2,
+            "total_candidates": len(tier1) + len(tier2),
+        }
+    finally:
+        conn.close()
+
+
+# ── POST /register-new-masters ────────────────────────────────────────────────
+
+class NewMasterItem(BaseModel):
+    name: str
+    category: str = ""
+    summary: str = ""
+    target: str = ""
+    mechanism: str = ""
+    aliases: str = ""
+    device_type: str = "equipment"
+    primary_category_id: Optional[int] = None
+    # row_ids: 이 마스터로 재매핑할 equipment row id 목록
+    row_ids: list[int] = []
+
+
+class RegisterNewMastersRequest(BaseModel):
+    candidates: list[NewMasterItem]
+
+
+@router.post("/register-new-masters")
+async def register_new_masters(
+    body: RegisterNewMastersRequest,
+    user: Annotated[dict, Depends(_admin)],
+):
+    """신규 마스터 일괄 등록.
+
+    1. device_info에 신규 row INSERT (각 후보)
+    2. equipment.device_info_id 재매핑 (row_ids를 새 마스터로)
+    3. 전체 트랜잭션
+    """
+    if not body.candidates:
+        raise HTTPException(400, "candidates가 비어 있습니다.")
+
+    conn = _conn()
+    try:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 중복 이름 사전 확인
+        existing = {
+            r["name"]
+            for r in conn.execute("SELECT name FROM device_info").fetchall()
+        }
+        duplicates = [c.name for c in body.candidates if c.name in existing]
+        if duplicates:
+            raise HTTPException(
+                400,
+                f"이미 존재하는 마스터 이름: {duplicates}. 등록 전 이름을 변경하세요."
+            )
+
+        conn.execute("BEGIN")
+        inserted = 0
+        remapped = 0
+
+        for item in body.candidates:
+            name = item.name.strip()
+            if not name:
+                continue
+
+            # device_info INSERT
+            cursor = conn.execute(
+                """
+                INSERT INTO device_info
+                    (name, category, summary, target, mechanism, aliases,
+                     device_type, primary_category_id, usage_count,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                """,
+                (
+                    name,
+                    item.category,
+                    item.summary,
+                    item.target,
+                    item.mechanism,
+                    item.aliases,
+                    item.device_type,
+                    item.primary_category_id,
+                    now,
+                    now,
+                ),
+            )
+            new_di_id = cursor.lastrowid
+            inserted += 1
+
+            # equipment rows 재매핑
+            if item.row_ids:
+                placeholders = ",".join("?" * len(item.row_ids))
+                conn.execute(
+                    f"UPDATE equipment SET device_info_id = ?, updated_at = ? WHERE id IN ({placeholders})",
+                    [new_di_id, now, *item.row_ids],
+                )
+                remapped += len(item.row_ids)
+
+        conn.execute("COMMIT")
+        return {
+            "inserted": inserted,
+            "remapped": remapped,
+        }
+
+    except HTTPException:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise HTTPException(500, f"신규 마스터 등록 실패: {str(e)}")
     finally:
         conn.close()

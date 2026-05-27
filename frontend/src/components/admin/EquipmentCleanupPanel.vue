@@ -7,6 +7,8 @@ import type {
   EquipmentRow,
   AutoMergeGroup,
   AutoMergePreviewResponse,
+  NewMasterCandidate,
+  NewMasterItem,
 } from '@/api/equipment_cleanup'
 import { getBranches } from '@/api/equipment'
 
@@ -432,6 +434,186 @@ function autoPreviewPageNumbers() {
   return pages
 }
 
+// ── 신규 마스터 발굴 ─────────────────────────────────────────────────────────
+
+const newMasterModalVisible = ref(false)
+const newMasterLoading = ref(false)
+const newMasterTier1 = ref<NewMasterCandidate[]>([])
+const newMasterTier2 = ref<NewMasterCandidate[]>([])
+const newMasterTotal = ref(0)
+
+// 체크 상태: name → boolean
+const newMasterChecked = ref<Record<string, boolean>>({})
+
+// 편집 상태: name → 편집 중인 필드들
+interface EditState {
+  name: string
+  category: string
+  summary: string
+  target: string
+  mechanism: string
+  aliases: string
+  device_type: string
+  primary_category_id: number | null
+  expanded: boolean
+}
+const newMasterEditState = ref<Record<string, EditState>>({})
+
+// 신규 마스터 발굴 모달 필터: 'all' | 'tier1' | 'tier2'
+const newMasterTierFilter = ref<'all' | 'tier1' | 'tier2'>('all')
+
+// 페이지네이션
+const newMasterPage = ref(1)
+const NEW_MASTER_PAGE_SIZE = 15
+
+const registering = ref(false)
+const registerConfirmVisible = ref(false)
+
+function newMasterFilteredList(): (NewMasterCandidate & { tier: 1 | 2 })[] {
+  const t1: (NewMasterCandidate & { tier: 1 | 2 })[] = newMasterTier1.value.map(c => ({ ...c, tier: 1 as const }))
+  const t2: (NewMasterCandidate & { tier: 1 | 2 })[] = newMasterTier2.value.map(c => ({ ...c, tier: 2 as const }))
+  if (newMasterTierFilter.value === 'tier1') return t1
+  if (newMasterTierFilter.value === 'tier2') return t2
+  return [...t1, ...t2]
+}
+
+function newMasterPagedList() {
+  const all = newMasterFilteredList()
+  const offset = (newMasterPage.value - 1) * NEW_MASTER_PAGE_SIZE
+  return all.slice(offset, offset + NEW_MASTER_PAGE_SIZE)
+}
+
+function newMasterTotalPages(): number {
+  return Math.max(1, Math.ceil(newMasterFilteredList().length / NEW_MASTER_PAGE_SIZE))
+}
+
+function newMasterPageNumbers(): (number | '...')[] {
+  const total = newMasterTotalPages()
+  const cur = newMasterPage.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | '...')[] = [1]
+  if (cur > 3) pages.push('...')
+  for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i)
+  if (cur < total - 2) pages.push('...')
+  pages.push(total)
+  return pages
+}
+
+function getEditState(candidate: NewMasterCandidate): EditState {
+  const k = candidate.name
+  if (!newMasterEditState.value[k]) {
+    newMasterEditState.value[k] = {
+      name: candidate.name,
+      category: candidate.suggested_category || '',
+      summary: '',
+      target: '',
+      mechanism: '',
+      aliases: '',
+      device_type: 'equipment',
+      primary_category_id: candidate.suggested_primary_category_id,
+      expanded: false,
+    }
+  }
+  return newMasterEditState.value[k]
+}
+
+function toggleNewMasterExpand(candidate: NewMasterCandidate) {
+  const s = getEditState(candidate)
+  s.expanded = !s.expanded
+}
+
+function newMasterCheckedCount(): number {
+  return Object.values(newMasterChecked.value).filter(Boolean).length
+}
+
+function toggleAllNewMaster(checked: boolean) {
+  for (const c of newMasterFilteredList()) {
+    newMasterChecked.value[c.name] = checked
+  }
+}
+
+function isAllNewMasterChecked(): boolean {
+  const list = newMasterFilteredList()
+  return list.length > 0 && list.every(c => newMasterChecked.value[c.name])
+}
+
+async function openNewMasterModal() {
+  newMasterLoading.value = true
+  newMasterModalVisible.value = true
+  newMasterChecked.value = {}
+  newMasterEditState.value = {}
+  newMasterPage.value = 1
+  try {
+    const { data } = await cleanupApi.getNewMasterCandidates()
+    newMasterTier1.value = data.tier1_candidates
+    newMasterTier2.value = data.tier2_candidates
+    newMasterTotal.value = data.total_candidates
+    // 기본: 전체 체크
+    for (const c of data.tier1_candidates) {
+      newMasterChecked.value[c.name] = true
+    }
+    for (const c of data.tier2_candidates) {
+      newMasterChecked.value[c.name] = true
+    }
+  } catch (e) {
+    showMsg('신규 마스터 후보 로딩 실패', true)
+    newMasterModalVisible.value = false
+  } finally {
+    newMasterLoading.value = false
+  }
+}
+
+function askRegisterNewMasters() {
+  if (newMasterCheckedCount() === 0) {
+    showMsg('등록할 후보를 하나 이상 선택하세요.', true)
+    return
+  }
+  registerConfirmVisible.value = true
+}
+
+async function confirmRegisterNewMasters() {
+  registerConfirmVisible.value = false
+  registering.value = true
+
+  // 체크된 후보들의 편집 상태를 수집
+  const allCandidates = [...newMasterTier1.value, ...newMasterTier2.value]
+  const candidates: NewMasterItem[] = []
+
+  for (const c of allCandidates) {
+    if (!newMasterChecked.value[c.name]) continue
+    const s = getEditState(c)
+    candidates.push({
+      name: s.name.trim(),
+      category: s.category,
+      summary: s.summary,
+      target: s.target,
+      mechanism: s.mechanism,
+      aliases: s.aliases,
+      device_type: s.device_type || 'equipment',
+      primary_category_id: s.primary_category_id,
+      row_ids: c.row_ids,
+    })
+  }
+
+  if (candidates.length === 0) {
+    showMsg('등록할 후보가 없습니다.', true)
+    registering.value = false
+    return
+  }
+
+  try {
+    const { data } = await cleanupApi.registerNewMasters({ candidates })
+    showMsg(`신규 마스터 ${data.inserted}건 등록, ${data.remapped} row 재매핑 완료`, false)
+    newMasterModalVisible.value = false
+    await loadSummary()
+    await loadDuplicates(currentPage.value)
+  } catch (e: any) {
+    showMsg(e.response?.data?.detail || '신규 마스터 등록 실패', true)
+  } finally {
+    registering.value = false
+  }
+}
+
 onMounted(() => {
   loadSummary()
   loadDuplicates(1)
@@ -507,6 +689,22 @@ onMounted(() => {
           class="px-2.5 py-1 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {{ autoExecuting ? '처리 중...' : '자동 통합 실행' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- 신규 마스터 발굴 패널 -->
+    <div class="shrink-0 mb-3 border border-violet-200 rounded bg-violet-50 px-3 py-2.5">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs font-semibold text-violet-800 shrink-0">신규 마스터 발굴</span>
+        <span class="text-slate-300">|</span>
+        <span class="text-xs text-slate-500">잘못 매핑된 이름 + 미매핑 빈번 이름을 자동 검출</span>
+        <button
+          @click="openNewMasterModal"
+          :disabled="newMasterLoading"
+          class="ml-auto px-2.5 py-1 text-xs rounded border border-violet-300 bg-white text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+        >
+          {{ newMasterLoading ? '발굴 중...' : '발굴 결과 보기' }}
         </button>
       </div>
     </div>
@@ -960,6 +1158,287 @@ onMounted(() => {
           >
             그래도 통합
           </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- 신규 마스터 발굴 모달 -->
+  <Teleport to="body">
+    <div
+      v-if="newMasterModalVisible"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="newMasterModalVisible = false"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-[720px] max-h-[85vh] flex flex-col">
+        <!-- 모달 헤더 -->
+        <div class="shrink-0 px-5 py-4 border-b border-slate-200">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-slate-800">신규 마스터 등록 후보</h3>
+            <button
+              @click="newMasterModalVisible = false"
+              class="text-slate-400 hover:text-slate-600 text-lg leading-none"
+            >×</button>
+          </div>
+          <!-- 요약 + 필터 -->
+          <div class="flex items-center gap-3 flex-wrap text-xs">
+            <button
+              @click="newMasterTierFilter = 'all'; newMasterPage = 1"
+              class="px-2 py-0.5 rounded text-[10px] font-medium transition"
+              :class="newMasterTierFilter === 'all'
+                ? 'bg-violet-600 text-white'
+                : 'bg-violet-100 text-violet-700 hover:bg-violet-200'"
+            >
+              전체 {{ newMasterTotal }}건
+            </button>
+            <button
+              @click="newMasterTierFilter = 'tier1'; newMasterPage = 1"
+              class="px-2 py-0.5 rounded text-[10px] font-medium transition"
+              :class="newMasterTierFilter === 'tier1'
+                ? 'bg-amber-600 text-white'
+                : 'bg-amber-100 text-amber-700 hover:bg-amber-200'"
+            >
+              Tier 1 (잘못 매핑) {{ newMasterTier1.length }}건
+            </button>
+            <button
+              @click="newMasterTierFilter = 'tier2'; newMasterPage = 1"
+              class="px-2 py-0.5 rounded text-[10px] font-medium transition"
+              :class="newMasterTierFilter === 'tier2'
+                ? 'bg-blue-600 text-white'
+                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'"
+            >
+              Tier 2 (미매핑 빈번) {{ newMasterTier2.length }}건
+            </button>
+            <span class="text-slate-300 ml-auto">|</span>
+            <label class="flex items-center gap-1 text-xs cursor-pointer select-none">
+              <input
+                type="checkbox"
+                :checked="isAllNewMasterChecked()"
+                @change="toggleAllNewMaster(($event.target as HTMLInputElement).checked)"
+                class="w-3 h-3"
+              />
+              현재 페이지 전체 선택
+            </label>
+            <span class="text-slate-500">
+              선택: <span class="font-semibold text-violet-700">{{ newMasterCheckedCount() }}건</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- 후보 목록 -->
+        <div class="flex-1 min-h-0 overflow-y-auto px-5 py-3">
+          <div v-if="newMasterLoading" class="flex items-center justify-center h-24 text-sm text-slate-400">
+            발굴 중...
+          </div>
+          <div v-else-if="newMasterFilteredList().length === 0" class="flex items-center justify-center h-24 text-sm text-slate-400">
+            후보가 없습니다.
+          </div>
+          <div v-else class="flex flex-col gap-2">
+            <div
+              v-for="candidate in newMasterPagedList()"
+              :key="candidate.name"
+              class="border rounded px-3 py-2.5 transition"
+              :class="newMasterChecked[candidate.name]
+                ? 'border-violet-300 bg-violet-50'
+                : 'border-slate-200 bg-white'"
+            >
+              <!-- 후보 헤더 -->
+              <div class="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  :checked="newMasterChecked[candidate.name] ?? false"
+                  @change="newMasterChecked[candidate.name] = ($event.target as HTMLInputElement).checked"
+                  class="w-3.5 h-3.5 mt-0.5 shrink-0"
+                />
+                <div class="flex-1 min-w-0">
+                  <!-- 이름 + Tier 뱃지 -->
+                  <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <span
+                      class="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold"
+                      :class="candidate.tier === 1
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-blue-100 text-blue-700'"
+                    >T{{ candidate.tier }}</span>
+                    <span class="text-xs font-semibold text-slate-800">{{ getEditState(candidate).name || candidate.name }}</span>
+                  </div>
+                  <!-- 현황 한 줄 -->
+                  <div class="text-[11px] text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span v-if="candidate.current_di_name">
+                      현재 매핑: <span class="text-amber-600 font-medium">{{ candidate.current_di_name }}</span>
+                    </span>
+                    <span v-else class="text-slate-400">미매핑</span>
+                    <span>{{ candidate.branches.join(' · ') }}</span>
+                    <span>{{ candidate.row_ids.length }}건 / {{ candidate.total_qty }}대</span>
+                    <span v-if="candidate.suggested_category" class="text-slate-400">
+                      추천 카테고리: {{ candidate.suggested_category }}
+                    </span>
+                  </div>
+                </div>
+                <!-- 상세 편집 토글 -->
+                <button
+                  @click="toggleNewMasterExpand(candidate)"
+                  class="shrink-0 text-[11px] text-slate-400 hover:text-slate-600 whitespace-nowrap"
+                >
+                  {{ getEditState(candidate).expanded ? '접기 ▲' : '상세 편집 ▼' }}
+                </button>
+              </div>
+
+              <!-- 상세 편집 (펼침) -->
+              <div
+                v-if="getEditState(candidate).expanded"
+                class="mt-2.5 pt-2.5 border-t border-slate-200 grid grid-cols-2 gap-x-3 gap-y-2"
+              >
+                <!-- 이름 (수정 가능) -->
+                <div class="col-span-2">
+                  <label class="block text-[10px] text-slate-500 mb-0.5">마스터 이름</label>
+                  <input
+                    v-model="getEditState(candidate).name"
+                    type="text"
+                    class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+                <!-- 카테고리 -->
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-0.5">카테고리</label>
+                  <input
+                    v-model="getEditState(candidate).category"
+                    type="text"
+                    placeholder="예: 필링"
+                    class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+                <!-- device_type -->
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-0.5">device_type</label>
+                  <select
+                    v-model="getEditState(candidate).device_type"
+                    class="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:border-violet-400"
+                  >
+                    <option value="equipment">equipment</option>
+                    <option value="injection">injection</option>
+                    <option value="care">care</option>
+                    <option value="etc">etc</option>
+                  </select>
+                </div>
+                <!-- 요약 -->
+                <div class="col-span-2">
+                  <label class="block text-[10px] text-slate-500 mb-0.5">요약</label>
+                  <input
+                    v-model="getEditState(candidate).summary"
+                    type="text"
+                    placeholder="한줄 설명"
+                    class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+                <!-- 대상 -->
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-0.5">target</label>
+                  <input
+                    v-model="getEditState(candidate).target"
+                    type="text"
+                    class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+                <!-- mechanism -->
+                <div>
+                  <label class="block text-[10px] text-slate-500 mb-0.5">mechanism</label>
+                  <input
+                    v-model="getEditState(candidate).mechanism"
+                    type="text"
+                    class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+                <!-- aliases -->
+                <div class="col-span-2">
+                  <label class="block text-[10px] text-slate-500 mb-0.5">aliases (쉼표 구분)</label>
+                  <input
+                    v-model="getEditState(candidate).aliases"
+                    type="text"
+                    placeholder="별칭1, 별칭2"
+                    class="w-full text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- 페이지네이션 -->
+            <div v-if="newMasterTotalPages() > 1" class="flex items-center justify-center gap-1 pt-2">
+              <button
+                @click="newMasterPage--"
+                :disabled="newMasterPage <= 1"
+                class="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >이전</button>
+              <template v-for="p in newMasterPageNumbers()" :key="p">
+                <span v-if="p === '...'" class="px-1 text-xs text-slate-400">...</span>
+                <button
+                  v-else
+                  @click="newMasterPage = p as number"
+                  class="px-2 py-1 text-xs rounded border transition"
+                  :class="p === newMasterPage
+                    ? 'bg-violet-600 text-white border-violet-600'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'"
+                >{{ p }}</button>
+              </template>
+              <button
+                @click="newMasterPage++"
+                :disabled="newMasterPage >= newMasterTotalPages()"
+                class="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >다음</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 모달 푸터 -->
+        <div class="shrink-0 px-5 py-3 border-t border-slate-200 flex items-center justify-between">
+          <span class="text-xs text-slate-500">
+            선택한 <span class="font-semibold text-violet-700">{{ newMasterCheckedCount() }}건</span>을 신규 마스터로 등록
+          </span>
+          <div class="flex gap-2">
+            <button
+              @click="newMasterModalVisible = false"
+              class="px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >닫기</button>
+            <button
+              @click="askRegisterNewMasters"
+              :disabled="registering || newMasterCheckedCount() === 0"
+              class="px-3 py-1.5 text-xs rounded bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {{ registering ? '등록 중...' : `선택 ${newMasterCheckedCount()}건 일괄 등록` }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- 신규 마스터 등록 확인 모달 -->
+  <Teleport to="body">
+    <div
+      v-if="registerConfirmVisible"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+      @click.self="registerConfirmVisible = false"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-[400px] p-5">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3">신규 마스터 등록 확인</h3>
+        <div class="text-xs text-slate-600 mb-4 space-y-1.5">
+          <p>
+            <span class="font-semibold text-violet-700">{{ newMasterCheckedCount() }}건</span>을
+            device_info에 신규 마스터로 등록하고 해당 equipment row들을 재매핑합니다.
+          </p>
+          <p class="text-slate-400">
+            · 중복 이름이 있으면 등록이 거부됩니다<br>
+            · 등록 후 자동으로 대상 row들이 재매핑됩니다
+          </p>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="registerConfirmVisible = false"
+            class="px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+          >취소</button>
+          <button
+            @click="confirmRegisterNewMasters"
+            class="px-3 py-1.5 text-xs rounded bg-violet-600 text-white hover:bg-violet-700"
+          >등록 실행</button>
         </div>
       </div>
     </div>

@@ -125,3 +125,50 @@ export const getAutoMergePreview = (params: { page?: number; page_size?: number 
 
 export const executeAutoMerge = (data: AutoMergeRequest) =>
   api.post<AutoMergeResult>('/admin/equipment-cleanup/auto-merge-execute', data, { timeout: 120000 })
+
+// ── 신규 마스터 후보 ────────────────────────────────────────────────────────
+
+export interface NewMasterCandidate {
+  name: string
+  normalized_name: string
+  current_di_id: number | null
+  current_di_name: string | null
+  branches: string[]
+  row_ids: number[]
+  total_qty: number
+  suggested_category: string
+  suggested_primary_category_id: number | null
+}
+
+export interface NewMasterCandidatesResponse {
+  tier1_candidates: NewMasterCandidate[]
+  tier2_candidates: NewMasterCandidate[]
+  total_candidates: number
+}
+
+export interface NewMasterItem {
+  name: string
+  category: string
+  summary: string
+  target: string
+  mechanism: string
+  aliases: string
+  device_type: string
+  primary_category_id: number | null
+  row_ids: number[]
+}
+
+export interface RegisterNewMastersRequest {
+  candidates: NewMasterItem[]
+}
+
+export interface RegisterNewMastersResult {
+  inserted: number
+  remapped: number
+}
+
+export const getNewMasterCandidates = () =>
+  api.get<NewMasterCandidatesResponse>('/admin/equipment-cleanup/new-master-candidates')
+
+export const registerNewMasters = (data: RegisterNewMastersRequest) =>
+  api.post<RegisterNewMastersResult>('/admin/equipment-cleanup/register-new-masters', data, { timeout: 120000 })

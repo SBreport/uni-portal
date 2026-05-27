@@ -84,3 +84,44 @@ export const mergeEquipment = (data: MergeRequest) =>
 
 export const remapEquipment = (data: RemapRequest) =>
   api.post<RemapResult>('/admin/equipment-cleanup/remap', data, { timeout: 300000 })
+
+// ── 자동 통합 ──────────────────────────────────────────────────────────────
+
+export interface AutoMergeGroup {
+  tier: 1 | 2 | 3
+  branch_name: string
+  device_info_name: string
+  name: string          // 통합 후 대표 이름
+  row_ids: number[]
+  names: string[]       // 원본 이름들
+  qtys: number[]
+  total_qty: number
+}
+
+export interface AutoMergePreviewResponse {
+  tier1_count: number
+  tier2_count: number
+  tier3_count: number
+  total: number
+  total_affected_rows: number
+  page: number
+  page_size: number
+  total_pages: number
+  groups: AutoMergeGroup[]
+}
+
+export interface AutoMergeRequest {
+  tiers: number[]
+}
+
+export interface AutoMergeResult {
+  merged_groups: number
+  deleted_rows: number
+  total_qty_consolidated: number
+}
+
+export const getAutoMergePreview = (params: { page?: number; page_size?: number }) =>
+  api.get<AutoMergePreviewResponse>('/admin/equipment-cleanup/auto-merge-preview', { params })
+
+export const executeAutoMerge = (data: AutoMergeRequest) =>
+  api.post<AutoMergeResult>('/admin/equipment-cleanup/auto-merge-execute', data, { timeout: 120000 })

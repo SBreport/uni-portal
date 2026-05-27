@@ -1,9 +1,11 @@
 """Equipment 정리 도구 라우터 (admin only).
 
-- GET  /admin/equipment-cleanup/duplicates  : 중복 그룹 목록
-- GET  /admin/equipment-cleanup/summary     : 요약 통계
-- POST /admin/equipment-cleanup/merge       : 중복 row 통합
-- POST /admin/equipment-cleanup/remap       : device_info_id 재매핑
+- GET  /admin/equipment-cleanup/duplicates          : 중복 그룹 목록
+- GET  /admin/equipment-cleanup/summary             : 요약 통계
+- POST /admin/equipment-cleanup/merge               : 중복 row 통합
+- POST /admin/equipment-cleanup/remap               : device_info_id 재매핑
+- GET  /admin/equipment-cleanup/auto-merge-preview  : 자동 통합 가능 그룹 미리보기
+- POST /admin/equipment-cleanup/auto-merge-execute  : 자동 통합 일괄 실행
 """
 
 import re
@@ -25,6 +27,24 @@ _admin = require_role("admin")
 
 def _conn() -> sqlite3.Connection:
     return get_conn(EQUIPMENT_DB)
+
+
+def normalize_name(name: str) -> str:
+    """이름 정규화: prefix 제거, 공백 통일, 보이지 않는 문자 제거.
+
+    - prefix 제거: "1. ", "2. ", "[1]", "(1)" 등
+    - 연속 공백 → 1개
+    - zero-width space 등 보이지 않는 문자 제거
+    """
+    if not name:
+        return name
+    # prefix 숫자 제거: "1. ", "2. ", "[1]", "(1)", "①" 등
+    name = re.sub(r'^[\[\(]?\d+[\]\)]?\.?\s*', '', name)
+    # zero-width space, BOM, soft hyphen 등 제거
+    name = re.sub(r'[​‌‍﻿­]', '', name)
+    # 연속 공백 → 1개 + 양쪽 strip
+    name = re.sub(r'\s+', ' ', name).strip()
+    return name
 
 
 def extract_variant(name: str) -> Optional[str]:
@@ -393,5 +413,259 @@ async def remap_equipment(
         except Exception:
             pass
         raise HTTPException(500, f"재매핑 실패: {str(e)}")
+    finally:
+        conn.close()
+
+
+# ── 자동 통합 헬퍼 ────────────────────────────────────────────────────────────
+
+def _build_auto_merge_groups(conn: sqlite3.Connection) -> list[dict]:
+    """자동 통합 가능한 그룹을 Tier 1/2/3 기준으로 반환.
+
+    반환값 각 항목:
+      tier, branch_id, branch_name, device_info_id, device_info_name,
+      row_ids (list[int]), qtys (list[int]), names (list[str]),
+      merged_name (정규화 후 대표 이름), total_qty
+    """
+    # 중복 그룹의 모든 row 조회
+    raw_rows = conn.execute("""
+        SELECT e.id, e.branch_id, b.name AS branch_name,
+               e.device_info_id, di.name AS device_info_name,
+               e.name, e.quantity, e.source
+        FROM equipment e
+        JOIN branches b ON e.branch_id = b.id
+        LEFT JOIN device_info di ON e.device_info_id = di.id
+        WHERE e.device_info_id IS NOT NULL
+        ORDER BY e.branch_id, e.device_info_id, e.id
+    """).fetchall()
+
+    # (branch_id, device_info_id) → list of rows
+    from collections import defaultdict
+    bucket: dict = defaultdict(list)
+    for r in raw_rows:
+        bucket[(r["branch_id"], r["device_info_id"])].append(dict(r))
+
+    groups = []
+    for (branch_id, device_info_id), rows in bucket.items():
+        if len(rows) < 2:
+            continue
+
+        branch_name = rows[0]["branch_name"]
+        device_info_name = rows[0]["device_info_name"] or ""
+
+        # 이름 정규화
+        norm_names = [normalize_name(r["name"] or "") for r in rows]
+        variants = [extract_variant(r["name"] or "") for r in rows]
+
+        # Tier 1: 원본 이름이 모두 동일
+        if len(set(r["name"] for r in rows)) == 1:
+            groups.append({
+                "tier": 1,
+                "branch_id": branch_id,
+                "branch_name": branch_name,
+                "device_info_id": device_info_id,
+                "device_info_name": device_info_name,
+                "row_ids": [r["id"] for r in rows],
+                "qtys": [r["quantity"] for r in rows],
+                "names": [r["name"] for r in rows],
+                "merged_name": rows[0]["name"],
+                "total_qty": sum(r["quantity"] for r in rows),
+            })
+            continue
+
+        # Tier 2: 정규화 후 이름이 모두 동일, variant 모두 None
+        if all(v is None for v in variants) and len(set(norm_names)) == 1:
+            groups.append({
+                "tier": 2,
+                "branch_id": branch_id,
+                "branch_name": branch_name,
+                "device_info_id": device_info_id,
+                "device_info_name": device_info_name,
+                "row_ids": [r["id"] for r in rows],
+                "qtys": [r["quantity"] for r in rows],
+                "names": [r["name"] for r in rows],
+                "merged_name": norm_names[0],
+                "total_qty": sum(r["quantity"] for r in rows),
+            })
+            continue
+
+        # Tier 3: variant 모두 동일 (None 포함)
+        if len(set(v for v in variants)) == 1:
+            # 정규화된 대표 이름: source='sheets' 우선, 없으면 가장 작은 id
+            sorted_rows = sorted(rows, key=lambda r: (0 if r["source"] == "sheets" else 1, r["id"]))
+            groups.append({
+                "tier": 3,
+                "branch_id": branch_id,
+                "branch_name": branch_name,
+                "device_info_id": device_info_id,
+                "device_info_name": device_info_name,
+                "row_ids": [r["id"] for r in rows],
+                "qtys": [r["quantity"] for r in rows],
+                "names": [r["name"] for r in rows],
+                "merged_name": normalize_name(sorted_rows[0]["name"] or ""),
+                "total_qty": sum(r["quantity"] for r in rows),
+            })
+
+    return groups
+
+
+# ── GET /auto-merge-preview ───────────────────────────────────────────────────
+
+@router.get("/auto-merge-preview")
+async def get_auto_merge_preview(
+    user: Annotated[dict, Depends(_admin)],
+    page: int = 1,
+    page_size: int = 50,
+):
+    """자동 통합 가능 그룹 미리보기.
+
+    Tier 1/2/3 기준으로 자동 처리 가능한 그룹과 건수를 반환.
+    """
+    conn = _conn()
+    try:
+        all_groups = _build_auto_merge_groups(conn)
+
+        tier1 = [g for g in all_groups if g["tier"] == 1]
+        tier2 = [g for g in all_groups if g["tier"] == 2]
+        tier3 = [g for g in all_groups if g["tier"] == 3]
+
+        total = len(all_groups)
+        total_affected_rows = sum(len(g["row_ids"]) for g in all_groups)
+
+        # 페이지네이션
+        offset = (page - 1) * page_size
+        paged_groups = all_groups[offset: offset + page_size]
+
+        # 직렬화
+        serialized = [
+            {
+                "tier": g["tier"],
+                "branch_name": g["branch_name"],
+                "device_info_name": g["device_info_name"],
+                "name": g["merged_name"],
+                "row_ids": g["row_ids"],
+                "names": g["names"],
+                "qtys": g["qtys"],
+                "total_qty": g["total_qty"],
+            }
+            for g in paged_groups
+        ]
+
+        return {
+            "tier1_count": len(tier1),
+            "tier2_count": len(tier2),
+            "tier3_count": len(tier3),
+            "total": total,
+            "total_affected_rows": total_affected_rows,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": max(1, (total + page_size - 1) // page_size),
+            "groups": serialized,
+        }
+    finally:
+        conn.close()
+
+
+# ── POST /auto-merge-execute ──────────────────────────────────────────────────
+
+class AutoMergeRequest(BaseModel):
+    tiers: list[int]  # 처리할 tier 목록 (예: [1, 2, 3])
+
+
+@router.post("/auto-merge-execute")
+async def auto_merge_execute(
+    body: AutoMergeRequest,
+    user: Annotated[dict, Depends(_admin)],
+):
+    """자동 통합 일괄 실행.
+
+    지정한 tier(들)에 해당하는 모든 자동 통합 가능 그룹을 단일 트랜잭션 안에서 처리.
+    - target_row: source='sheets' 우선, 동점이면 가장 작은 id
+    - target.quantity = 그룹 전체 qty 합산
+    - target.name = merged_name (정규화된 대표 이름)
+    - source rows DELETE
+    """
+    if not body.tiers:
+        raise HTTPException(400, "tiers가 비어 있습니다.")
+    invalid = [t for t in body.tiers if t not in (1, 2, 3)]
+    if invalid:
+        raise HTTPException(400, f"유효하지 않은 tier: {invalid}")
+
+    conn = _conn()
+    try:
+        all_groups = _build_auto_merge_groups(conn)
+        target_groups = [g for g in all_groups if g["tier"] in body.tiers]
+
+        if not target_groups:
+            return {
+                "merged_groups": 0,
+                "deleted_rows": 0,
+                "total_qty_consolidated": 0,
+            }
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        conn.execute("BEGIN")
+        merged_groups = 0
+        deleted_rows = 0
+        total_qty_consolidated = 0
+
+        for g in target_groups:
+            row_ids = g["row_ids"]
+            if len(row_ids) < 2:
+                continue
+
+            # target row 결정: source='sheets' 우선, 동점이면 최소 id
+            rows_detail = conn.execute(
+                f"SELECT id, source, quantity FROM equipment WHERE id IN ({','.join('?' * len(row_ids))})",
+                row_ids,
+            ).fetchall()
+
+            # source='sheets' 우선 정렬
+            sorted_rows = sorted(rows_detail, key=lambda r: (0 if r["source"] == "sheets" else 1, r["id"]))
+            target_id = sorted_rows[0]["id"]
+            source_ids = [r["id"] for r in sorted_rows[1:]]
+
+            total_qty = sum(r["quantity"] for r in rows_detail)
+            merged_name = g["merged_name"] or (
+                conn.execute("SELECT name FROM equipment WHERE id = ?", (target_id,)).fetchone()["name"]
+            )
+
+            # target 업데이트
+            conn.execute(
+                "UPDATE equipment SET quantity = ?, name = ?, updated_at = ? WHERE id = ?",
+                (total_qty, merged_name, now, target_id),
+            )
+
+            # source 삭제
+            conn.execute(
+                f"DELETE FROM equipment WHERE id IN ({','.join('?' * len(source_ids))})",
+                source_ids,
+            )
+
+            merged_groups += 1
+            deleted_rows += len(source_ids)
+            total_qty_consolidated += total_qty
+
+        conn.execute("COMMIT")
+
+        return {
+            "merged_groups": merged_groups,
+            "deleted_rows": deleted_rows,
+            "total_qty_consolidated": total_qty_consolidated,
+        }
+
+    except HTTPException:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise HTTPException(500, f"자동 통합 실패: {str(e)}")
     finally:
         conn.close()

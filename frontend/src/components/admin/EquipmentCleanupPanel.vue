@@ -5,6 +5,8 @@ import type {
   CleanupSummary,
   DuplicateGroup,
   EquipmentRow,
+  AutoMergeGroup,
+  AutoMergePreviewResponse,
 } from '@/api/equipment_cleanup'
 import { getBranches } from '@/api/equipment'
 
@@ -306,6 +308,130 @@ function pageNumbers() {
   return pages
 }
 
+// ── 자동 통합 ─────────────────────────────────────────────────────────────
+
+const autoTiers = ref<Set<number>>(new Set([1, 2]))  // 기본: Tier 1, 2 선택
+const autoPreview = ref<AutoMergePreviewResponse | null>(null)
+const autoPreviewLoading = ref(false)
+const autoPreviewVisible = ref(false)
+const autoPreviewPage = ref(1)
+const AUTO_PREVIEW_PAGE_SIZE = 30
+const autoExecuting = ref(false)
+const autoConfirmVisible = ref(false)
+
+function toggleTier(tier: number) {
+  if (autoTiers.value.has(tier)) {
+    autoTiers.value.delete(tier)
+  } else {
+    autoTiers.value.add(tier)
+  }
+}
+
+async function loadAutoPreview(page = 1) {
+  autoPreviewLoading.value = true
+  autoPreviewPage.value = page
+  try {
+    const { data } = await cleanupApi.getAutoMergePreview({
+      page,
+      page_size: AUTO_PREVIEW_PAGE_SIZE,
+    })
+    autoPreview.value = data
+  } catch (e) {
+    showMsg('미리보기 로딩 실패', true)
+  } finally {
+    autoPreviewLoading.value = false
+  }
+}
+
+async function openAutoPreview() {
+  await loadAutoPreview(1)
+  autoPreviewVisible.value = true
+}
+
+function filteredPreviewGroups(): AutoMergeGroup[] {
+  if (!autoPreview.value) return []
+  return autoPreview.value.groups.filter(g => autoTiers.value.has(g.tier))
+}
+
+function previewSelectedCount(): number {
+  return filteredPreviewGroups().length
+}
+
+function previewSelectedRows(): number {
+  return filteredPreviewGroups().reduce((acc, g) => acc + g.row_ids.length, 0)
+}
+
+function autoPreviewTierCount(tier: number): number {
+  if (!autoPreview.value) return 0
+  if (tier === 1) return autoPreview.value.tier1_count
+  if (tier === 2) return autoPreview.value.tier2_count
+  if (tier === 3) return autoPreview.value.tier3_count
+  return 0
+}
+
+function autoPreviewTotalCount(): number {
+  if (!autoPreview.value) return 0
+  const t1 = autoTiers.value.has(1) ? autoPreview.value.tier1_count : 0
+  const t2 = autoTiers.value.has(2) ? autoPreview.value.tier2_count : 0
+  const t3 = autoTiers.value.has(3) ? autoPreview.value.tier3_count : 0
+  return t1 + t2 + t3
+}
+
+function tierLabel(tier: number): string {
+  if (tier === 1) return 'T1'
+  if (tier === 2) return 'T2'
+  if (tier === 3) return 'T3'
+  return ''
+}
+
+function tierBadgeClass(tier: number): string {
+  if (tier === 1) return 'bg-emerald-100 text-emerald-700'
+  if (tier === 2) return 'bg-teal-100 text-teal-700'
+  if (tier === 3) return 'bg-cyan-100 text-cyan-700'
+  return 'bg-slate-100 text-slate-600'
+}
+
+function askAutoExecute() {
+  if (autoTiers.value.size === 0) {
+    showMsg('처리할 Tier를 하나 이상 선택하세요.', true)
+    return
+  }
+  autoConfirmVisible.value = true
+}
+
+async function confirmAutoExecute() {
+  autoConfirmVisible.value = false
+  autoPreviewVisible.value = false
+  autoExecuting.value = true
+  try {
+    const { data } = await cleanupApi.executeAutoMerge({ tiers: [...autoTiers.value] })
+    showMsg(
+      `자동 통합 완료: ${data.merged_groups}건 그룹 처리, ${data.deleted_rows} row 삭제 (총 ${data.total_qty_consolidated}대 통합)`,
+      false,
+    )
+    autoPreview.value = null
+    await loadSummary()
+    await loadDuplicates(1)
+  } catch (e: any) {
+    showMsg(e.response?.data?.detail || '자동 통합 실패', true)
+  } finally {
+    autoExecuting.value = false
+  }
+}
+
+function autoPreviewPageNumbers() {
+  if (!autoPreview.value) return []
+  const total = autoPreview.value.total_pages
+  const cur = autoPreviewPage.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | '...')[] = [1]
+  if (cur > 3) pages.push('...')
+  for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i)
+  if (cur < total - 2) pages.push('...')
+  pages.push(total)
+  return pages
+}
+
 onMounted(() => {
   loadSummary()
   loadDuplicates(1)
@@ -337,6 +463,52 @@ onMounted(() => {
           <span class="font-semibold text-red-600 ml-1">{{ summary.null_mapping.toLocaleString() }}건</span>
         </span>
       </template>
+    </div>
+
+    <!-- 자동 일괄 통합 패널 -->
+    <div class="shrink-0 mb-3 border border-emerald-200 rounded bg-emerald-50 px-3 py-2.5">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs font-semibold text-emerald-800 shrink-0">자동 일괄 통합</span>
+        <span class="text-slate-300">|</span>
+
+        <!-- Tier 체크박스 -->
+        <label
+          v-for="tier in [1, 2, 3]"
+          :key="tier"
+          class="flex items-center gap-1 text-xs cursor-pointer select-none"
+        >
+          <input
+            type="checkbox"
+            :checked="autoTiers.has(tier)"
+            @change="toggleTier(tier)"
+            class="w-3 h-3"
+          />
+          <span class="text-slate-700">
+            Tier {{ tier }}
+            <span class="text-slate-400 text-[10px]">
+              ({{ tier === 1 ? '완전 동일' : tier === 2 ? '정규화 동일' : '같은 변형' }})
+            </span>
+          </span>
+        </label>
+
+        <span class="text-slate-300">|</span>
+
+        <!-- 버튼들 -->
+        <button
+          @click="openAutoPreview"
+          :disabled="autoPreviewLoading || autoExecuting"
+          class="px-2.5 py-1 text-xs rounded border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+        >
+          {{ autoPreviewLoading ? '로딩 중...' : '미리보기' }}
+        </button>
+        <button
+          @click="askAutoExecute"
+          :disabled="autoExecuting || autoTiers.size === 0"
+          class="px-2.5 py-1 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {{ autoExecuting ? '처리 중...' : '자동 통합 실행' }}
+        </button>
+      </div>
     </div>
 
     <!-- 툴바 -->
@@ -560,6 +732,186 @@ onMounted(() => {
       </div>
     </div>
   </div>
+
+  <!-- 자동 통합 미리보기 모달 -->
+  <Teleport to="body">
+    <div
+      v-if="autoPreviewVisible && autoPreview"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="autoPreviewVisible = false"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-[680px] max-h-[80vh] flex flex-col">
+        <!-- 모달 헤더 -->
+        <div class="shrink-0 px-5 py-4 border-b border-slate-200">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-slate-800">자동 통합 미리보기</h3>
+            <button
+              @click="autoPreviewVisible = false"
+              class="text-slate-400 hover:text-slate-600 text-lg leading-none"
+            >×</button>
+          </div>
+          <!-- Tier 요약 -->
+          <div class="flex items-center gap-3 flex-wrap text-xs">
+            <span
+              v-for="tier in [1, 2, 3]"
+              :key="tier"
+              class="flex items-center gap-1"
+            >
+              <span
+                class="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                :class="tierBadgeClass(tier)"
+              >Tier {{ tier }}</span>
+              <span class="text-slate-600">{{ autoPreviewTierCount(tier).toLocaleString() }}건</span>
+              <span v-if="!autoTiers.has(tier)" class="text-slate-400">(미선택)</span>
+            </span>
+            <span class="text-slate-300">|</span>
+            <span class="text-slate-600">
+              선택 Tier 합계:
+              <span class="font-semibold text-emerald-700">{{ autoPreviewTotalCount().toLocaleString() }}건</span>
+            </span>
+            <span class="text-slate-600">
+              / 전체:
+              <span class="font-semibold">{{ autoPreview.total.toLocaleString() }}건</span>
+              (<span class="text-slate-500">{{ autoPreview.total_affected_rows.toLocaleString() }} row</span>)
+            </span>
+          </div>
+        </div>
+
+        <!-- 그룹 목록 -->
+        <div class="flex-1 min-h-0 overflow-y-auto px-5 py-3">
+          <div v-if="autoPreviewLoading" class="flex items-center justify-center h-24 text-sm text-slate-400">
+            로딩 중...
+          </div>
+          <template v-else>
+            <div class="flex flex-col gap-1.5">
+              <div
+                v-for="(g, idx) in autoPreview.groups"
+                :key="idx"
+                class="flex items-start gap-2 px-2.5 py-2 rounded border text-xs"
+                :class="autoTiers.has(g.tier) ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50 opacity-50'"
+              >
+                <!-- Tier 뱃지 -->
+                <span
+                  class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold mt-0.5"
+                  :class="tierBadgeClass(g.tier)"
+                >{{ tierLabel(g.tier) }}</span>
+                <!-- 지점 / 마스터 -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1 mb-0.5">
+                    <span class="font-medium text-slate-700">{{ g.branch_name }}</span>
+                    <span class="text-slate-400">/</span>
+                    <span class="font-medium text-slate-700">{{ g.device_info_name }}</span>
+                  </div>
+                  <!-- 원본 이름들 -->
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      v-for="(name, ni) in g.names"
+                      :key="ni"
+                      class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]"
+                    >{{ name }}</span>
+                    <span class="text-slate-400 self-center text-[10px]">→</span>
+                    <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-medium">
+                      {{ g.name }}
+                    </span>
+                  </div>
+                </div>
+                <!-- qty 요약 -->
+                <div class="shrink-0 text-right text-[10px] text-slate-500">
+                  <div class="font-medium text-slate-700">{{ g.total_qty }}대</div>
+                  <div>{{ g.row_ids.length }}→1 row</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 페이지네이션 -->
+            <div v-if="autoPreview.total_pages > 1" class="flex items-center justify-center gap-1 pt-3">
+              <button
+                @click="loadAutoPreview(autoPreviewPage - 1)"
+                :disabled="autoPreviewPage <= 1 || autoPreviewLoading"
+                class="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >이전</button>
+              <template v-for="p in autoPreviewPageNumbers()" :key="p">
+                <span v-if="p === '...'" class="px-1 text-xs text-slate-400">...</span>
+                <button
+                  v-else
+                  @click="loadAutoPreview(p as number)"
+                  :disabled="autoPreviewLoading"
+                  class="px-2 py-1 text-xs rounded border transition"
+                  :class="p === autoPreviewPage
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'"
+                >{{ p }}</button>
+              </template>
+              <button
+                @click="loadAutoPreview(autoPreviewPage + 1)"
+                :disabled="autoPreviewPage >= autoPreview.total_pages || autoPreviewLoading"
+                class="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >다음</button>
+            </div>
+          </template>
+        </div>
+
+        <!-- 모달 푸터 -->
+        <div class="shrink-0 px-5 py-3 border-t border-slate-200 flex items-center justify-between">
+          <span class="text-xs text-slate-500">
+            선택 Tier 기준 <span class="font-semibold text-emerald-700">{{ autoPreviewTotalCount().toLocaleString() }}건</span> 그룹 처리 예정
+          </span>
+          <div class="flex gap-2">
+            <button
+              @click="autoPreviewVisible = false"
+              class="px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >닫기</button>
+            <button
+              @click="askAutoExecute"
+              :disabled="autoTiers.size === 0 || autoPreviewTotalCount() === 0"
+              class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >자동 통합 실행</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- 자동 통합 실행 확인 모달 -->
+  <Teleport to="body">
+    <div
+      v-if="autoConfirmVisible"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+      @click.self="autoConfirmVisible = false"
+    >
+      <div class="bg-white rounded-lg shadow-xl w-[400px] p-5">
+        <h3 class="text-sm font-semibold text-slate-800 mb-3">자동 통합 실행 확인</h3>
+        <div class="text-xs text-slate-600 mb-4 space-y-1">
+          <p>
+            선택한 Tier
+            <span class="font-semibold text-slate-800">
+              {{ [...autoTiers].sort().map(t => 'Tier ' + t).join(', ') }}
+            </span>
+            에 해당하는
+            <span class="font-semibold text-emerald-700">{{ autoPreviewTotalCount().toLocaleString() }}건</span>
+            그룹을 자동 통합합니다.
+          </p>
+          <p class="text-slate-400">
+            · target row: source='sheets' 우선, 동점이면 가장 작은 id<br>
+            · 나머지 source row들은 삭제됩니다
+          </p>
+          <p class="text-amber-600 mt-2">
+            삭제된 row는 되돌릴 수 없습니다. 진행하시겠습니까?
+          </p>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button
+            @click="autoConfirmVisible = false"
+            class="px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+          >취소</button>
+          <button
+            @click="confirmAutoExecute"
+            class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700"
+          >통합 실행</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 
   <!-- variant 다름 경고 모달 -->
   <Teleport to="body">

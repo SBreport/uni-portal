@@ -313,6 +313,48 @@ function applyInitialFilters(filter: Record<string, any>) {
   page.value = 1
 }
 
+// ── 엑셀 다운로드 ──
+const exporting = ref(false)
+
+async function downloadXlsx() {
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    const params: any = {}
+    if (isUandi.value) params.branch_filter = 'uandi'
+    if (searchText.value) params.search = searchText.value
+    if (filterChannel.value) params.channel = filterChannel.value
+    if (filterTypeMain.value) params.post_type_main = filterTypeMain.value
+    if (filterAuthor.value) params.author = filterAuthor.value
+    if (filterBranch.value) params.branch_name = filterBranch.value
+    if (filterProjectMonth.value) params.project_month = filterProjectMonth.value
+    if (filterNeedsReview.value !== null) params.needs_review = filterNeedsReview.value
+    if (dateFrom.value) params.date_from = dateFrom.value
+    if (dateTo.value) params.date_to = dateTo.value
+
+    const res = await blogApi.exportBlogPostsXlsx(params)
+
+    // Content-Disposition에서 파일명 파싱 시도, 실패 시 fallback
+    let filename = `블로그_${new Date().toISOString().slice(0, 10)}.xlsx`
+    const cd = res.headers['content-disposition'] as string | undefined
+    if (cd) {
+      const match = cd.match(/filename="?([^";\s]+)"?/)
+      if (match) filename = match[1]
+    }
+
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    window.URL.revokeObjectURL(url)
+  } catch (e) {
+    alert('엑셀 다운로드에 실패했습니다.')
+  } finally {
+    exporting.value = false
+  }
+}
+
 // 페이지 변경 시 목록 재조회
 watch(page, () => loadPosts())
 
@@ -411,6 +453,10 @@ onMounted(() => {
                   ? 'border-blue-400 text-blue-600 bg-blue-50'
                   : 'border-slate-300 text-slate-400 hover:text-slate-600'">
           컬럼필터
+        </button>
+        <button @click="downloadXlsx" :disabled="exporting"
+                class="text-xs px-2 h-7 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 transition-colors">
+          {{ exporting ? '다운로드 중…' : '엑셀' }}
         </button>
         <button @click="resetFilter" class="text-xs text-slate-400 hover:text-slate-600 shrink-0">초기화</button>
         <span class="ml-auto text-xs text-slate-400 shrink-0 tabular-nums">{{ totalCount.toLocaleString() }}건</span>

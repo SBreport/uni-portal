@@ -92,3 +92,10 @@ export const getActiveAccounts = (params?: { branch_filter?: string }) =>
 
 export const exportKeywordsCsv = () =>
   api.get('/blog/posts/export-keywords.csv', { responseType: 'blob', headers: { Accept: 'text/csv' } })
+
+export const exportBlogPostsXlsx = (params?: BlogPostsParams) =>
+  api.get('/blog/posts/export.xlsx', {
+    params,
+    responseType: 'blob',
+    headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+  })

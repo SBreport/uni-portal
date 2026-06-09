@@ -60,6 +60,61 @@ def _bf_clause(branch_filter: str | None, column: str = "branch_name", prefix: s
 
 # ── 게시글 목록 ──
 
+def _build_post_where(*, channel=None, platform=None, post_type=None, post_type_main=None,
+                      blog_id=None, keyword=None, search=None, date_from=None, date_to=None,
+                      author=None, branch_name=None, project_month=None, needs_review=None,
+                      branch_filter=None) -> tuple[str, list]:
+    """WHERE 절 문자열('WHERE ...' 또는 '')과 params 리스트 반환."""
+    conditions = []
+    params = []
+
+    if branch_filter == "uandi":
+        or_clause = " OR ".join(f"branch_name LIKE '%{p}%'" for p in BRAND_PATTERNS)
+        conditions.append(f"({or_clause})")
+    if channel:
+        conditions.append("blog_channel = ?")
+        params.append(channel)
+    if platform:
+        conditions.append("platform = ?")
+        params.append(platform)
+    if post_type:
+        conditions.append("post_type LIKE ?")
+        params.append(f"%{post_type}%")
+    if post_type_main:
+        conditions.append("post_type_main = ?")
+        params.append(post_type_main)
+    if blog_id:
+        conditions.append("blog_id = ?")
+        params.append(blog_id)
+    if keyword:
+        conditions.append("keyword LIKE ?")
+        params.append(f"%{keyword}%")
+    if search:
+        conditions.append("(title LIKE ? OR keyword LIKE ? OR tags LIKE ? OR clean_title LIKE ?)")
+        params.extend([f"%{search}%"] * 4)
+    if date_from:
+        conditions.append("published_at >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append("published_at <= ?")
+        params.append(date_to)
+    if author:
+        conditions.append("(author_main = ? OR author LIKE ?)")
+        params.extend([author, f"%{author}%"])
+    if branch_name:
+        conditions.append("(branch_name = ? OR project_branch = ? OR project_branch LIKE ?)")
+        params.extend([branch_name, branch_name, f"{branch_name}%"])
+    if project_month:
+        conditions.append("project_month = ?")
+        params.append(project_month)
+    if needs_review is not None:
+        conditions.append("needs_review = ?")
+        params.append(needs_review)
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+    return where, params
+
+
 def list_posts(*, page: int, per_page: int, channel=None, platform=None,
                post_type=None, post_type_main=None, blog_id=None, keyword=None,
                search=None, date_from=None, date_to=None, author=None,
@@ -67,53 +122,13 @@ def list_posts(*, page: int, per_page: int, channel=None, platform=None,
                branch_filter=None) -> dict:
     conn = _conn()
     try:
-        conditions = []
-        params = []
-
-        if branch_filter == "uandi":
-            or_clause = " OR ".join(f"branch_name LIKE '%{p}%'" for p in BRAND_PATTERNS)
-            conditions.append(f"({or_clause})")
-        if channel:
-            conditions.append("blog_channel = ?")
-            params.append(channel)
-        if platform:
-            conditions.append("platform = ?")
-            params.append(platform)
-        if post_type:
-            conditions.append("post_type LIKE ?")
-            params.append(f"%{post_type}%")
-        if post_type_main:
-            conditions.append("post_type_main = ?")
-            params.append(post_type_main)
-        if blog_id:
-            conditions.append("blog_id = ?")
-            params.append(blog_id)
-        if keyword:
-            conditions.append("keyword LIKE ?")
-            params.append(f"%{keyword}%")
-        if search:
-            conditions.append("(title LIKE ? OR keyword LIKE ? OR tags LIKE ? OR clean_title LIKE ?)")
-            params.extend([f"%{search}%"] * 4)
-        if date_from:
-            conditions.append("published_at >= ?")
-            params.append(date_from)
-        if date_to:
-            conditions.append("published_at <= ?")
-            params.append(date_to)
-        if author:
-            conditions.append("(author_main = ? OR author LIKE ?)")
-            params.extend([author, f"%{author}%"])
-        if branch_name:
-            conditions.append("(branch_name = ? OR project_branch = ? OR project_branch LIKE ?)")
-            params.extend([branch_name, branch_name, f"{branch_name}%"])
-        if project_month:
-            conditions.append("project_month = ?")
-            params.append(project_month)
-        if needs_review is not None:
-            conditions.append("needs_review = ?")
-            params.append(needs_review)
-
-        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        where, params = _build_post_where(
+            channel=channel, platform=platform, post_type=post_type,
+            post_type_main=post_type_main, blog_id=blog_id, keyword=keyword,
+            search=search, date_from=date_from, date_to=date_to, author=author,
+            branch_name=branch_name, project_month=project_month,
+            needs_review=needs_review, branch_filter=branch_filter,
+        )
 
         total = conn.execute(f"SELECT COUNT(*) FROM blog_posts {where}", params).fetchone()[0]
         offset = (page - 1) * per_page
@@ -137,6 +152,66 @@ def list_posts(*, page: int, per_page: int, channel=None, platform=None,
             "pages": (total + per_page - 1) // per_page,
             "items": [dict(r) for r in rows],
         }
+    finally:
+        conn.close()
+
+
+def export_posts(*, include_author: bool, channel=None, platform=None,
+                 post_type=None, post_type_main=None, blog_id=None, keyword=None,
+                 search=None, date_from=None, date_to=None, author=None,
+                 branch_name=None, project_month=None, needs_review=None,
+                 branch_filter=None) -> list[dict]:
+    """필터 조건에 맞는 전체 게시글을 엑셀용 dict 리스트로 반환.
+
+    include_author=True 이면 '담당자' 키 포함, False 이면 제외.
+    """
+    conn = _conn()
+    try:
+        where, params = _build_post_where(
+            channel=channel, platform=platform, post_type=post_type,
+            post_type_main=post_type_main, blog_id=blog_id, keyword=keyword,
+            search=search, date_from=date_from, date_to=date_to, author=author,
+            branch_name=branch_name, project_month=project_month,
+            needs_review=needs_review, branch_filter=branch_filter,
+        )
+        rows = conn.execute(
+            f"""SELECT
+                    CASE
+                        WHEN blog_channel = 'br' THEN '브랜드'
+                        WHEN blog_channel = 'opt' THEN '최적'
+                        WHEN blog_channel = 'cafe' THEN '카페'
+                        ELSE blog_channel
+                    END AS channel_label,
+                    post_type_main,
+                    branch_name,
+                    COALESCE(NULLIF(clean_title,''), NULLIF(title,''), NULLIF(scraped_title,'')) AS title_display,
+                    keyword,
+                    author_main,
+                    published_at,
+                    status_clean,
+                    blog_id,
+                    published_url
+                FROM blog_posts {where}
+                ORDER BY published_at DESC, id DESC""",
+            params,
+        ).fetchall()
+
+        result = []
+        for r in rows:
+            row: dict = {}
+            row["채널"] = r["channel_label"] or ""
+            row["원고종류"] = r["post_type_main"] or ""
+            row["지점"] = r["branch_name"] or ""
+            row["제목"] = r["title_display"] or ""
+            row["키워드"] = r["keyword"] or ""
+            if include_author:
+                row["담당자"] = r["author_main"] or ""
+            row["발행일"] = r["published_at"] or ""
+            row["상태"] = r["status_clean"] or ""
+            row["블로그계정"] = r["blog_id"] or ""
+            row["발행URL"] = r["published_url"] or ""
+            result.append(row)
+        return result
     finally:
         conn.close()
 

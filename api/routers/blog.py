@@ -21,7 +21,7 @@ from blog.post_queries import (
     list_posts, get_post, get_filter_options, get_dashboard, get_stats,
     list_accounts, update_account as _update_account,
     get_notion_token, get_notion_token_status, save_notion_token,
-    get_last_sync_status, export_keywords, BRAND_PATTERNS,
+    get_last_sync_status, export_keywords, export_posts, BRAND_PATTERNS,
 )
 
 router = APIRouter(prefix="/blog", tags=["Blog"])
@@ -85,6 +85,83 @@ def export_keywords_csv(
         content=csv_bytes.encode("utf-8"),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="blog_keywords_{today}.csv"'},
+    )
+
+
+# ── 게시글 목록 엑셀 다운로드 ──
+# {post_id} 라우터보다 먼저 등록해야 "export.xlsx"가 int로 파싱되어 422가 나는 것을 피함
+@router.get("/posts/export.xlsx")
+def export_posts_xlsx(
+    channel: Optional[str] = None,
+    platform: Optional[str] = None,
+    post_type: Optional[str] = None,
+    post_type_main: Optional[str] = None,
+    blog_id: Optional[str] = None,
+    keyword: Optional[str] = None,
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    author: Optional[str] = None,
+    branch_name: Optional[str] = None,
+    project_month: Optional[str] = None,
+    needs_review: Optional[int] = None,
+    branch_filter: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
+    """현재 필터 조건 그대로 엑셀(.xlsx)로 내보내기. 로그인 사용자 누구나 사용 가능."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    include_author = user["role"] in ("admin", "editor")
+
+    rows = export_posts(
+        include_author=include_author,
+        channel=channel, platform=platform, post_type=post_type,
+        post_type_main=post_type_main, blog_id=blog_id, keyword=keyword,
+        search=search, date_from=date_from, date_to=date_to, author=author,
+        branch_name=branch_name, project_month=project_month,
+        needs_review=needs_review, branch_filter=branch_filter,
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "블로그"
+
+    if rows:
+        headers = list(rows[0].keys())
+    else:
+        # 데이터가 없어도 헤더는 출력
+        if include_author:
+            headers = ["채널", "원고종류", "지점", "제목", "키워드", "담당자", "발행일", "상태", "블로그계정", "발행URL"]
+        else:
+            headers = ["채널", "원고종류", "지점", "제목", "키워드", "발행일", "상태", "블로그계정", "발행URL"]
+
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    ws.freeze_panes = "A2"
+
+    # 컬럼 너비 설정
+    col_widths = {
+        "채널": 10, "원고종류": 14, "지점": 14, "제목": 40,
+        "키워드": 20, "담당자": 12, "발행일": 12, "상태": 12,
+        "블로그계정": 14, "발행URL": 45,
+    }
+    for i, header in enumerate(headers, start=1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = col_widths.get(header, 12)
+
+    for row in rows:
+        ws.append([v if v != "" else None for v in row.values()])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    today = datetime.now().strftime("%Y%m%d")
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="blog_posts_{today}.xlsx"'},
     )
 
 

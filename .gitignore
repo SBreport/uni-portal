@@ -20,6 +20,9 @@ credentials.json
 # Claude Code 워크트리 (격리된 작업 브랜치의 메타 디렉토리, main에서 commit 금지)
 .claude/worktrees/
 
+# 세션 메타 파일 (다음 세션 컨텍스트 복원용, 외부 공개 차단)
+_세션/
+
 # 임시 보관 (삭제 대기)
 _temp/
 # 진단 산출물은 커밋 대상 (검수용)

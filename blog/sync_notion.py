@@ -26,6 +26,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from blog.enrich import enrich_row
+from blog.branch_link import load_branches, resolve_blog
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "equipment.db")
 
@@ -222,6 +223,9 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
     new_posts = 0
     matched = 0
 
+    # evt_branch_id 매핑용 룩업 딕셔너리 (루프 밖에서 1회만 로드)
+    by_name, by_short = load_branches(conn)
+
     print(f"[sync_notion] enrich rows count={len(pages)}", flush=True)
     for pg in pages:
         d = extract_page_data(pg)
@@ -246,6 +250,9 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
             "keyword": d["keyword"],
             "author": d["author"],
         })
+
+        # evt_branch_id: enriched["branch_name"]을 기준으로 지점 매핑
+        evt_branch_id = resolve_blog(enriched["branch_name"], by_name, by_short)
 
         # 제목 우선순위: Notion 원본 > 기존 scraped_title > enrich fallback(keyword)
         clean_title = d["title"] if d["title"] else enriched["clean_title"]
@@ -277,7 +284,8 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
                         clean_title = ?, needs_review = 0,
                         post_type_main = ?, post_type_sub = ?,
                         status_clean = ?, author_main = ?, author_sub = ?,
-                        branch_name = ?, slot_number = ?
+                        branch_name = ?, slot_number = ?,
+                        evt_branch_id = ?
                     WHERE id = ?
                 """, (
                     d["title"], d["keyword"], d["tags"], d["post_type"],
@@ -287,6 +295,7 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
                     clean_title, enriched["post_type_main"], enriched["post_type_sub"],
                     enriched["status_clean"], enriched["author_main"], enriched["author_sub"],
                     enriched["branch_name"], enriched["slot_number"],
+                    evt_branch_id,
                     existing["id"],
                 ))
 
@@ -309,9 +318,10 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
                         status, exposure_rank, note,
                         clean_title, needs_review,
                         branch_name, slot_number, post_type_main, post_type_sub,
-                        status_clean, author_main, author_sub
+                        status_clean, author_main, author_sub,
+                        evt_branch_id
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                              ?, 0, ?, ?, ?, ?, ?, ?, ?)
+                              ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     d["content_number"], d["title"], d["keyword"], d["tags"], d["post_type"],
                     channel, blog_id, post_number, platform,
@@ -321,6 +331,7 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
                     enriched["branch_name"], enriched["slot_number"],
                     enriched["post_type_main"], enriched["post_type_sub"],
                     enriched["status_clean"], enriched["author_main"], enriched["author_sub"],
+                    evt_branch_id,
                 ))
             new_posts += 1
 

@@ -468,6 +468,68 @@ def get_active_accounts(
         conn.close()
 
 
+# ── 브랜치 재매핑 (데이터 복구용) ──
+@router.post("/relink-branches")
+def relink_branches(user: dict = Depends(require_role("admin"))):
+    """blog_posts 전체에 대해 evt_branch_id를 재매핑한다.
+
+    - 기존 NULL이던 행 중 매핑 성공한 건수를 updated로 반환
+    - 이미 올바른 값이 들어 있는 행도 동일 값으로 덮어쓴다 (멱등)
+    """
+    from shared.db import get_conn, EQUIPMENT_DB
+    from blog.branch_link import load_branches, resolve_blog
+
+    conn = get_conn(EQUIPMENT_DB)
+    try:
+        # 실행 전 NULL 건수 기록 (updated 계산용)
+        null_before = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE evt_branch_id IS NULL"
+        ).fetchone()[0]
+
+        # 룩업 딕셔너리 로드
+        by_name, by_short = load_branches(conn)
+
+        # DISTINCT branch_name 기준으로 배치 업데이트 (행 수 무관 효율적)
+        rows = conn.execute(
+            "SELECT DISTINCT branch_name FROM blog_posts"
+        ).fetchall()
+
+        for r in rows:
+            bn = r[0]
+            eid = resolve_blog(bn, by_name, by_short)
+            if eid is not None:
+                conn.execute(
+                    "UPDATE blog_posts SET evt_branch_id = ? WHERE branch_name = ?",
+                    (eid, bn),
+                )
+            else:
+                conn.execute(
+                    "UPDATE blog_posts SET evt_branch_id = NULL WHERE branch_name = ?",
+                    (bn,),
+                )
+        conn.commit()
+
+        # 통계 수집
+        total = conn.execute("SELECT COUNT(*) FROM blog_posts").fetchone()[0]
+        mapped = conn.execute(
+            "SELECT COUNT(*) FROM blog_posts WHERE evt_branch_id IS NOT NULL"
+        ).fetchone()[0]
+        unmapped = total - mapped
+        null_after = unmapped
+        updated = null_before - null_after  # 새로 채워진 건수 (음수면 0)
+        updated = max(updated, 0)
+
+        return {
+            "ok": True,
+            "total": total,
+            "mapped": mapped,
+            "unmapped": unmapped,
+            "updated": updated,
+        }
+    finally:
+        conn.close()
+
+
 # ── 스케줄러 상태/트리거 ──
 @router.get("/scheduler/status")
 async def scheduler_status(user: Annotated[dict, Depends(_admin)]):

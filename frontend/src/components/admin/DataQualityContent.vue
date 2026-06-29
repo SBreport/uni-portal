@@ -67,6 +67,7 @@ const scrapeStatus = ref<any>(null)
 const scraping = ref(false)
 const importingData = ref(false)
 const downloadingCsv = ref(false)
+const downloadingBlogDb = ref(false)
 const blogActionMsg = ref('')
 const blogActionError = ref(false)
 
@@ -126,7 +127,7 @@ async function downloadKeywordsCsv() {
     const disposition: string = response.headers['content-disposition'] || ''
     let filename = ''
     const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i)
-    if (match) filename = decodeURIComponent(match[1].replace(/"/g, ''))
+    if (match) filename = decodeURIComponent((match[1] ?? '').replace(/"/g, ''))
     if (!filename) {
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
       filename = `blog_keywords_${today}.csv`
@@ -140,6 +141,34 @@ async function downloadKeywordsCsv() {
     showMsg('키워드 CSV 다운로드 완료')
   } catch (e: any) { showMsg(e.response?.data?.detail || 'CSV 다운로드 실패', true) }
   finally { downloadingCsv.value = false }
+}
+
+async function downloadBlogSnapshotDb() {
+  downloadingBlogDb.value = true
+  try {
+    const response = await blogApi.downloadBlogSnapshotDb()
+    const blob = response.data as Blob
+    const disposition: string = response.headers['content-disposition'] || ''
+    let filename = ''
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+    const plainMatch = disposition.match(/filename="?([^";]+)"?/i)
+    if (utf8Match) filename = decodeURIComponent(utf8Match[1] ?? '')
+    else if (plainMatch) filename = plainMatch[1] ?? ''
+    if (!filename) {
+      const now = new Date()
+      const stamp = now.toISOString().slice(0, 19).replace(/[-:T]/g, '').slice(0, 14)
+      filename = `blog_snapshot_${stamp}.db`
+    }
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    showMsg('블로그 분석 DB 다운로드 완료')
+  } catch (e: any) { showMsg(e.response?.data?.detail || '블로그 분석 DB 다운로드 실패', true) }
+  finally { downloadingBlogDb.value = false }
 }
 
 async function uploadCsv(e: Event) {
@@ -258,6 +287,17 @@ onMounted(() => {
           <button @click="downloadKeywordsCsv" :disabled="downloadingCsv"
             class="px-3 py-1 bg-teal-600 text-white text-xs rounded hover:bg-teal-700 disabled:opacity-50">
             {{ downloadingCsv ? '다운로드 중...' : 'CSV 다운로드' }}
+          </button>
+        </div>
+        <!-- 블로그 분석 DB 다운로드 -->
+        <div class="flex items-center justify-between py-2 px-3 bg-slate-50 rounded">
+          <div>
+            <p class="text-xs font-medium text-slate-700">블로그 분석 DB 다운로드</p>
+            <p class="text-[10px] text-slate-400">최신 운영 블로그 테이블만 담은 SQLite DB 생성 후 다운로드</p>
+          </div>
+          <button @click="downloadBlogSnapshotDb" :disabled="downloadingBlogDb"
+            class="px-3 py-1 bg-slate-800 text-white text-xs rounded hover:bg-slate-900 disabled:opacity-50">
+            {{ downloadingBlogDb ? '생성 중...' : 'DB 다운로드' }}
           </button>
         </div>
         <!-- Result message -->

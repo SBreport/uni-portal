@@ -13,7 +13,7 @@ import traceback
 from datetime import datetime
 from typing import Annotated, Optional
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from api.deps import require_role, get_current_user
@@ -29,6 +29,7 @@ _admin = require_role("admin")
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 UPLOAD_DIR = os.path.join(DB_DIR, "blog")
+BACKUP_DIR = os.path.join(DB_DIR, "backups")
 
 
 # ── 게시글 목록 (페이지네이션 + 필터) ──
@@ -162,6 +163,109 @@ def export_posts_xlsx(
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="blog_posts_{today}.xlsx"'},
+    )
+
+
+@router.get("/download-snapshot.db")
+def download_blog_snapshot_db(user: dict = Depends(require_role("admin"))):
+    """블로그 분석용 SQLite 스냅샷을 생성해 다운로드.
+
+    전체 운영 DB에는 사용자/토큰 등 민감 테이블이 포함될 수 있으므로,
+    블로그 분석에 필요한 테이블만 별도 DB로 복사한다.
+    """
+    import sqlite3
+
+    source_db = os.path.abspath(os.path.join(DB_DIR, "equipment.db"))
+    if not os.path.exists(source_db):
+        raise HTTPException(404, "equipment.db 파일이 없습니다")
+
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"blog_snapshot_{stamp}.db"
+    snapshot_path = os.path.abspath(os.path.join(BACKUP_DIR, filename))
+
+    tables = [
+        "blog_posts",
+        "blog_accounts",
+        "blog_sync_log",
+        "notion_sync_log",
+        "paper_blog_links",
+        "evt_branches",
+    ]
+
+    src = sqlite3.connect(source_db, timeout=30)
+    src.row_factory = sqlite3.Row
+    dst = sqlite3.connect(snapshot_path)
+    try:
+        existing = {
+            row["name"]
+            for row in src.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+
+        for table in tables:
+            if table not in existing:
+                continue
+
+            schema = src.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name = ?",
+                (table,),
+            ).fetchone()
+            if not schema or not schema["sql"]:
+                continue
+
+            dst.execute(schema["sql"])
+
+            rows = src.execute(f"SELECT * FROM {table}").fetchall()
+            if rows:
+                cols = [desc[0] for desc in src.execute(f"SELECT * FROM {table} LIMIT 1").description]
+                quoted_cols = ", ".join(f'"{col}"' for col in cols)
+                placeholders = ", ".join(["?"] * len(cols))
+                dst.executemany(
+                    f"INSERT INTO {table} ({quoted_cols}) VALUES ({placeholders})",
+                    ([row[col] for col in cols] for row in rows),
+                )
+
+        index_rows = src.execute(
+            """
+            SELECT sql
+            FROM sqlite_master
+            WHERE type = 'index'
+              AND sql IS NOT NULL
+              AND tbl_name IN ({})
+            """.format(",".join(["?"] * len(tables))),
+            tables,
+        ).fetchall()
+        for row in index_rows:
+            dst.execute(row["sql"])
+
+        dst.execute("""
+            CREATE TABLE IF NOT EXISTS snapshot_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT ''
+            )
+        """)
+        dst.executemany(
+            "INSERT OR REPLACE INTO snapshot_meta (key, value) VALUES (?, ?)",
+            [
+                ("created_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                ("source", "equipment.db"),
+                ("scope", "blog-analysis"),
+            ],
+        )
+        dst.commit()
+    except Exception as exc:
+        dst.rollback()
+        if os.path.exists(snapshot_path):
+            os.remove(snapshot_path)
+        raise HTTPException(500, f"블로그 분석 DB 생성 실패: {type(exc).__name__}: {exc}")
+    finally:
+        dst.close()
+        src.close()
+
+    return FileResponse(
+        snapshot_path,
+        filename=filename,
+        media_type="application/octet-stream",
     )
 
 

@@ -93,6 +93,13 @@ export const getActiveAccounts = (params?: { branch_filter?: string }) =>
 export const exportKeywordsCsv = () =>
   api.get('/blog/posts/export-keywords.csv', { responseType: 'blob', headers: { Accept: 'text/csv' } })
 
+export const downloadBlogSnapshotDb = () =>
+  api.get('/blog/download-snapshot.db', {
+    responseType: 'blob',
+    timeout: 300000,
+    headers: { Accept: 'application/octet-stream' },
+  })
+
 export const exportBlogPostsXlsx = (params?: BlogPostsParams) =>
   api.get('/blog/posts/export.xlsx', {
     params,

@@ -31,7 +31,7 @@ from blog.branch_link import load_branches, resolve_blog
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "equipment.db")
 
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
-NOTION_BLOG_DB_ID = os.environ.get("NOTION_BLOG_DB_ID", "1523e540ee5d4f7d9aa7edf6cc13d394")
+NOTION_BLOG_DB_ID = os.environ.get("NOTION_BLOG_DB_ID", "")
 
 OPTIMAL_KEYWORDS = ["최적", "NB", "준최", "배포", "알선"]
 

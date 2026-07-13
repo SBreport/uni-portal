@@ -3,10 +3,13 @@
 # ============================================================
 
 # 데이터베이스 (로컬에서 자동 생성됨)
-data/*.db
-data/*.db-wal
-data/*.db-shm
+*.db
+*.db-wal
+*.db-shm
 data/backups/
+
+# 루트 임시 스크래핑 산출물 (커밋 금지)
+tmp_*.json
 
 # 인증/비밀 파일 (절대 Git에 올리지 않음)
 .streamlit/secrets.toml

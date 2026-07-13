@@ -18,9 +18,12 @@ services:
           memory: 256M
     environment:
       - TZ=Asia/Seoul
-      - AUTH_SALT=${AUTH_SALT:-uandi_equipment_2026}
+      # 비밀값은 하드코딩 금지 — .env 또는 Portainer 환경변수로 주입 (미설정 시 앱 기동 실패)
+      - AUTH_SALT=${AUTH_SALT:?AUTH_SALT를 .env 또는 배포 환경변수에 설정하세요}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET을 .env 또는 배포 환경변수에 설정하세요}
+      - AUTH_SALT_LEGACY=${AUTH_SALT_LEGACY:-}
       - AUTH_BOOTSTRAP_ADMIN_ID=${AUTH_BOOTSTRAP_ADMIN_ID:-admin}
-      - AUTH_BOOTSTRAP_ADMIN_PW_HASH=${AUTH_BOOTSTRAP_ADMIN_PW_HASH:-9fd94e1caae92307047e2cfb6739f3610fb9a7c7c4924c53f4ae52f88ec7e9ad}
+      - AUTH_BOOTSTRAP_ADMIN_PW_HASH=${AUTH_BOOTSTRAP_ADMIN_PW_HASH:?관리자 초기 비밀번호 해시를 설정하세요}
       - AUTH_BOOTSTRAP_ADMIN_ROLE=${AUTH_BOOTSTRAP_ADMIN_ROLE:-admin}
       - EVENT_SHEET_ID=${EVENT_SHEET_ID:-}
       - CAFE_SHEET_ID=${CAFE_SHEET_ID:-}

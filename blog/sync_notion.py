@@ -143,7 +143,8 @@ def extract_page_data(page: dict) -> dict:
         s = val.get("status") if val.get("type") == "status" else None
         return s.get("name", "") if s else ""
 
-    main_url = get_url("메인블로그 링크")
+    # 2026-06-30 노션 양식 개편으로 속성명 변경: 구명 우선, 없으면 신명 (겸용)
+    main_url = get_url("메인블로그 링크") or get_url("발행 URL")
 
     return {
         "notion_page_id": page.get("id", ""),
@@ -154,7 +155,7 @@ def extract_page_data(page: dict) -> dict:
         "tags": ", ".join(get_multi_select("관련 태그")),
         "post_type": ", ".join(get_multi_select("종류")),
         "author": ", ".join(get_people("담당자")),
-        "published_at": get_date("발행 일자"),
+        "published_at": get_date("발행 일자") or get_date("발행일"),
         "status": get_status("진행 상황"),
         "main_url": main_url,
         "backup_url": get_url("백업블로그 링크"),
@@ -222,6 +223,13 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
     updated = 0
     new_posts = 0
     matched = 0
+    skipped = 0
+
+    # 스킵 건수 컬럼 (구버전 DB 호환)
+    try:
+        conn.execute("ALTER TABLE notion_sync_log ADD COLUMN skipped INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
 
     # evt_branch_id 매핑용 룩업 딕셔너리 (루프 밖에서 1회만 로드)
     by_name, by_short = load_branches(conn)
@@ -232,6 +240,7 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
         platform, blog_id, post_number = parse_blog_url(d["main_url"])
 
         if not blog_id or not post_number:
+            skipped += 1
             continue
 
         # DB에서 기존 레코드 찾기
@@ -275,9 +284,12 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
                 ).fetchone()
                 url_changed = old_url and old_url["published_url"] != d["main_url"]
 
+                # tags: 노션 개편으로 '관련 태그' 속성이 사라짐 — 빈값이면 기존 태그 보존
                 conn.execute("""
                     UPDATE blog_posts SET
-                        title = ?, keyword = ?, tags = ?, post_type = ?,
+                        title = ?, keyword = ?,
+                        tags = CASE WHEN ? = '' THEN tags ELSE ? END,
+                        post_type = ?,
                         author = ?, published_at = ?, status = ?,
                         exposure_rank = ?, note = ?,
                         published_url = ?,
@@ -288,7 +300,7 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
                         evt_branch_id = ?
                     WHERE id = ?
                 """, (
-                    d["title"], d["keyword"], d["tags"], d["post_type"],
+                    d["title"], d["keyword"], d["tags"], d["tags"], d["post_type"],
                     d["author"], d["published_at"], d["status"],
                     d["exposure_rank"], d["note"],
                     d["main_url"],
@@ -339,9 +351,9 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
     print("[sync_notion] writing to db", flush=True)
     if not dry_run:
         conn.execute("""
-            INSERT INTO notion_sync_log (sync_type, notion_pages, matched, updated, new_posts, last_edited_cutoff, triggered_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (sync_type, len(pages), matched, updated, new_posts, latest_edited, triggered_by))
+            INSERT INTO notion_sync_log (sync_type, notion_pages, matched, updated, new_posts, skipped, last_edited_cutoff, triggered_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (sync_type, len(pages), matched, updated, new_posts, skipped, latest_edited, triggered_by))
         conn.commit()
 
     conn.close()
@@ -353,8 +365,9 @@ def incremental_sync(token: str, db_id: str, dry_run: bool = False, force_full: 
         "matched": matched,
         "updated": updated,
         "new_posts": new_posts,
+        "skipped": skipped,
         "last_edited_cutoff": latest_edited,
-        "message": f"동기화 완료: {updated}건 업데이트, {new_posts}건 신규",
+        "message": f"동기화 완료: {updated}건 업데이트, {new_posts}건 신규, {skipped}건 스킵(URL 없음)",
     }
 
 
